@@ -7,6 +7,7 @@ function $(id) {
 import { HoverRenderer } from "./renderer.js";
 import { OriginalSound } from "./sound.js";
 import { OriginalHUD } from "./hud.js";
+import { OriginalMenu } from "./menu.js";
 const originalSound = new OriginalSound();
 const E = HoverEngine, R = HoverRules, T = HoverTraining, B = HoverRecords, canvas = $("game"), tracks = HOVER_TRACKS.map(E.prepare);
 const trainingTracks = HOVER_TRAINING_TRACKS.map(E.prepare);
@@ -189,6 +190,45 @@ $("machine").onchange = () => {
     select();
 };
 select();
+const browserSettings = document.getElementById("browser-settings");
+for (const id of ["difficulty", "quality", "ghost-enabled"]) {
+    const element = $(id);
+    const label = document.querySelector(`label[for="${id}"]`);
+    if (label)
+        browserSettings.append(label);
+    if (id === "ghost-enabled")
+        browserSettings.append(element.parentElement);
+    else
+        browserSettings.append(element);
+}
+browserSettings.append($("sound"));
+const originalMenu = new OriginalMenu({
+    mode(value) {
+        $("mode").value = value;
+        setCourseOptions();
+        select();
+    },
+    change(kind, delta) {
+        const field = $(kind);
+        field.selectedIndex =
+            (field.selectedIndex + delta + field.options.length) %
+                field.options.length;
+        field.dispatchEvent(new Event("change"));
+    },
+    start() {
+        start();
+    },
+    sound(kind) {
+        initAudio();
+        originalSound.ready?.then(() => originalSound.effect(kind === "ok" ? 72 : kind === "cancel" ? 74 : 73, kind === "ok" ? 50 : 40));
+    },
+    music(name) {
+        if (name)
+            originalSound.playCourse(name);
+        else
+            originalSound.cancel();
+    },
+});
 $("quality").onchange = () => {
     view.retro = $("quality").value === "retro";
     view.resize();
@@ -262,6 +302,7 @@ function start(nextRound = false) {
     view.yaw = null;
     toastTimer = 0;
     $("menu").hidden = true;
+    document.getElementById("menu-controls").hidden = true;
     $("result").hidden = true;
     $("pause-panel").hidden = true;
     $("next-race").hidden = true;
@@ -288,6 +329,7 @@ function menu() {
     $("pause-panel").hidden = true;
     $("result").hidden = true;
     $("menu").hidden = false;
+    originalMenu.show("title");
     $("touch").hidden = true;
     $("message").textContent = "";
     document.querySelector(".game-wrap").classList.remove("playing");
@@ -445,6 +487,27 @@ window.addEventListener("keydown", (e) => {
     keys[e.code] = true;
     if (e.repeat)
         return;
+    if (state === "menu") {
+        if (e.target.tagName === "BUTTON" &&
+            ["Enter", "Space"].includes(e.code))
+            return;
+        if ([
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight",
+            "Enter",
+            "Space",
+            "KeyZ",
+            "Escape",
+            "Backspace",
+            "KeyX",
+        ].includes(e.code)) {
+            e.preventDefault();
+            originalMenu.key(e.code);
+        }
+        return;
+    }
     if (e.code === "Escape" || e.code === "KeyP")
         pause();
     if (e.code === "Enter") {
@@ -490,7 +553,9 @@ for (const button of document.querySelectorAll("[data-key]")) {
 }
 function input() {
     const p = Array.from(navigator.getGamepads?.() || []).find(Boolean), b = (i) => p?.buttons[i]?.pressed || false, axis = p && Math.abs(p.axes[0]) > 0.15 ? p.axes[0] : 0;
-    if (b(9) && !padPause)
+    if (state === "menu")
+        originalMenu.gamepad();
+    if (state !== "menu" && b(9) && !padPause)
         pause();
     padPause = b(9);
     return {
@@ -526,6 +591,11 @@ function beep() {
 }
 let currentInput = {};
 function render() {
+    if (state === "menu") {
+        view.drawMenu(originalMenu.screen, track, car.type, worldTime, (performance.now() - originalMenu.entered) / 1000);
+        originalMenu.draw();
+        return;
+    }
     let display = car;
     if (state === "menu") {
         const p = E.at(track, demoDistance);
@@ -759,6 +829,8 @@ requestAnimationFrame(frame);
 window.hoverDiagnostics = () => ({
     state,
     mode,
+    menuScreen: originalMenu.screen,
+    menuSelection: originalMenu.selected,
     sourceMode: R.profile(mode).sourceMode,
     training: trainingSession
         ? {

@@ -57,6 +57,7 @@ function $<K extends keyof Elements>(id: K): Elements[K] {
 import { HoverRenderer } from "./renderer.js";
 import { OriginalSound } from "./sound.js";
 import { OriginalHUD } from "./hud.js";
+import { OriginalMenu } from "./menu.js";
 const originalSound = new OriginalSound();
 const E = HoverEngine,
   R = HoverRules,
@@ -289,6 +290,45 @@ $("machine").onchange = () => {
   select();
 };
 select();
+const browserSettings = document.getElementById("browser-settings")!;
+for (const id of ["difficulty", "quality", "ghost-enabled"]) {
+  const element = $(id as "difficulty" | "quality" | "ghost-enabled");
+  const label = document.querySelector(`label[for="${id}"]`);
+  if (label) browserSettings.append(label);
+  if (id === "ghost-enabled") browserSettings.append(element.parentElement!);
+  else browserSettings.append(element);
+}
+browserSettings.append($("sound"));
+const originalMenu = new OriginalMenu({
+  mode(value) {
+    $("mode").value = value;
+    setCourseOptions();
+    select();
+  },
+  change(kind, delta) {
+    const field = $(kind);
+    field.selectedIndex =
+      (field.selectedIndex + delta + field.options.length) %
+      field.options.length;
+    field.dispatchEvent(new Event("change"));
+  },
+  start() {
+    start();
+  },
+  sound(kind) {
+    initAudio();
+    originalSound.ready?.then(() =>
+      originalSound.effect(
+        kind === "ok" ? 72 : kind === "cancel" ? 74 : 73,
+        kind === "ok" ? 50 : 40,
+      ),
+    );
+  },
+  music(name) {
+    if (name) originalSound.playCourse(name);
+    else originalSound.cancel();
+  },
+});
 $("quality").onchange = () => {
   view.retro = $("quality").value === "retro";
   view.resize();
@@ -372,6 +412,7 @@ function start(nextRound = false) {
   view.yaw = null;
   toastTimer = 0;
   $("menu").hidden = true;
+  document.getElementById("menu-controls")!.hidden = true;
   $("result").hidden = true;
   $("pause-panel").hidden = true;
   $("next-race").hidden = true;
@@ -398,6 +439,7 @@ function menu() {
   $("pause-panel").hidden = true;
   $("result").hidden = true;
   $("menu").hidden = false;
+  originalMenu.show("title");
   $("touch").hidden = true;
   $("message").textContent = "";
   document.querySelector(".game-wrap")!.classList.remove("playing");
@@ -550,6 +592,31 @@ window.addEventListener("keydown", (e) => {
   if (handled.includes(e.code)) e.preventDefault();
   keys[e.code] = true;
   if (e.repeat) return;
+  if (state === "menu") {
+    if (
+      (e.target as HTMLElement).tagName === "BUTTON" &&
+      ["Enter", "Space"].includes(e.code)
+    )
+      return;
+    if (
+      [
+        "ArrowUp",
+        "ArrowDown",
+        "ArrowLeft",
+        "ArrowRight",
+        "Enter",
+        "Space",
+        "KeyZ",
+        "Escape",
+        "Backspace",
+        "KeyX",
+      ].includes(e.code)
+    ) {
+      e.preventDefault();
+      originalMenu.key(e.code);
+    }
+    return;
+  }
   if (e.code === "Escape" || e.code === "KeyP") pause();
   if (e.code === "Enter") {
     if (state === "menu") start();
@@ -597,7 +664,8 @@ function input() {
   const p = Array.from(navigator.getGamepads?.() || []).find(Boolean),
     b = (i: number) => p?.buttons[i]?.pressed || false,
     axis = p && Math.abs(p.axes[0]) > 0.15 ? p.axes[0] : 0;
-  if (b(9) && !padPause) pause();
+  if (state === "menu") originalMenu.gamepad();
+  if (state !== "menu" && b(9) && !padPause) pause();
   padPause = b(9);
   return {
     accel: keys.Space || keys.ArrowUp || b(0),
@@ -632,6 +700,17 @@ function beep() {
 }
 let currentInput: Input = {};
 function render() {
+  if (state === "menu") {
+    view.drawMenu(
+      originalMenu.screen,
+      track,
+      car.type,
+      worldTime,
+      (performance.now() - originalMenu.entered) / 1000,
+    );
+    originalMenu.draw();
+    return;
+  }
   let display: Pose = car;
   if (state === "menu") {
     const p = E.at(track, demoDistance);
@@ -879,6 +958,8 @@ requestAnimationFrame(frame);
 window.hoverDiagnostics = () => ({
   state,
   mode,
+  menuScreen: originalMenu.screen,
+  menuSelection: originalMenu.selected,
   sourceMode: R.profile(mode).sourceMode,
   training: trainingSession
     ? {

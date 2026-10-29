@@ -744,6 +744,135 @@ export class HoverRenderer {
       this.renderer.autoClear = true;
     } else this.resultLetters.visible = false;
   }
+  // Dedicated black-background selection pass. Reuse original TMD letters and
+  // the actual course mesh instead of a browser illustration of the course.
+  menuScene = new THREE.Scene();
+  menuLetters = new THREE.Group();
+  menuHeading = "";
+  menuShip: ReturnType<HoverRenderer["makeShip"]> | null = null;
+  menuCamera = new THREE.PerspectiveCamera(
+    (2 * Math.atan(120 / 320) * 180) / Math.PI,
+    4 / 3,
+    0.1,
+    10000,
+  );
+  drawMenu(screen: string, track: Track, type: number, time: number, age = 1) {
+    this.retroUniform.value = this.retro ? 1 : 0;
+    if (this.menuScene.children.length === 0) {
+      this.menuScene.background = new THREE.Color(0);
+      this.menuScene.add(new THREE.AmbientLight(0xffffff, 1.6));
+      const light = new THREE.DirectionalLight(0xffffff, 1.5);
+      light.position.set(0, 256, 128);
+      this.menuScene.add(light, this.menuLetters);
+    }
+    const heading =
+      screen === "car"
+        ? "CARSELECT"
+        : screen === "course"
+          ? "COURCESELECT"
+          : "";
+    if (heading !== this.menuHeading) {
+      this.clear(this.menuLetters);
+      this.menuHeading = heading;
+      [...heading].forEach((ch, i) => {
+        const first = ch <= "O" ? "A" : "P";
+        const letter = this.modelObject(
+          first === "A" ? "ALP_A_O" : "ALP_P_O",
+          ch.charCodeAt(0) - first.charCodeAt(0),
+        );
+        letter.position.set(
+          -37.5 + i * 5.6 + (i > (screen === "car" ? 2 : 5) ? 5.6 : 0),
+          25.5,
+          -90,
+        );
+        this.menuLetters.add(letter);
+      });
+    }
+    const entryFrame = Math.min(0, Math.floor(age * 60) - 60);
+    this.menuLetters.children.forEach((letter, i) => {
+      const count = heading.length;
+      const lag = Math.max(
+        0,
+        -entryFrame * (screen === "car" ? 4 : 6) +
+          (count - i) * 12 -
+          (screen === "car" ? 120 : 156),
+      );
+      letter.position.x =
+        -37.5 +
+        i * 5.6 +
+        (i > (screen === "car" ? 2 : 5) ? 5.6 : 0) -
+        lag * 0.2 * (count - i);
+      letter.rotation.y = (lag * 4 * (i + 2) * Math.PI * 2) / 4096;
+    });
+    this.menuCamera.position.set(0, 0, 0);
+    this.menuCamera.up.set(0, 1, 0);
+    this.menuCamera.lookAt(0, 0, -90);
+    this.renderer.autoClear = true;
+    this.renderer.render(this.menuScene, this.menuCamera);
+    if (screen === "car") {
+      if (this.menuShip?.type !== type) {
+        if (this.menuShip) {
+          this.clear(this.menuShip.root);
+          if (this.menuShip.shadow) {
+            this.scene.remove(this.menuShip.shadow);
+            this.clear(this.menuShip.shadow);
+          }
+        }
+        this.menuShip = this.makeShip(type);
+        this.scene.remove(this.menuShip.root);
+        if (this.menuShip.shadow) this.scene.remove(this.menuShip.shadow);
+      }
+      const ship = this.menuShip!;
+      ship.flames.forEach((m) => (m.visible = false));
+      ship.sides.forEach((m) => (m.visible = false));
+      ship.root.position.set(3.5 - entryFrame * 0.08, 0, 0);
+      ship.root.rotation.set(0, (time * Math.PI * 2) / 3, 0);
+      const modelScene = new THREE.Scene();
+      modelScene.add(ship.root, new THREE.AmbientLight(0xffffff, 1.6));
+      const light = new THREE.DirectionalLight(0xffffff, 1.5);
+      light.position.set(0, 256, 128);
+      modelScene.add(light);
+      this.menuCamera.position.set(0, 9, -14);
+      this.menuCamera.lookAt(0, 4, 0);
+      // Original projection places the model in the left half of the display.
+
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(modelScene, this.menuCamera);
+
+      modelScene.remove(ship.root);
+    } else if (screen === "course") {
+      this.setTrack(track);
+      const box = new THREE.Box3().setFromObject(this.trackGroup);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const pivot = new THREE.Group();
+      pivot.add(this.trackGroup);
+      this.trackGroup.position.copy(center).multiplyScalar(-1);
+      pivot.rotation.set(0, (time * 16 * 60 * Math.PI * 2) / 4096, 0);
+      const preview = new THREE.Scene();
+      preview.add(pivot);
+      const distance = Math.max(size.x, size.z) * 1.5;
+      this.menuCamera.position.set(0, distance * 0.94, distance * 0.342);
+      this.menuCamera.lookAt(0, 0, 0);
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(preview, this.menuCamera);
+      this.trackGroup.position.set(0, 0, 0);
+      this.scene.add(this.trackGroup);
+    }
+    if (heading) {
+      this.menuCamera.position.set(0, 0, 0);
+      this.menuCamera.lookAt(0, 0, -90);
+      this.menuScene.background = null;
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this.menuScene, this.menuCamera);
+      this.menuScene.background = new THREE.Color(0);
+    }
+    this.renderer.autoClear = true;
+    this.frames++;
+  }
   diagnostics() {
     return {
       renderer: "Three.js " + THREE.REVISION,

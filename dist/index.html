@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <header>
+    <header hidden>
       <a class="brand" href="./"
         ><span class="brand-mark">⫸</span> HOVER<span>RACING</span></a
       >
@@ -61,7 +61,8 @@
           ><canvas id="minimap" width="220" height="160"></canvas>
         </div>
         <div id="message" aria-live="polite"></div>
-        <section id="menu" class="menu">
+        <section id="menu" class="menu" aria-label="タイトル画面"></section>
+        <section id="legacy-setup" hidden inert>
           <div class="intro">
             <div class="eyebrow">
               <i></i> ORIGINAL ASSETS · THREE.JS · 60 HZ
@@ -131,12 +132,12 @@
           </div>
         </section>
         <section id="pause-panel" class="modal" hidden>
-          <div class="eyebrow">RACE PAUSED</div>
-          <h2>ひと休み。</h2>
+          <div class="eyebrow">HOVER RACING</div>
+          <h2>PAUSE</h2>
           <p>慣性をつかんで、次のコーナーへ。</p>
-          <button id="resume" class="primary">レースを再開 ↗</button
+          <button id="resume" class="primary">CONTINUE</button
           ><button id="restart" class="secondary">リトライ</button
-          ><button id="back" class="secondary">コース選択に戻る</button>
+          ><button id="back" class="secondary">EXIT</button>
         </section>
         <section id="result" class="modal" hidden>
           <div class="eyebrow" id="result-tag">RACE COMPLETE</div>
@@ -145,7 +146,7 @@
           <div id="lap-times"></div>
           <button id="next-race" class="primary" hidden>次のコースへ ↗</button
           ><button id="again" class="primary">もう一度走る ↗</button
-          ><button id="result-back" class="secondary">コース選択に戻る</button>
+          ><button id="result-back" class="secondary">タイトルに戻る</button>
         </section>
         <div id="touch" hidden>
           <div>
@@ -165,6 +166,16 @@
           </div>
         </div>
       </div>
+      <nav id="menu-controls" aria-label="メニュー操作">
+        <button id="menu-back">戻る <kbd>Esc / X</kbd></button>
+        <button id="menu-prev" aria-label="前の項目">◀</button>
+        <button id="menu-next" aria-label="次の項目">▶</button>
+        <button id="menu-confirm">決定 <kbd>Enter / Z</kbd></button>
+      </nav>
+      <details class="browser-options">
+        <summary>ブラウザ設定・操作</summary>
+        <div id="browser-settings"></div>
+      </details>
       <details id="records-panel">
         <summary>VIEW RECORDS / 選択中コースの記録</summary>
         <div id="records-list"></div>
@@ -216,7 +227,7 @@
         >
       </details>
     </main>
-    <footer>
+    <footer hidden>
       <span>HOVER RACING <b> / </b> WEB RECREATION</span
       ><span>Original by Sato Tomokazu · 1997</span>
     </footer>

@@ -17,3 +17,7 @@ png(OUT/'font.png',256,128,b''.join(rgba(pixel(22,487<<6,u,v+128)) for v in rang
 png(OUT/"hud-red.png",128,256,b"".join(bytes((c[0],0,0,c[3])) for v in range(256) for u in range(128) for c in [rgba(pixel(25,487<<6,u,v))]))
 upload("BOMB")
 png(OUT/"bomb.png",64,128,b"".join(rgba(pixel(0x96,492<<6,u,v)) for v in range(128) for u in range(64)))
+
+# MENU_ETC.C title() uses TITLE.TIM (TITLE=1 is disabled in GP1.H).
+# The logo is two strips, source Y=128 and Y=206, drawn at (40,8)/(40,58).
+png(OUT/'title.png',256,128,b''.join(rgba(pixel(0x85,482<<6,u,v+128)) for v in range(128) for u in range(256)))

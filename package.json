@@ -12,7 +12,8 @@
     "lint:fix": "npm run lint -- --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:browser": "node tests/test-browser-fidelity.cjs"
+    "test:browser": "node tests/test-browser-fidelity.cjs",
+    "test:menu": "node tests/test-browser-menu.cjs"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

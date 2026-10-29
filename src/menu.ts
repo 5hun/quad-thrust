@@ -1,0 +1,637 @@
+// MENU_ETC.C / GP1_MAIN.C: original title tree and selection order.
+export type MenuScreen =
+  | "title"
+  | "modes"
+  | "gp"
+  | "levels"
+  | "option"
+  | "slots"
+  | "record-kind"
+  | "car"
+  | "course"
+  | "training"
+  | "record-detail"
+  | "records"
+  | "music"
+  | "help"
+  | "notice";
+interface MenuHooks {
+  mode(value: string): void;
+  change(kind: "machine" | "course", delta: number): void;
+  start(): void;
+  sound(kind: "move" | "ok" | "cancel"): void;
+  music(name: string | null): void;
+}
+const lists: Partial<Record<MenuScreen, string[]>> = {
+  title: ["START", "OPTION", "HELP", "EXIT"],
+  modes: ["GRANDPRIX", "TIME ATTACK", "TRAINING", "2P BATTLE"],
+  gp: ["Blue GP", "Yellow GP", "Red GP", "PRACTICE"],
+  levels: ["LEVEL 1", "LEVEL 2", "LEVEL 3", "FREE RUN"],
+  option: ["MEMORY CARD", "VIEW RECORDS", "VIEW REPLAY", "MUSIC MODE"],
+  slots: ["SLOT 1", "SLOT 2"],
+  "record-kind": ["GRANDPRIX'S", "TIME ATTACK'S"],
+};
+const parent: Partial<Record<MenuScreen, [MenuScreen, number]>> = {
+  modes: ["title", 0],
+  gp: ["modes", 0],
+  levels: ["modes", 2],
+  option: ["title", 1],
+  slots: ["option", 0],
+  "record-kind": ["option", 1],
+  training: ["levels", 0],
+  records: ["record-kind", 0],
+  music: ["option", 3],
+  help: ["title", 2],
+};
+const field = (id: string) => document.getElementById(id) as HTMLSelectElement;
+export class OriginalMenu {
+  screen: MenuScreen = "title";
+  selected = 0;
+  entered = performance.now();
+  mode = "time";
+  recordClass = "gp";
+  recordCourse = 0;
+  notice = "";
+  noticeParent: MenuScreen = "title";
+  noticeSelection = 0;
+  panel: HTMLElement;
+  canvas: HTMLCanvasElement;
+  g: CanvasRenderingContext2D;
+  buttons: HTMLElement;
+  font = new Image();
+  logo = new Image();
+  palettes = new Map<string, HTMLCanvasElement>();
+  curves: number[][][] = [];
+  padHeld = new Set<string>();
+  constructor(public hooks: MenuHooks) {
+    this.panel = document.getElementById("menu")!;
+    this.panel.replaceChildren();
+    this.canvas = document.createElement("canvas");
+    this.canvas.id = "original-menu";
+    this.canvas.width = 320;
+    this.canvas.height = 240;
+    this.canvas.setAttribute("aria-hidden", "true");
+    this.g = this.canvas.getContext("2d")!;
+    this.buttons = document.createElement("nav");
+    this.buttons.setAttribute("aria-label", "ゲームメニュー");
+    this.panel.append(this.canvas, this.buttons);
+    this.font.src = "assets/font.png";
+    this.logo.src = "assets/title.png";
+    // car_select_init: 136 samples, three simulation ticks per graph pixel.
+    this.curves = HoverEngine.MACHINES.map((m) =>
+      [false, true].map((turbo) => {
+        let inertia = 0,
+          speed = 0;
+        const values: number[] = [];
+        for (let i = 0; i < 408; i++) {
+          // car_select_init records the last value of each three-tick group.
+          values[Math.floor(i / 3)] = (speed * 26) >> 8;
+          speed = Math.floor(Math.abs(inertia * 2) / Math.sqrt(128));
+          let thrust = (m.accel - ((m.falloff * speed) >> 6)) >> 2;
+          if (turbo)
+            thrust += Math.max(
+              0,
+              (m.turbo - ((m.turboFall * speed) >> 4)) >> 2,
+            );
+          if (speed <= 2000) inertia += Math.trunc((thrust * 128) / m.weight);
+          const drag = Math.trunc((speed * m.drag) / (m.weight * (speed + 1)));
+          inertia -= (inertia * drag) >> 13;
+        }
+        values[159] = Math.floor(speed / 2);
+        return values;
+      }),
+    );
+    document.getElementById("menu-prev")!.onclick = () => this.move(-1);
+    document.getElementById("menu-next")!.onclick = () => this.move(1);
+    document.getElementById("menu-confirm")!.onclick = () => this.confirm();
+    document.getElementById("menu-back")!.onclick = () => this.back();
+    this.show("title");
+  }
+  show(screen: MenuScreen, selected = 0) {
+    this.screen = screen;
+    this.selected = selected;
+    this.entered = performance.now();
+    this.panel.dataset.screen = screen;
+    this.buttons.replaceChildren();
+    if (lists[screen])
+      lists[screen]!.forEach((label, i) => {
+        const count = lists[screen]!.length;
+        const y =
+          count === 2
+            ? 140 + i * 32
+            : count === 3
+              ? 124 + i * 32
+              : 124 + i * 24;
+        this.button(
+          label,
+          160 - label.length * 8,
+          y,
+          label.length * 16,
+          16,
+          () => {
+            this.selected = i;
+            this.confirm();
+          },
+          i,
+        );
+      });
+    else if (
+      ["car", "course", "training", "music", "records"].includes(screen)
+    ) {
+      this.button("前へ", 0, 94, 24, 48, () => this.move(-1));
+      this.button("次へ", 296, 94, 24, 48, () => this.move(1));
+    }
+    document.getElementById("menu-controls")!.hidden = false;
+    this.syncSelection();
+    this.draw();
+  }
+  button(
+    label: string,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    click: () => void,
+    index?: number,
+  ) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.setAttribute("aria-label", label);
+    b.style.cssText = `left:${x / 3.2}%;top:${y / 2.4}%;width:${w / 3.2}%;height:${h / 2.4}%`;
+    b.onclick = click;
+    if (index !== undefined) b.dataset.index = String(index);
+    this.buttons.append(b);
+  }
+  syncSelection() {
+    this.buttons
+      .querySelectorAll<HTMLButtonElement>("[data-index]")
+      .forEach((b) =>
+        b.setAttribute(
+          "aria-current",
+          String(+b.dataset.index! === this.selected),
+        ),
+      );
+  }
+  move(delta: number) {
+    this.hooks.sound("move");
+    if (lists[this.screen])
+      this.selected = Math.max(
+        0,
+        Math.min(lists[this.screen]!.length - 1, this.selected + delta),
+      );
+    else if (this.screen === "car") this.hooks.change("machine", delta);
+    else if (this.screen === "course") this.hooks.change("course", delta);
+    else if (this.screen === "training") {
+      const i = field("course").selectedIndex;
+      if (i + delta >= 0 && i + delta < 5) this.hooks.change("course", delta);
+    } else if (this.screen === "records")
+      this.selected = Math.max(0, Math.min(8, this.selected + delta));
+    else if (this.screen === "music")
+      this.selected =
+        (this.selected + delta + this.songs.length) % this.songs.length;
+    this.syncSelection();
+  }
+  get songs() {
+    return [
+      "SAMPLE16",
+      "SAMPLE15",
+      "HOVER4",
+      "TO7",
+      "ENTRY1",
+      "SELECT",
+      "SAMPLE19",
+      "HOVER2",
+      "CANION",
+      "B",
+      "SAMPLE26",
+      "SAMPLE21",
+    ];
+  }
+  get songNames() {
+    return [
+      "Mysterious Wave",
+      "Laser Wind",
+      "A North Breeze",
+      "Freezing Moment",
+      "Rest On Space",
+      "E.O.E.",
+      "Groove On Night",
+      "Drop To The Sky",
+      "Dead Heat",
+      "ON!",
+      "Help Mode",
+      "NoTitle -UnUsed-",
+    ];
+  }
+  choose(mode: string) {
+    this.mode = mode;
+    this.hooks.mode(mode);
+    this.hooks.music("SELECT");
+    this.show(mode.startsWith("train") ? "training" : "car");
+  }
+  message(text: string, from = this.screen) {
+    this.notice = text;
+    this.noticeParent = from;
+    this.noticeSelection = this.selected;
+    this.show("notice");
+  }
+  confirm() {
+    this.hooks.sound("ok");
+    const i = this.selected;
+    switch (this.screen) {
+      case "title":
+        if (i < 3) this.show((["modes", "option", "help"] as MenuScreen[])[i]);
+        else
+          this.message(
+            "終了しました。\n決定でタイトル画面に戻ります。",
+            "title",
+          );
+        break;
+      case "modes":
+        if (i === 0) this.show("gp");
+        if (i === 1) this.choose("time");
+        if (i === 2) this.show("levels");
+        if (i === 3)
+          this.message("2P BATTLE\n画面分割対戦は未対応です。", "modes");
+        break;
+      case "gp":
+        this.choose(i === 3 ? "practice" : "gp" + i);
+        break;
+      case "levels":
+        this.choose(i === 3 ? "free" : "train" + i);
+        break;
+      case "option":
+        if (i === 0) this.show("slots");
+        if (i === 1) this.show("record-kind");
+        if (i === 2)
+          this.message(
+            "VIEW REPLAY\n原作形式のリプレイは未対応です。",
+            "option",
+          );
+        if (i === 3) this.show("music");
+        break;
+      case "slots":
+        this.message(
+          "MEMORY CARD\n記録・ゴースト・課題クリアは\nこのブラウザに自動保存します。\nPS1のカード形式は未対応です。",
+          "slots",
+        );
+        break;
+      case "record-kind":
+        this.recordClass = i === 0 ? "gp" : "time";
+        this.show("records");
+        break;
+      case "training":
+        this.show("car");
+        break;
+      case "car":
+        if (this.mode.startsWith("gp") || this.mode.startsWith("train"))
+          this.hooks.start();
+        else this.show("course");
+        break;
+      case "course":
+        this.hooks.start();
+        break;
+      case "music":
+        this.hooks.music(this.songs[i]);
+        break;
+      case "notice":
+        this.show(this.noticeParent, this.noticeSelection);
+        break;
+      case "help":
+        this.back();
+        break;
+      case "records":
+        this.recordCourse = this.selected;
+        this.show("record-detail");
+        break;
+      case "record-detail":
+        this.show("records", this.recordCourse);
+        break;
+    }
+  }
+  back() {
+    this.hooks.sound("cancel");
+    if (this.screen === "course") this.show("car");
+    else if (this.screen === "car") {
+      if (this.mode.startsWith("train")) this.show("training");
+      else {
+        this.hooks.music(null);
+        this.show(
+          this.mode.startsWith("gp") || this.mode === "practice"
+            ? "gp"
+            : this.mode === "free"
+              ? "levels"
+              : "modes",
+          this.mode.startsWith("gp")
+            ? +this.mode.slice(2)
+            : this.mode === "practice" || this.mode === "free"
+              ? 3
+              : 1,
+        );
+      }
+    } else if (this.screen === "record-detail")
+      this.show("records", this.recordCourse);
+    else if (this.screen === "notice")
+      this.show(this.noticeParent, this.noticeSelection);
+    else if (parent[this.screen]) {
+      if (this.screen === "training" || this.screen === "music")
+        this.hooks.music(null);
+      const [screen, i] = parent[this.screen]!;
+      this.show(
+        screen,
+        this.screen === "training"
+          ? +this.mode.slice(5)
+          : this.screen === "records"
+            ? +(this.recordClass === "time")
+            : i,
+      );
+    }
+  }
+  key(code: string) {
+    if (["ArrowUp", "ArrowLeft"].includes(code)) this.move(-1);
+    else if (["ArrowDown", "ArrowRight"].includes(code)) this.move(1);
+    else if (["Enter", "Space", "KeyZ"].includes(code)) this.confirm();
+    else if (["Escape", "Backspace", "KeyX"].includes(code)) this.back();
+  }
+  gamepad() {
+    const p = Array.from(navigator.getGamepads?.() || []).find(Boolean);
+    const active = new Set<string>();
+    if (p) {
+      if (p.buttons[12]?.pressed || p.axes[1] < -0.5) active.add("ArrowUp");
+      if (p.buttons[13]?.pressed || p.axes[1] > 0.5) active.add("ArrowDown");
+      if (p.buttons[14]?.pressed || p.axes[0] < -0.5) active.add("ArrowLeft");
+      if (p.buttons[15]?.pressed || p.axes[0] > 0.5) active.add("ArrowRight");
+      if (p.buttons[0]?.pressed || p.buttons[9]?.pressed) active.add("Enter");
+      if (p.buttons[1]?.pressed) active.add("Escape");
+    }
+    for (const code of active) if (!this.padHeld.has(code)) this.key(code);
+    this.padHeld = active;
+  }
+  text(text: string, x: number, y: number, size = 8, color = "white") {
+    if (!this.font.complete || !this.font.naturalWidth) return;
+    let image = this.palettes.get(color);
+    if (!image) {
+      image = document.createElement("canvas");
+      image.width = 256;
+      image.height = 128;
+      const ctx = image.getContext("2d")!;
+      ctx.drawImage(this.font, 0, 0);
+      if (color !== "white") {
+        ctx.globalCompositeOperation = "multiply";
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, 256, 128);
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.drawImage(this.font, 0, 0);
+      }
+      this.palettes.set(color, image);
+    }
+    for (const c of text) {
+      const t = (size === 16 ? c.toUpperCase() : c).charCodeAt(0) - 32;
+      if (t >= 0 && t < 96)
+        this.g.drawImage(
+          image,
+          size === 8 ? Math.floor(t / 16) * 8 : 128 + Math.floor(t / 8) * 16,
+          size === 8 ? (t % 16) * 8 : (t % 8) * 16,
+          size,
+          size,
+          Math.round(x),
+          Math.round(y),
+          size,
+          size,
+        );
+      x += size;
+    }
+  }
+  time(t?: number) {
+    if (t === undefined) return "--'--\"--";
+    const n = Math.floor((Math.round(t * 60) * 100) / 60);
+    return `${String(Math.floor(n / 6000)).padStart(2, "0")}'${String(Math.floor(n / 100) % 60).padStart(2, "0")}"${String(n % 100).padStart(2, "0")}`;
+  }
+  courseName(i: number) {
+    return `${Math.floor(i / 3) + 1}-${(i % 3) + 1} ${HOVER_TRACKS[i].name.replace("’", "'")}`;
+  }
+  draw() {
+    const g = this.g;
+    g.clearRect(0, 0, 320, 240);
+    g.imageSmoothingEnabled = false;
+    const list = lists[this.screen];
+    if (list) {
+      if (this.logo.complete && this.logo.naturalWidth) {
+        const age = (performance.now() - this.entered) / 1000;
+        const offset =
+          this.screen === "title" ? Math.max(0, 60 - age * 60) * 8 : 0;
+        g.drawImage(
+          this.logo,
+          0,
+          0,
+          256,
+          51,
+          40 - offset,
+          8 + (offset * 50) / 116,
+          256,
+          51,
+        );
+        g.drawImage(
+          this.logo,
+          0,
+          78,
+          256,
+          50,
+          40 + offset,
+          58 - (offset * 50) / 116,
+          256,
+          50,
+        );
+      }
+      list.forEach((label, i) =>
+        this.text(
+          label,
+          160 - label.length * 8,
+          list.length === 2
+            ? 140 + i * 32
+            : list.length === 3
+              ? 124 + i * 32
+              : 124 + i * 24,
+          16,
+          i === this.selected ? "#00ff00" : "white",
+        ),
+      );
+      this.text("Copyright (C) 1997 Sato Tomokazu", 40, 224);
+    } else if (this.screen === "car") {
+      const type = +field("machine").value,
+        m = HoverEngine.MACHINES[type];
+      this.text(m.name[0] + m.name.slice(1).toLowerCase(), 16, 56, 16);
+      const labels = [
+        "Booster",
+        "Slaster",
+        "Radder",
+        "Resistance",
+        "Turbo",
+        "Weight",
+        "Power",
+      ];
+      const props = HoverEngine.MACHINES.map((m) => [
+        m.accel - m.falloff * 8,
+        m.side,
+        m.rudder ? m.rotation + 227 / m.rudder : 0,
+        m.drag,
+        m.turbo - m.turboFall * 4,
+        m.weight,
+        m.tank,
+      ]);
+      labels.forEach((label, i) => {
+        g.fillStyle = "#000080";
+        g.fillRect(
+          176,
+          152 + i * 12,
+          (152 * props[type][i]) / Math.max(...props.map((p) => p[i])),
+          8,
+        );
+        this.text(label, 176, 152 + i * 12);
+      });
+      this.curves[type].forEach((curve, j) => {
+        g.strokeStyle = j ? "red" : "white";
+        g.beginPath();
+        curve
+          .slice(0, 136)
+          .forEach((v, i) =>
+            i ? g.lineTo(176 + i, 136 - v) : g.moveTo(176 + i, 136 - v),
+          );
+        g.stroke();
+      });
+      this.text("MAX SPEED", 208, 112);
+      this.text("MAX TURBO", 208, 132);
+      this.text(Math.round(this.curves[type][0][159]) + "Km/h", 256, 122);
+      this.text(Math.round(this.curves[type][1][159]) + "Km/h", 256, 142);
+    } else if (this.screen === "course") {
+      const course = +field("course").value;
+      this.text(this.courseName(course), 16, 56, 16);
+      ["lap", "total"].forEach((kind, i) => {
+        const row = HoverRecords.read(
+          this.mode === "time" ? "time" : "gp",
+          course,
+          kind,
+        )[0];
+        this.text(i ? "TOTAL RECORD" : "BESTLAP RECORD", 8 + i * 176, 192);
+        this.text(this.time(row?.time), 32 + i * 176, 204);
+        if (row)
+          this.text(HoverEngine.MACHINES[row.machine].name, 32 + i * 176, 216);
+      });
+    } else if (this.screen === "training") {
+      const task = HoverTraining.tasks[+field("course").value];
+      this.text("TRAINING MODE", 16, 16, 16, "#ff00ff");
+      this.jp(
+        `${Math.floor(task.id / 5) + 1}-${(task.id % 5) + 1}`,
+        16,
+        56,
+        16,
+      );
+      this.jp(task.description, 32, 80);
+      this.jp(`制限時間 ${task.limit} 秒`, 160, 152);
+      const marks = HoverTraining.loadMarks()[task.id];
+      HoverEngine.MACHINES.forEach((m, i) => {
+        if (marks & (1 << i))
+          this.text(m.name, 16 + (i % 3) * 104, 184 + Math.floor(i / 3) * 16);
+      });
+    } else if (this.screen === "records") {
+      this.text("BEST RECORDS", 8, 0, 16, "red");
+      HOVER_TRACKS.forEach((_, i) => {
+        const row = HoverRecords.read(
+          this.recordClass as "gp" | "time",
+          i,
+          "lap",
+        )[0];
+        this.text(
+          this.courseName(i),
+          16,
+          24 + i * 24,
+          8,
+          i === this.selected ? "#00ff00" : "white",
+        );
+        this.text(
+          this.time(row?.time),
+          192,
+          24 + i * 24,
+          8,
+          i === this.selected ? "#00ff00" : "white",
+        );
+        this.text(
+          this.time(
+            HoverRecords.read(this.recordClass as "gp" | "time", i, "total")[0]
+              ?.time,
+          ),
+          192,
+          34 + i * 24,
+        );
+      });
+    } else if (this.screen === "record-detail") {
+      this.text(this.courseName(this.recordCourse), 16, 16, 16);
+      ["lap", "total"].forEach((kind, col) => {
+        const x = 16 + col * 160;
+        this.text(col ? "TOTAL RECORDS" : "BESTLAP RECORDS", x, 48);
+        const rows = HoverRecords.read(
+          this.recordClass as "gp" | "time",
+          this.recordCourse,
+          kind,
+        );
+        for (let i = 0; i < 6; i++) {
+          this.text(`${i + 1} ${this.time(rows[i]?.time)}`, x, 72 + i * 24);
+          if (rows[i])
+            this.text(
+              HoverEngine.MACHINES[rows[i].machine].name,
+              x + 16,
+              82 + i * 24,
+            );
+        }
+      });
+    } else if (this.screen === "music") {
+      this.text("MUSIC MODE", 8, 8, 16, "blue");
+      this.songNames.forEach((s, i) =>
+        this.text(
+          s,
+          32,
+          32 + i * 17,
+          16,
+          i === this.selected ? "#00ff00" : "white",
+        ),
+      );
+    } else if (this.screen === "help") {
+      this.text("HELP", 16, 16, 16);
+      this.jp(
+        "↑↓ / ←→ : 選択\nEnter / Z : 決定\nEsc / X : 戻る\n\nSpace / ↑ : 加速\n←→ : ラダー  Shift : ターボ\nQ A / E D : スラスター\nS / ↓ : ブレーキ\nEsc / P : ポーズ",
+        24,
+        48,
+      );
+    } else if (this.screen === "notice") this.jp(this.notice, 16, 32);
+    if (["car", "course", "training", "music"].includes(this.screen)) {
+      g.fillStyle = "#00ffff";
+      for (const side of [0, 1]) {
+        g.beginPath();
+        g.moveTo(side ? 318 : 2, 120);
+        g.lineTo(side ? 308 : 12, 112);
+        g.lineTo(side ? 308 : 12, 128);
+        g.fill();
+      }
+    }
+    this.panel.setAttribute(
+      "aria-label",
+      `${this.screen}: ${list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : this.screen === "training" ? HoverTraining.tasks[+field("course").value].description : this.screen === "notice" ? this.notice : "選択画面")}`,
+    );
+  }
+  jp(text: string, x: number, y: number, size = 12) {
+    this.g.fillStyle = "white";
+    this.g.font = `${size}px monospace`;
+    this.g.textBaseline = "top";
+    let line = 0,
+      col = 0;
+    for (const ch of text) {
+      if (ch === "\n" || col * size > 288 - x) {
+        line++;
+        col = 0;
+        if (ch === "\n") continue;
+      }
+      this.g.fillText(ch, x + col * size, y + line * (size + 6));
+      col += ch.charCodeAt(0) > 255 ? 1 : 0.6;
+    }
+  }
+}

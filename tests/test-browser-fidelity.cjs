@@ -22,7 +22,9 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       if (m.type() === "error") errors.push(m.text());
     });
     await page.goto(baseURL);
-    await page.waitForFunction(() => window.hoverDiagnostics?.().triangles > 0);
+    await page.waitForFunction(
+      () => window.hoverDiagnostics?.().menuScreen === "title",
+    );
     await page.evaluate(async () => {
       const { HoverRenderer } = await import("./renderer.js");
       const { OriginalSound } = await import("./sound.js");
@@ -274,14 +276,17 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       await f.sound.context.close();
     });
     await page.evaluate(() => window.fidelity.canvas.remove());
-    await page.selectOption("#mode", "train0");
+    await page.getByRole("button", { name: "START", exact: true }).click();
+    await page.getByRole("button", { name: "TRAINING", exact: true }).click();
+    await page.getByRole("button", { name: "LEVEL 1", exact: true }).click();
+    await page.locator("#menu-confirm").click();
     await page.evaluate(() => {
       window.HoverTraining.step = (session) => {
         session.status = "complete";
         session.reason = "test";
       };
     });
-    await page.click("#start");
+    await page.locator("#menu-confirm").click();
     await page.waitForFunction(
       () => window.hoverDiagnostics().state === "finished",
     );

@@ -28,7 +28,7 @@ for i in range(128):
   tones.append(dict(sample=struct.unpack_from('<H',t,22)[0],volume=p[1]*t[2]/127**2,pan=t[3],center=t[4],shift=t[5],min=t[6],max=t[7],adsr1=struct.unpack_from('<H',t,16)[0],adsr2=struct.unpack_from('<H',t,18)[0]))
  programs[i]=tones;active+=1
 songs={}
-for name in ['SAMPLE15','HOVER2','TO7','HOVER4','SAMPLE16','B']:
+for name in ['SAMPLE15','HOVER2','TO7','HOVER4','SAMPLE16','B','SELECT','ENTRY1','SAMPLE19','CANION','SAMPLE26','SAMPLE21']:
  d=(ROOT/'extracted'/f'{name}.SEQ').read_bytes();assert d[:4]==b'pQES';ppqn=int.from_bytes(d[8:10],'big');tempo=int.from_bytes(d[10:13],'big');pos=15;status=0;seconds=0;events=[];end=False
  def byte():
   global pos

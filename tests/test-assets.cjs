@@ -18,7 +18,9 @@ for (const [name, song] of Object.entries(HOVER_MUSIC.songs)) {
       assert.ok(tones, `${name}: missing program ${programs[ch]}`);
       const intentionalSilence =
         (name === "HOVER2" && programs[ch] === 127 && a === 28) ||
-        (name === "SAMPLE16" && programs[ch] === 127 && a === 51);
+        (name === "SAMPLE16" && programs[ch] === 127 && a === 51) ||
+        // SELECT.SEQ also contains percussion keys absent from the supplied VAB.
+        (name === "SELECT" && programs[ch] === 127 && [36, 56].includes(a));
       assert.ok(
         intentionalSilence || tones.some((t) => a >= t.min && a <= t.max),
         `${name}: unexpected unmapped note ${a}`,
@@ -42,7 +44,7 @@ assert.equal(Object.keys(HOVER_MUSIC.samples).length, 17);
 assert.ok(HOVER_MODELS.OTHER[0]["solid|semi"]);
 assert.equal(HOVER_MODELS.ALP_0_9.length, 15);
 console.log(
-  "PASS: 6 original sequences, 17 original samples, 9 course mappings, translucent POWER UP and countdown models",
+  "PASS: 12 original sequences, 17 original samples, 9 course mappings, translucent POWER UP and countdown models",
 );
 
 require("../dist/backgrounds.js");
