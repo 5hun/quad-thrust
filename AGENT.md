@@ -1,5 +1,5 @@
-# エージェントへの指示
+# Instructions for Agents
 
-このリポジトリでは、依頼された作業に必要な変更と検証を終えた後、追加確認なしで Git コミットまで実行してよい。
+In this repository, you may create Git commits without additional confirmation after completing the changes and verification required for the user's requested work.
 
-push はユーザーから依頼された場合に実行する。
+Push only when the user requests it.
