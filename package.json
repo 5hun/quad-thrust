@@ -1,17 +1,18 @@
 {
   "name": "hover-browser",
   "version": "1.0.0",
-  "description": "提供された `HOVER_SOURCE` と `HOVER120/HOVER.PAC` をもとにしたブラウザ移植です。前版の Canvas 2D 疑似3Dを撤去し、**Three.js r180 / WebGL 2** に変更しました。",
+  "description": "\u63d0\u4f9b\u3055\u308c\u305f `HOVER_SOURCE` \u3068 `HOVER120/HOVER.PAC` \u3092\u3082\u3068\u306b\u3057\u305f\u30d6\u30e9\u30a6\u30b6\u79fb\u690d\u3067\u3059\u3002\u524d\u7248\u306e Canvas 2D \u7591\u4f3c3D\u3092\u64a4\u53bb\u3057\u3001**Three.js r180 / WebGL 2** \u306b\u5909\u66f4\u3057\u307e\u3057\u305f\u3002",
   "scripts": {
     "prepare": "husky",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node tests/test-assets.cjs && node tests/test-training.cjs && node tests/test.cjs && node tests/test-circuits.cjs",
+    "test": "npm run build && node tests/test-assets.cjs && node tests/test-training.cjs && node tests/test.cjs && node tests/test-fidelity.cjs && node tests/test-circuits.cjs",
     "start": "python3 start-server.py",
     "lint": "eslint src tests/*.cjs eslint.config.mjs --max-warnings=0",
     "lint:fix": "npm run lint -- --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:browser": "node tests/test-browser-fidelity.cjs"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

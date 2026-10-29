@@ -29,7 +29,7 @@ def texture(page,clut):
   data=b''.join(rgba(pixel(page,clut,u,v)) for v in range(256) for u in range(256));png(OUT/(key+'.png'),256,256,data);texs[key]=True
  return key+'.png'
 models={}
-for name in ['XVN_CAR','XVP_CAR','SVS_CAR','JUSTER','XXX_CAR','YAKA_MAN','OTHER','ALP_0_9']:
+for name in ['XVN_CAR','XVP_CAR','SVS_CAR','JUSTER','XXX_CAR','YAKA_MAN','OTHER','ALP_0_9','ALP_A_O','ALP_P_O']:
  d=(ROOT/'extracted'/f'{name}.TMD').read_bytes();magic,flags,count=struct.unpack_from('<III',d);assert magic==65 and flags==0
  objects=[]
  for obj in range(count):

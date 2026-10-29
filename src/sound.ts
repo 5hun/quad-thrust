@@ -9,6 +9,8 @@ interface Voice {
   t: Tone;
   base: number;
   released: boolean;
+  envelope: AudioWorkletNode;
+  velocity: number;
   held?: boolean;
 }
 export class OriginalSound {
@@ -20,6 +22,11 @@ export class OriginalSound {
   song: Song | null;
   notesPlayed: number;
   master!: GainNode;
+  reverb!: ConvolverNode;
+  effects = new Map<
+    number,
+    { source: AudioBufferSourceNode; envelope: AudioWorkletNode }
+  >();
   ready!: Promise<void>;
   timer?: ReturnType<typeof setInterval>;
   pendingCourse: string | number | null = null;
@@ -58,8 +65,30 @@ export class OriginalSound {
       const limiter = c.createDynamicsCompressor();
       this.master.connect(limiter);
       limiter.connect(c.destination);
-      this.ready = Promise.all(
-        [
+      // GP1_MAIN.C selects HALL at depth 64/127. A deterministic stereo
+      // hall impulse restores the missing wet path; this is not SPU RAM emulation.
+      this.reverb = c.createConvolver();
+      const impulse = c.createBuffer(
+        2,
+        Math.ceil(c.sampleRate * 1.8),
+        c.sampleRate,
+      );
+      let seed = 1;
+      for (let ch = 0; ch < 2; ch++) {
+        const data = impulse.getChannelData(ch);
+        for (let i = Math.floor(c.sampleRate * 0.025); i < data.length; i++) {
+          seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+          data[i] = (seed / 0x80000000 - 1) * Math.exp((-6 * i) / data.length);
+        }
+      }
+      this.reverb.buffer = impulse;
+      const wet = c.createGain();
+      wet.gain.value = 64 / 127;
+      this.reverb.connect(wet);
+      wet.connect(this.master);
+      this.ready = Promise.all([
+        c.audioWorklet.addModule("spu-envelope.js"),
+        ...[
           ...Object.entries(window.HOVER_SOUNDS).map(
             ([id, s]) => ["se" + id, s] as [string, Sample],
           ),
@@ -71,7 +100,7 @@ export class OriginalSound {
           if (!r.ok) throw Error(s.file);
           this.buffers.set(id, await c.decodeAudioData(await r.arrayBuffer()));
         }),
-      ).then(() => {
+      ]).then(() => {
         for (const name of ["wind", "rear", "left", "right"]) {
           const meta = window.HOVER_SOUNDS[65],
             source = c.createBufferSource(),
@@ -81,9 +110,12 @@ export class OriginalSound {
           source.loop = true;
           source.loopStart = meta.loopStart;
           source.loopEnd = meta.loopEnd;
-          source.connect(gain);
+          const envelope = this.envelope(meta, c.currentTime, source);
+          source.connect(envelope);
+          envelope.connect(gain);
           gain.connect(pan);
           pan.connect(this.master);
+          pan.connect(this.reverb);
           pan.pan.value = name === "left" ? -0.6 : name === "right" ? 0.6 : 0;
           gain.gain.value = 0;
           source.start();
@@ -98,14 +130,70 @@ export class OriginalSound {
     if (this.pendingCourse != null && !this.song)
       this.playCourse(this.pendingCourse);
   }
-  effect(id: number, note = 60) {
+  envelope(
+    t: { adsr1?: number; adsr2?: number },
+    when: number,
+    source: AudioBufferSourceNode,
+  ) {
+    const node = new AudioWorkletNode(this.context!, "hover-spu-envelope", {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      outputChannelCount: [1],
+      processorOptions: {
+        adsr1: t.adsr1 ?? 15,
+        adsr2: t.adsr2 ?? 0x1fc0,
+        when,
+      },
+    });
+    node.port.onmessage = () => {
+      try {
+        source.stop();
+      } catch {}
+    };
+    return node;
+  }
+  disposeEnvelope(node: AudioWorkletNode) {
+    node.port.postMessage({ dispose: true });
+    node.disconnect();
+    node.port.close();
+  }
+  effect(id: number, note = 60, volume = 127, sustained = false) {
     if (!this.enabled || !this.buffers.has("se" + id)) return;
+    // car_hitsound replaces the previous wall/landing voice.
+    const old = this.effects.get(id);
+    if (old) old.envelope.port.postMessage({ when: this.context!.currentTime });
+    const meta = window.HOVER_SOUNDS[id];
     const s = this.context!.createBufferSource();
     s.buffer = this.buffers.get("se" + id)!;
-    s.playbackRate.value = 2 ** ((note - window.HOVER_SOUNDS[id].note!) / 12);
-    s.connect(this.master);
-    s.onended = () => s.disconnect();
+    s.playbackRate.value =
+      2 ** ((note - meta.note! - (meta.shift || 0) / 128) / 12);
+    s.loop = sustained && meta.loop;
+    s.loopStart = meta.loopStart;
+    s.loopEnd = meta.loopEnd;
+    const envelope = this.envelope(meta, this.context!.currentTime, s);
+    const gain = this.context!.createGain();
+    gain.gain.value = (volume / 127) * (meta.volume ?? 1);
+    s.connect(envelope);
+    envelope.connect(gain);
+    gain.connect(this.master);
+    gain.connect(this.reverb);
+    this.effects.set(id, { source: s, envelope });
+    s.onended = () => {
+      s.disconnect();
+      this.disposeEnvelope(envelope);
+      gain.disconnect();
+      if (this.effects.get(id)?.source === s) this.effects.delete(id);
+    };
     s.start();
+  }
+  continuous(id: number, note: number, volume: number, active: boolean) {
+    if (active && !this.effects.has(id)) this.effect(id, note, volume, true);
+    if (!active) {
+      this.effects
+        .get(id)
+        ?.envelope.port.postMessage({ when: this.context!.currentTime });
+      this.effects.delete(id);
+    }
   }
   stopMusic() {
     for (const v of this.voices) {
@@ -145,18 +233,7 @@ export class OriginalSound {
   release(v: Voice, when: number) {
     if (v.released) return;
     v.released = true;
-    const rate = v.t.adsr2 & 31;
-    const seconds = Math.min(
-      3,
-      Math.max(
-        0.015,
-        (32768 * Math.pow(2, Math.max(0, rate - 11))) /
-          (Math.pow(2, Math.max(0, 11 - rate)) * 8 * 44100),
-      ),
-    );
-    v.g.gain.cancelAndHoldAtTime(when);
-    v.g.gain.linearRampToValueAtTime(0, when + seconds);
-    v.s.stop(when + seconds + 0.01);
+    v.envelope.port.postMessage({ when });
   }
   note(ch: number, n: number, velocity: number, when: number) {
     const channel = this.channels[ch];
@@ -178,39 +255,36 @@ export class OriginalSound {
           channel.expression) /
           127) *
         0.65;
-      const ar = (t.adsr1 >> 8) & 127,
-        shift = ar >> 2,
-        step = 7 - (ar & 3);
-      const attack = Math.min(
-        2,
-        Math.max(
-          0.001,
-          (32768 * Math.pow(2, Math.max(0, shift - 11))) /
-            (step * Math.pow(2, Math.max(0, 11 - shift)) * 44100),
-        ),
-      );
-      const sustain = ((t.adsr1 & 15) + 1) / 16;
-      g.gain.setValueAtTime(0, when);
-      g.gain.linearRampToValueAtTime(level, when + attack);
-      g.gain.setTargetAtTime(
-        level * sustain,
-        when + attack,
-        0.03 * Math.pow(2, (t.adsr1 >> 4) & 15),
-      );
+      g.gain.setValueAtTime(level, when);
+      const envelope = this.envelope(t, when, s);
       pan.pan.value = Math.max(
         -1,
         Math.min(1, (channel.pan + t.pan - 128) / 64),
       );
-      s.connect(g);
+      s.connect(envelope);
+      envelope.connect(g);
       g.connect(pan);
       pan.connect(this.master);
-      const v = { s, g, pan, ch, n, t, base, released: false };
+      pan.connect(this.reverb);
+      const v = {
+        s,
+        g,
+        pan,
+        ch,
+        n,
+        t,
+        base,
+        envelope,
+        velocity,
+        released: false,
+      };
       this.voices.add(v);
       s.onended = () => {
         this.voices.delete(v);
         s.disconnect();
         g.disconnect();
         pan.disconnect();
+        this.disposeEnvelope(envelope);
       };
       s.start(when);
       this.notesPlayed++;
@@ -242,6 +316,21 @@ export class OriginalSound {
         if (a === 7) c.volume = b;
         if (a === 10) c.pan = b;
         if (a === 11) c.expression = b;
+        if (a === 7 || a === 10 || a === 11)
+          for (const v of this.voices) {
+            if (v.ch !== ch) continue;
+            v.g.gain.setValueAtTime(
+              (((((v.velocity / 127) * v.t.volume * c.volume) / 127) *
+                c.expression) /
+                127) *
+                0.65,
+              when,
+            );
+            v.pan.pan.setValueAtTime(
+              Math.max(-1, Math.min(1, (c.pan + v.t.pan - 128) / 64)),
+              when,
+            );
+          }
         if (a === 64) {
           c.sustain = b >= 64;
           if (!c.sustain)
@@ -259,8 +348,10 @@ export class OriginalSound {
   }
   update(car: Car, input: Input, running: boolean) {
     if (!this.context) return;
+    this.continuous(70, 40, 80, running && car.energy < 12.5);
+    this.continuous(71, 90, 64, running && car.grip && car.tile === "d");
     for (const { name, source, gain } of this.loops) {
-      const note = name === "wind" ? 8 : car.turbo ? 32 : 20;
+      const note = name === "wind" ? 8 : name === "rear" && car.turbo ? 32 : 20;
       let volume = 0;
       if (running) {
         if (name === "wind")
@@ -271,7 +362,9 @@ export class OriginalSound {
           volume = (
             name === "left" ? input.l1 || input.l2 : input.r1 || input.r2
           )
-            ? 40 / 127
+            ? car.type === 5
+              ? 0
+              : 40 / 127
             : 0;
       }
       gain.gain.setTargetAtTime(volume, this.context!.currentTime, 0.02);

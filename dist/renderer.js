@@ -109,6 +109,10 @@ export class HoverRenderer {
     countDigits;
     skyGroup;
     countdown = null;
+    retroUniform = { value: 1 };
+    result = null;
+    resultText = "";
+    resultLetters = new THREE.Group();
     constructor(canvas) {
         this.renderer = new THREE.WebGLRenderer({
             canvas,
@@ -148,6 +152,7 @@ export class HoverRenderer {
             return m;
         });
         this.countScene.add(new THREE.AmbientLight(0xffffff, 2));
+        this.countScene.add(this.resultLetters);
         this.skyGroup = new THREE.Group();
         this.scene.add(this.skyGroup);
     }
@@ -161,6 +166,37 @@ export class HoverRenderer {
             this.cache.set(path, t);
         }
         return this.cache.get(path);
+    }
+    // WebGL perspective interpolation is cancelled by carrying clip W with UV.
+    // The 320x240 snap is applied only in RETRO, independent of canvas CSS size.
+    sourceMaterial(material) {
+        material.onBeforeCompile = (shader) => {
+            shader.uniforms.sourceRetro = this.retroUniform;
+            const header = "uniform float sourceRetro;\nvarying float sourceW;\n";
+            shader.vertexShader =
+                header +
+                    shader.vertexShader.replace("#include <project_vertex>", `
+        #include <project_vertex>
+        sourceW = mix(1.0, gl_Position.w, sourceRetro);
+        #ifdef USE_MAP
+          vMapUv *= sourceW;
+        #endif
+        if (sourceRetro > 0.5 && gl_Position.w > 0.0) {
+          vec2 pixel = gl_Position.xy / gl_Position.w * vec2(160.0, 120.0);
+          gl_Position.xy = floor(pixel + 0.5) / vec2(160.0, 120.0) * gl_Position.w;
+        }
+      `);
+            shader.fragmentShader =
+                header +
+                    shader.fragmentShader
+                        .replace("#include <map_fragment>", THREE.ShaderChunk.map_fragment.replace("vMapUv", "(vMapUv / sourceW)"))
+                        .replace("#include <dithering_fragment>", `
+          #include <dithering_fragment>
+          if (sourceRetro > 0.5) gl_FragColor.rgb = floor(clamp(gl_FragColor.rgb, 0.0, 1.0) * 31.0 + 0.5) / 31.0;
+        `);
+        };
+        material.customProgramCacheKey = () => "hover-source-raster-v1";
+        return material;
     }
     resize() {
         const r = this.canvas.getBoundingClientRect();
@@ -237,6 +273,7 @@ export class HoverRenderer {
                 side: THREE.DoubleSide,
                 alphaTest: 0.1,
             });
+            this.sourceMaterial(mat);
             this.trackGroup.add(new THREE.Mesh(geometry, mat));
         }
         this.yaw = null;
@@ -260,7 +297,8 @@ export class HoverRenderer {
             }
             const [textureName, semi] = material.split("|");
             const fx = name === "OTHER" ||
-                (!["YAKA_MAN", "ALP_0_9"].includes(name) &&
+                (name !== "YAKA_MAN" &&
+                    !name.startsWith("ALP_") &&
                     (index === 2 || index === 3));
             const Material = fx ? THREE.MeshBasicMaterial : THREE.MeshLambertMaterial;
             const mat = new Material({
@@ -272,6 +310,7 @@ export class HoverRenderer {
                 depthWrite: !ghost && !semi,
                 alphaTest: 0.01,
             });
+            this.sourceMaterial(mat);
             if (ghost) {
                 mat.color.set(0x70edff);
                 if (mat instanceof THREE.MeshLambertMaterial)
@@ -298,8 +337,8 @@ export class HoverRenderer {
                 fore.position.y = -1.05;
                 arm.add(fore);
                 const hand = this.modelObject(name, 5, ghost);
-                hand.position.y = -2.3556;
-                arm.add(hand);
+                hand.position.y = -1.3056;
+                fore.add(hand);
                 body.add(arm);
                 const leg = new THREE.Group();
                 leg.position.set(s * 0.489, -2.4472, -0.0555);
@@ -308,10 +347,10 @@ export class HoverRenderer {
                 knee.position.y = -2.265;
                 leg.add(knee);
                 const foot = this.modelObject(name, 8, ghost);
-                foot.position.y = -4.08;
-                leg.add(foot);
+                foot.position.y = -1.815;
+                knee.add(foot);
                 body.add(leg);
-                limbs.push({ arm, leg, s });
+                limbs.push({ arm, fore, leg, knee, foot, s });
             }
             body.position.y = 4.5;
         }
@@ -356,10 +395,14 @@ export class HoverRenderer {
             const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
                 map: texture,
                 transparent: true,
-                opacity: 0.65,
+                opacity: 0.5,
+                // DRAW_SP.C draw_bomb submits screen-space sprites at OT depth 0.
+                // Ship and road depth must never occlude this overlay.
+                depthTest: false,
                 depthWrite: false,
             }));
             sprite.visible = false;
+            sprite.renderOrder = 100;
             root.add(sprite);
             return sprite;
         });
@@ -367,6 +410,10 @@ export class HoverRenderer {
         body.add(power);
         power.visible = false;
         this.scene.add(root);
+        const debris = new THREE.InstancedMesh(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([-0.16, 0, 0, 0.16, 0, 0, 0, 0.3, 0], 3)), new THREE.MeshBasicMaterial({ color: 0xb0b0b0, side: THREE.DoubleSide }), 64);
+        debris.count = 0;
+        debris.frustumCulled = false;
+        root.add(debris);
         return {
             type,
             root,
@@ -379,18 +426,32 @@ export class HoverRenderer {
             ghost,
             power,
             explosions,
+            debris,
+            motionFrame: 0,
+            motionTick: -1,
         };
     }
     updateShip(ship, p, input, time) {
         ship.root.visible = true;
+        const tick = p.ticks ?? Math.floor(time * 60);
+        const explosion = p.explosionFrames;
+        // Original over counts down from 300; car_draw hides the last 120 ticks.
+        ship.body.visible = explosion === undefined || explosion <= 180;
         ship.explosions.forEach((s, i) => {
             const t = p.explosionFrames ?? Infinity;
             s.visible = Number.isFinite(t) && t < 300;
             if (s.visible) {
                 const phase = (t + i * 2) % 8;
+                const cycle = Math.floor((t + i * 2) / 8);
+                let seed = (Math.imul(cycle + 1, 1664525) + i * 1013904223) >>> 0;
+                const rand = () => {
+                    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+                    return seed;
+                };
+                const scale = (rand() & 8191) + 4096;
                 s.material.map.offset.set(Math.floor(phase / 4) * 0.5, 1 - ((phase % 4) + 1) * 0.25);
-                s.position.set(Math.sin(i * 3.7 + Math.floor(t / 8)) * 2, Math.cos(i * 5 + Math.floor(t / 8)) * 2, 0);
-                s.scale.setScalar(7 + i * 2);
+                s.position.set(((rand() & 31) - 16) * 0.08, ((rand() & 31) - 16) * 0.08, 0);
+                s.scale.setScalar((32 * scale) / 51200);
             }
         });
         ship.root.position.set(p.x, p.y, -p.z);
@@ -398,7 +459,6 @@ export class HoverRenderer {
         ship.body.rotation.set(p.pitch || 0, 0, p.roll || 0);
         for (const g of ship.rudders)
             g.rotation.y = (-(p.rudderAngle || 0) * Math.PI * 2) / 4096;
-        const tick = p.ticks ?? Math.floor(time * 60);
         const size = (input.accel || p.turbo ? 64 : p.fireTail || 0) + (p.turbo ? 16 : 0);
         for (const g of ship.flames) {
             g.visible = size > 0 && (tick & 1) === 0;
@@ -420,16 +480,53 @@ export class HoverRenderer {
             g.visible = !!input[names[i]] && (tick & 1) === 1;
             g.rotation.x = (-tick * 165 * Math.PI * 2) / 4096;
         });
-        ship.limbs.forEach(({ arm, leg, s }) => {
-            const phase = time * ((p.sourceSpeed ?? 0) > 40 ? 12 : 3);
-            arm.rotation.x = Math.sin(phase) * s * 0.6;
-            leg.rotation.x = -Math.sin(phase) * s * 0.6;
+        if (ship.motionTick !== tick) {
+            const elapsed = ship.motionTick < 0 ? 0 : Math.max(0, tick - ship.motionTick);
+            ship.motionFrame += elapsed * (((p.sourceSpeed || 0) >> 7) + 1);
+            ship.motionTick = tick;
+        }
+        // OMAKE.C DASH tables and cap_work's four-way integer interpolation.
+        const arm0 = [25, 30, 58, 74, 68, 39, 24, -7, -9, -11, -21];
+        const arm1 = [-57, -46, -8, -4, -8, -25, -54, -89, -100, -86, -59];
+        const foot0 = [0, 0, 19, 20, 11, -9, -30, -42, -36, -22, -14];
+        const foot1 = [27, 37, 34, 51, 79, 83, 87, 45, 14, -1, 10];
+        const motion = (a, frame, parent) => {
+            const f = frame % 44, j = Math.floor(f / 4), k = (j + 1) % 11;
+            const value = Math.trunc(-((a[j] - (parent?.[j] || 0)) * 4096 * (4 - (f % 4)) +
+                (a[k] - (parent?.[k] || 0)) * 4096 * ((f % 4) + 1)) /
+                4 /
+                360);
+            return ((value + Math.trunc((13 * 4096) / 360 / 2)) * Math.PI * 2) / 4096;
+        };
+        ship.limbs.forEach(({ arm, fore, leg, knee, s }) => {
+            const f = ship.motionFrame + (s > 0 ? 0 : 22);
+            const standing = (p.sourceSpeed || 0) < 20;
+            arm.rotation.x = standing ? 0 : motion(arm0, f);
+            fore.rotation.x = standing ? 0 : motion(arm1, f, arm0);
+            leg.rotation.x = standing ? 0 : motion(foot0, f + 22);
+            knee.rotation.x = standing ? 0 : motion(foot1, f + 22, foot0);
         });
         if (ship.shadow) {
-            ship.shadow.visible = p.y - (p.groundY ?? p.y - 2) < 20;
+            ship.shadow.visible =
+                p.onRoad !== false && (explosion === undefined || explosion <= 180);
             ship.shadow.position.set(p.x, (p.groundY ?? p.y - 2) + 0.06, -p.z);
-            ship.shadow.rotation.set(0, -p.heading, 0);
+            const n = p.groundNormal || [0, 4096, 0];
+            const up = new THREE.Vector3(n[0], n[1], -n[2]).normalize();
+            ship.shadow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+            ship.shadow.rotateY(-p.heading);
         }
+        const inverse = new THREE.Matrix4();
+        ship.root.updateMatrixWorld(true);
+        inverse.copy(ship.root.matrixWorld).invert();
+        const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion();
+        ship.debris.count = Math.min(64, p.debris?.length || 0);
+        for (let i = 0; i < ship.debris.count; i++) {
+            const d = p.debris[i];
+            rotation.setFromEuler(new THREE.Euler((48 - d.life) * 0.7, d.seed % 8, (48 - d.life) * 0.4));
+            matrix.compose(new THREE.Vector3(d.x, d.y, -d.z), rotation, new THREE.Vector3(1, 1, 1));
+            ship.debris.setMatrixAt(i, matrix.premultiply(inverse));
+        }
+        ship.debris.instanceMatrix.needsUpdate = true;
     }
     updateCamera(car) {
         if (this.yaw === null) {
@@ -445,6 +542,7 @@ export class HoverRenderer {
     }
     draw(track, car, bots, state, time, input, ghost = null) {
         this.setTrack(track);
+        this.retroUniform.value = this.retro ? 1 : 0;
         const racers = [car, ...bots, ...(ghost ? [ghost] : [])];
         while (this.ships.length > racers.length) {
             const s = this.ships.pop();
@@ -491,6 +589,7 @@ export class HoverRenderer {
         this.renderer.clearDepth();
         this.renderer.render(this.scene, this.camera);
         this.renderer.autoClear = true;
+        this.resultLetters.visible = !!this.result;
         if (this.countdown !== null && this.countdown !== undefined) {
             const n = this.countdown;
             let i = Math.floor(n / 60);
@@ -511,6 +610,34 @@ export class HoverRenderer {
             }
         }
         this.frames++;
+        if (this.result) {
+            const { text, frame } = this.result;
+            if (this.resultText !== text) {
+                this.clear(this.resultLetters);
+                this.resultText = text;
+                for (const ch of text) {
+                    const first = ch <= "O" ? "A" : "P";
+                    this.resultLetters.add(this.modelObject(first === "A" ? "ALP_A_O" : "ALP_P_O", ch.charCodeAt(0) - first.charCodeAt(0)));
+                }
+            }
+            this.countDigits.forEach((m) => (m.visible = false));
+            this.resultLetters.visible = true;
+            // TRAINIG.C: one character every 8 ticks, Z 8000 -> 6000 by 200,
+            // Y rotation 4096/5 per tick while approaching the final position.
+            this.resultLetters.children.forEach((m, i) => {
+                const age = frame - (i + 1) * 8;
+                const steps = Math.min(10, Math.max(0, age + 1));
+                m.visible = age >= 0;
+                m.position.set((i - (text.length - 1) / 2) * 6, 0, -80 + steps * 2);
+                m.rotation.y = (-steps * 819 * Math.PI * 2) / 4096;
+            });
+            this.renderer.autoClear = false;
+            this.renderer.clearDepth();
+            this.renderer.render(this.countScene, this.countCamera);
+            this.renderer.autoClear = true;
+        }
+        else
+            this.resultLetters.visible = false;
     }
     diagnostics() {
         return {

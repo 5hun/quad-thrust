@@ -197,7 +197,7 @@ function resize() {
     view.resize();
 }
 new ResizeObserver(resize).observe(canvas);
-let gpRound = 0, gpCup = 0, ghostFrames = [], recording = [], ghostClock = 0, ghostBestTime = Infinity;
+let gpRound = 0, resultFrames = 0, gpCup = 0, ghostFrames = [], recording = [], ghostClock = 0, ghostBestTime = Infinity;
 function start(nextRound = false) {
     originalSound.cancel();
     originalSound.pause(false);
@@ -339,7 +339,8 @@ function finishTraining() {
         return;
     state = "finished";
     $("touch").hidden = true;
-    $("result").hidden = false;
+    resultFrames = 0;
+    $("result").hidden = true;
     $("message").textContent = "";
     const success = trainingSession.status === "complete";
     if (success)
@@ -558,6 +559,13 @@ function render() {
     }
     view.countdown =
         state === "countdown" ? Math.max(0, Math.ceil(countdown * 60)) : null;
+    view.result =
+        state === "finished" && trainingSession?.status && resultFrames < 120
+            ? {
+                text: trainingSession.status === "complete" ? "COMPLETE" : "MISS",
+                frame: resultFrames,
+            }
+            : null;
     view.draw(track, display, state === "menu" ? [] : bots, state, worldTime, state === "menu" ? { accel: true } : currentInput, ghost);
 }
 function hud() {
@@ -590,6 +598,11 @@ function hud() {
 }
 function update(dt) {
     currentInput = input();
+    if (state === "finished" && trainingSession?.status) {
+        if (++resultFrames >= 120)
+            $("result").hidden = false;
+        return;
+    }
     if (state === "menu") {
         demoDistance += dt * 48;
         return;
@@ -629,6 +642,7 @@ function update(dt) {
         return;
     }
     if (state === "destroyed") {
+        E.stepDebris(car);
         car.explosionFrames = (car.explosionFrames ?? 0) + 1;
         if (car.explosionFrames >= 300)
             finish();
@@ -641,8 +655,6 @@ function update(dt) {
     car.fireTail =
         currentInput.accel || car.turbo ? 64 : Math.max(0, (car.fireTail || 0) - 1);
     const previousProgress = car.progress;
-    if (car.energy < 12.5 && car.ticks % 60 === 0)
-        originalSound.effect(70, 40);
     const laps = car.laps.length;
     E.step(car, track, currentInput, dt, mode === "free");
     if (car.progress < previousProgress)
@@ -698,10 +710,12 @@ function update(dt) {
         const e = car.events.shift();
         if (e === "repair") {
             car.repairFrames = 32;
-            originalSound.effect(69, 24);
+            originalSound.effect(69, 24, 90);
         }
-        if (e === "wall")
+        if (e === "wall-sound")
             originalSound.effect(67, 45);
+        if (e === "collision")
+            originalSound.effect(67, 70);
         if (e === "land")
             originalSound.effect(67, 80);
     }
@@ -710,7 +724,8 @@ function update(dt) {
             state = "destroyed";
             car.explosionFrames = 0;
             car.explosionPlayed = true;
-            originalSound.effect(68, 30);
+            E.emitDebris(car, 64, 2, [0, 1, 0]);
+            originalSound.effect(68, 30, 90);
         }
         else
             finish();

@@ -59,6 +59,18 @@ interface Pose {
   repairFrames?: number;
   fireTail?: number;
   groundY?: number;
+  groundNormal?: Vec3;
+  onRoad?: boolean;
+  debris?: {
+    x: number;
+    y: number;
+    z: number;
+    vx: number;
+    vy: number;
+    vz: number;
+    life: number;
+    seed: number;
+  }[];
   active?: Input;
 }
 interface Car extends Pose {
@@ -122,6 +134,8 @@ interface Nearest {
   dx: number;
   dz: number;
   dy: number;
+  surface: number;
+  normal: Vec3;
 }
 interface TrainingSession {
   task: (typeof HoverTraining.tasks)[number];
@@ -137,6 +151,11 @@ interface Sample {
   loopStart: number;
   loopEnd: number;
   note?: number;
+  shift?: number;
+  volume?: number;
+  pan?: number;
+  adsr1?: number;
+  adsr2?: number;
 }
 interface Tone {
   sample: number;

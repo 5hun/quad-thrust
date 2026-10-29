@@ -19,10 +19,10 @@ for i in range(1,nvag+1):
   if flag&1:loop_end=len(pcm);break
  path=out/f'se-{i}.wav'
  with wave.open(str(path),'wb') as w:w.setnchannels(1);w.setsampwidth(2);w.setframerate(44100);w.writeframes(struct.pack('<'+'h'*len(pcm),*pcm))
- samples[i]={'file':path.name,'loopStart':loop_start/44100,'loopEnd':(loop_end or len(pcm))/44100}
+ samples[i]={'file':path.name,'loop':bool(flag&2),'loopStart':loop_start/44100,'loopEnd':(loop_end or len(pcm))/44100}
 meta={};active=0
 for i in range(128):
  tones=h[32+i*16]
  if not tones:continue
- tone=h[2080+active*512:2080+active*512+32];vag=struct.unpack_from('<H',tone,22)[0];meta[i]={**samples[vag],'note':tone[4]};active+=1
+ tone=h[2080+active*512:2080+active*512+32];vag=struct.unpack_from('<H',tone,22)[0];meta[i]={**samples[vag],'note':tone[4],'shift':tone[5],'volume':h[33+i*16]*tone[2]/127**2,'pan':tone[3],'adsr1':struct.unpack_from('<H',tone,16)[0],'adsr2':struct.unpack_from('<H',tone,18)[0]};active+=1
 assert offset==len(vb),(offset,len(vb));(ROOT/'dist/sounds.js').write_text('window.HOVER_SOUNDS='+json.dumps(meta)+';\n');print('Converted',len(meta),'original effect programs')

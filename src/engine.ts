@@ -179,7 +179,29 @@ namespace HoverEngine {
         const wx = r[0] - l[0],
           wz = r[2] - l[2],
           lane = ((x - l[0]) * wx + (z - l[2]) * wz) / (wx * wx + wz * wz || 1);
+        // CAR_CTR.C car_gravide: plane through the current tile's first
+        // vertex, its next longitudinal vertex and its next lateral vertex.
+        const row = Math.floor(clamp(lane, 0, 0.9999) * p.tiles.length);
+        const a = p.l.map((v, k) => mix(v, p.r[k], row / p.tiles.length));
+        const along = q.l.map(
+          (v, k) => mix(v, q.r[k], row / p.tiles.length) - a[k],
+        );
+        const across = p.l.map((v, k) => (p.r[k] - v) / p.tiles.length);
+        let normal = [
+          along[1] * across[2] - along[2] * across[1],
+          along[2] * across[0] - along[0] * across[2],
+          along[0] * across[1] - along[1] * across[0],
+        ];
+        const scale = (normal[1] < 0 ? -1 : 1) / (Math.hypot(...normal) || 1);
+        normal = normal.map((v) => Math.round(v * scale * 4096));
+        const surface =
+          normal[1] === 0
+            ? a[1]
+            : a[1] -
+              (normal[0] * (x - a[0]) + normal[2] * (z - a[2])) / normal[1];
         best = {
+          surface,
+          normal,
           index: i,
           t,
           x: cx,
@@ -303,9 +325,12 @@ namespace HoverEngine {
     car.linePosition += lines;
     car.lastLine = near.index;
     const inside = near.lane >= 0 && near.lane <= 1;
-    const surface = mix(near.ly, near.ry, clamp(near.lane, 0, 1)),
+    const surface = near.surface,
       target = surface + 2;
     car.groundY = surface;
+    car.groundNormal = near.normal;
+    car.onRoad = inside;
+    stepDebris(car);
     car.grip = inside && car.y <= target + 1.5 && car.y >= surface - 1;
     const ch = inside ? near.tile : "outside";
     car.tile = ch;
@@ -362,6 +387,16 @@ namespace HoverEngine {
         v[j] -= (v[j] * (j === 1 ? drag : horizontal)) >> 13;
         if (old * v[j] < 0) v[j] = 0;
       }
+    // Test falling before the cushion can snap an already submerged car up.
+    if (
+      (!inside && car.y <= surface - 68.48) ||
+      (inside && car.y <= surface - 4.12)
+    ) {
+      car.finished = true;
+      car.reason = "course-out";
+      sync(car);
+      return;
+    }
     // Original gravity and anti-gravity cushion, in PS1 Y-down inertia units.
     const gravity =
       ((m.weight * 3) >> 4) - (Math.round(-car.pitch / UNIT) >> 8);
@@ -388,20 +423,17 @@ namespace HoverEngine {
       b[1] += gravity;
       if (car.tei > 0) car.tei--;
     }
-    if (car.grip) {
-      const slope = near.slope,
-        sideSlope = (near.ry - near.ly) / near.width,
-        dx = Math.sin(near.heading),
-        dz = Math.cos(near.heading);
-      const normalScale =
-        4096 / Math.sqrt(1 + slope * slope + sideSlope * sideSlope);
+    car.grip = inside && car.y <= target + 1.5;
+    if (car.grip && !car.cpuLevel) {
+      const [nx, ny, nz] = near.normal;
+      // CAR_CTR2.C car_bank, including its formerly missing Y component.
+      const bank = [
+        ((nx >> 2) * m.weight) >> 12,
+        ((Math.trunc((nx * nx + nz * nz) / (ny || 1)) >> 2) * m.weight) >> 12,
+        ((nz >> 2) * m.weight) >> 12,
+      ];
       for (const v of [f, b]) {
-        v[0] += Math.trunc(
-          ((-slope * dx - sideSlope * dz) * normalScale * m.weight) / 16384,
-        );
-        v[2] += Math.trunc(
-          ((-slope * dz + sideSlope * dx) * normalScale * m.weight) / 16384,
-        );
+        for (let j = 0; j < 3; j++) v[j] += bank[j];
       }
     }
     car.rudderAngle = clamp(car.rudderAngle, -220, 220);
@@ -462,43 +494,76 @@ namespace HoverEngine {
     if (m.rudder && speed >= 5)
       car.heading -= Math.trunc(car.rudderAngle / m.rudder) * UNIT;
     if (car.grip) {
-      const desiredPitch = Math.atan(
-        near.slope * Math.cos(car.heading - near.heading),
-      );
-      car.pitch += clamp(desiredPitch - car.pitch, -11 * UNIT, 11 * UNIT);
-      const bank = clamp(
-        -(car.heading - oldHeading) * speed * 0.004,
-        -0.5,
-        0.5,
-      );
-      car.roll += clamp(bank - car.roll, -11 * UNIT, 11 * UNIT);
-    } else car.roll *= 0.985;
+      const [nx, ny, nz] = near.normal;
+      const along = nx * Math.sin(car.heading) + nz * Math.cos(car.heading);
+      const across = nx * Math.cos(car.heading) - nz * Math.sin(car.heading);
+      const forwardError =
+        along * Math.cos(car.pitch) + ny * Math.sin(car.pitch);
+      const rightError =
+        across * Math.cos(car.roll) +
+        (ny * Math.cos(car.pitch) - along * Math.sin(car.pitch)) *
+          Math.sin(car.roll);
+      // CAR_CTR2.C car_rotation: normal in ship coordinates, 40-unit
+      // deadband, and integer one-degree steps. Corner bank is additive.
+      if (Math.abs(rightError) < 600)
+        car.roll +=
+          ((speed * Math.trunc(-angle(car.heading - oldHeading) / UNIT)) >> 8) *
+          UNIT;
+      if (forwardError > 40) car.pitch -= 11 * UNIT;
+      if (forwardError < -40) car.pitch += 11 * UNIT;
+      if (rightError > 40) car.roll -= 11 * UNIT;
+      if (rightError < -40) car.roll += 11 * UNIT;
+    } else car.roll -= clamp(car.roll, -5 * UNIT, 5 * UNIT);
     const nx = car.x + (f[0] + b[0]) / 1600,
       nz = car.z + (f[2] + b[2]) / 1600;
     const next = nearest(track, nx, nz, car.index);
+    // The source offsets each wall by 128/256 PS1 units, independent of width.
+    const margin = 2.56;
+    const right = next.lane > 0.5;
+    const edgeHeight = right ? next.ry : next.ly;
     const crossed =
       inside &&
-      (next.lane < 0.025 || next.lane > 0.975) &&
-      car.y < surface + 6.12;
+      (next.lane * next.width < margin ||
+        (1 - next.lane) * next.width < margin) &&
+      (right ? near.lane < next.lane : near.lane > next.lane) &&
+      (car.y < edgeHeight + 7.12 || !!car.cpuLevel);
     car.x = nx;
     car.z = nz;
     car.y -= (f[1] + b[1]) / 1600;
     if (crossed) {
-      const right = next.lane > 0.5,
-        tx = Math.sin(next.heading),
-        tz = Math.cos(next.heading),
-        hr = (speed >> 4) + 3,
+      const node = track.nodes[next.index],
+        end = node.end || track.nodes[(next.index + 1) % track.nodes.length];
+      const startEdge = right ? node.r : node.l,
+        endEdge = right ? end.r : end.l;
+      const edge = endEdge.map(
+        (v, k) => (v - startEdge[k]) * (k === 1 ? -50 : 50),
+      );
+      const len = Math.hypot(edge[0], edge[2]) || 1;
+      const tx = edge[0] / len,
+        tz = edge[2] / len,
+        hr = car.cpuLevel ? 0 : (speed >> 4) + 3,
         normalX = (right ? -1 : 1) * tz,
         normalZ = (right ? 1 : -1) * tx;
-      const tangent = (f[0] * tx + f[2] * tz) * (speed > 80 ? 180 / 256 : 1);
-      f[0] = b[0] = Math.round(tangent * tx + normalX * hr * 16);
-      f[2] = b[2] = Math.round(tangent * tz + normalZ * hr * 16);
-      const offset = (right ? 1 : -1) * (next.width / 2 - 1.5);
-      car.x = next.x + tz * offset;
-      car.z = next.z - tx * offset;
+      let projection = Math.trunc(
+        (64 * (edge[0] * f[0] + edge[1] * f[1] + edge[2] * f[2])) /
+          (edge.reduce((s, v) => s + v * v, 0) || 1),
+      );
+      if (speed > 80 && !car.cpuLevel) projection = (projection * 180) >> 8;
+      f[0] = b[0] =
+        ((edge[0] * projection) >> 6) +
+        ((Math.round(normalX * 4096) * hr) >> 8);
+      f[2] = b[2] =
+        ((edge[2] * projection) >> 6) +
+        ((Math.round(normalZ * 4096) * hr) >> 8);
+      const distance = (right ? 1 - next.lane : next.lane) * next.width;
+      car.x += normalX * (margin - distance + 0.2);
+      car.z += normalZ * (margin - distance + 0.2);
       car.damage += 2 * hr * hr + 10;
       car.flash = 0.18;
       car.events.push("wall");
+      if (hr > 16) car.events.push("wall-sound");
+      if (!car.cpuLevel)
+        emitDebris(car, Math.max(0, hr - 3), 1, [normalX, 0, normalZ]);
     }
     let delta = next.distance - car.lastDistance;
     if (delta < -track.length / 2) delta += track.length;
@@ -511,13 +576,6 @@ namespace HoverEngine {
     if (car.damage >= m.tank) {
       car.finished = true;
       car.reason = "destroyed";
-    }
-    if (
-      (!inside && car.y < surface - 70) ||
-      (inside && car.y < surface - 6.12)
-    ) {
-      car.finished = true;
-      car.reason = "course-out";
     }
     sync(car);
   }
@@ -536,11 +594,12 @@ namespace HoverEngine {
     }
   }
   export function collide(a: Car, b: Car) {
-    if (a.finished || b.finished || Math.abs(a.y - b.y) > 5.12) return;
+    if (a.finished || b.finished) return;
     const dx = a.x - b.x,
+      dy = a.y - b.y,
       dz = a.z - b.z,
-      d = Math.hypot(dx, dz);
-    if (d >= 5.12 || d === 0) return;
+      d = Math.floor(Math.hypot(dx, dy, dz) * 100);
+    if (d >= 512) return;
     const impact = (Math.abs(a.sourceSpeed - b.sourceSpeed) >> 3) + 200;
     for (const [c, sign] of [
       [a, 1],
@@ -548,12 +607,57 @@ namespace HoverEngine {
     ] as [Car, number][]) {
       const force = Math.trunc((impact * 128) / MACHINES[c.type].weight);
       for (const v of [c.front, c.rear]) {
-        v[0] += ((sign * dx) / d) * force;
-        v[2] += ((sign * dz) / d) * force;
+        v[0] += d ? Math.trunc((sign * dx * 100 * force) / d) : 0;
+        v[1] -= d ? Math.trunc((sign * dy * 100 * force) / d) : 0;
+        v[2] += d ? Math.trunc((sign * dz * 100 * force) / d) : 0;
       }
-      c.damage += impact + 300;
+      if (!c.cpuLevel) {
+        c.damage += force + 300;
+        c.events.push("collision");
+        emitDebris(c, 8, 2, [0, 0, 1]);
+      }
       c.flash = 0.1;
       sync(c);
+    }
+  }
+  // GAME.C add_crash_chip / crash_chip: 48 ticks, inertia /16, gravity 16.
+  export function emitDebris(
+    car: Car,
+    count: number,
+    spread: number,
+    normal: Vec3,
+  ) {
+    car.debris ||= [];
+    let seed =
+      (car.ticks * 1664525 + car.type * 1013904223 + car.debris.length) >>> 0;
+    const rand = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed & 511;
+    };
+    for (let i = 0; i < Math.min(count, 64); i++) {
+      const v = [rand(), rand(), rand()].map((n) => (n - 256) * 2 ** spread);
+      const dot = v[0] * normal[0] + v[1] * normal[1] + v[2] * normal[2];
+      for (let j = 0; j < 3; j++) v[j] -= (normal[j] * dot) / 2;
+      car.debris.push({
+        x: car.x,
+        y: car.y,
+        z: car.z,
+        vx: v[0],
+        vy: v[1],
+        vz: v[2],
+        life: 48,
+        seed,
+      });
+    }
+    car.debris = car.debris.slice(-64);
+  }
+  export function stepDebris(car: Car) {
+    car.debris = (car.debris || []).filter((p) => --p.life > 0);
+    for (const p of car.debris) {
+      p.vy -= 16;
+      p.x += p.vx / 1600;
+      p.y += p.vy / 1600;
+      p.z += p.vz / 1600;
     }
   }
   // Resolve each unordered pair once, including CPU/CPU pairs.
