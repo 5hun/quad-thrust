@@ -101,6 +101,7 @@ export class HoverRenderer {
   ships: ReturnType<HoverRenderer["makeShip"]>[];
   track: Track | null;
   yaw: number | null;
+  follow = { yaw: 0, pitch: 0, roll: 0, distance: 0 };
   retro: boolean;
   frames: number;
   errors: string[];
@@ -463,6 +464,18 @@ export class HoverRenderer {
       ship.shadow.rotation.set(0, -p.heading, 0);
     }
   }
+  updateCamera(car: Pose) {
+    if (this.yaw === null) {
+      this.follow = {
+        yaw: car.heading,
+        pitch: car.pitch || 0,
+        roll: car.roll || 0,
+        distance: 0,
+      };
+    }
+    E.cameraStep(this.follow, car);
+    this.yaw = this.follow.yaw;
+  }
   draw(
     track: Track,
     car: Pose,
@@ -504,11 +517,10 @@ export class HoverRenderer {
         time,
       );
     });
-    if (this.yaw === null) this.yaw = car.heading;
-    this.yaw += E.angle(car.heading - this.yaw) * 0.1;
+    if (this.yaw === null) this.updateCamera(car);
     const menu = state === "menu",
-      distance = menu ? 24 : 35 + (car.sourceSpeed || 0) / 200;
-    const yaw = this.yaw + (menu ? -0.42 : 0),
+      distance = menu ? 24 : 35 + this.follow.distance / 400;
+    const yaw = menu ? car.heading - 0.42 : this.follow.yaw,
       sy = Math.sin(yaw),
       cy = Math.cos(yaw);
     this.camera.position.set(
@@ -516,8 +528,15 @@ export class HoverRenderer {
       car.y + (menu ? 10 : 8.5),
       -car.z + cy * distance,
     );
-    const pitch = menu ? -0.18 : (car.pitch || 0) * 0.55 - 0.12;
-    this.camera.up.set(0, 1, 0);
+    const pitch = menu
+      ? -0.18
+      : this.follow.pitch - (Math.trunc((4096 * 7) / 360) * Math.PI * 2) / 4096;
+    const roll = menu ? 0 : this.follow.roll;
+    this.camera.up.set(
+      -Math.cos(yaw) * Math.sin(roll),
+      Math.cos(roll),
+      Math.sin(yaw) * Math.sin(roll),
+    );
     this.camera.lookAt(
       car.x + sy * 30,
       car.y + 8.5 + Math.tan(pitch) * (distance + 30),

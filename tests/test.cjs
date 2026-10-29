@@ -120,6 +120,9 @@ near(a.z, b.z);
 near(a.time, b.time);
 c = E.create(t);
 c.progress = t.length - 1;
+c.linePosition = t.nodes.length - 1;
+c.lastLine = t.nodes.length - 1;
+c.previousTile = ".";
 c.lastDistance = t.length - 1;
 let p = E.at(t, 3);
 Object.assign(c, {
@@ -139,4 +142,97 @@ E.step(c, t, {}, 1 / 60);
 assert.equal(c.laps.length, 0);
 console.log(
   "PASS: source thrust/drag/yaw formulas, independent inertias, frame-rate invariance, no-rudder/no-thruster machines, one-shot repair/jump, lethal floor, falling, aerial wall clearance, collisions, forward/reverse lap checks.",
+);
+
+// A completed distance alone must not count: the source requires a g tile.
+const noGoal = E.prepare({
+  ...box.window.HOVER_TRACKS[0],
+  samples: box.window.HOVER_TRACKS[0].samples.map((n) => ({
+    ...n,
+    tiles: n.tiles.replaceAll("g", "."),
+  })),
+});
+c = E.create(noGoal);
+c.progress = noGoal.length * 2;
+c.linePosition = noGoal.nodes.length * 2;
+c.previousTile = ".";
+E.step(c, noGoal, {}, 1 / 60);
+assert.equal(c.laps.length, 0, "distance without g must not award a lap");
+// Initial grid and repeated crossings within 32 original rows are not laps.
+c = E.create(t);
+c.previousTile = ".";
+E.step(c, t, {}, 1 / 60);
+assert.equal(c.laps.length, 0);
+c.linePosition = 32;
+c.previousTile = ".";
+E.step(c, t, {}, 1 / 60);
+assert.equal(c.laps.length, 0);
+c.linePosition = 33;
+c.previousTile = ".";
+E.step(c, t, {}, 1 / 60);
+assert.equal(c.laps.length, 1);
+c.previousTile = ".";
+E.step(c, t, {}, 1 / 60);
+assert.equal(
+  c.laps.length,
+  1,
+  "reentering same goal must not award another lap",
+);
+// Each pair collides once; CPU pair is tested with player far away.
+const player = E.create(t),
+  cpu1 = E.create(t),
+  cpu2 = E.create(t);
+player.x += 100;
+cpu2.x += 3;
+E.collideAll([player, cpu1, cpu2]);
+assert.equal(player.damage, 0);
+assert.equal(cpu1.damage, 500);
+assert.equal(cpu2.damage, 500);
+assert.ok(cpu1.vx < 0 && cpu2.vx > 0);
+// Original four difficulty rows and slot-based maximum speeds.
+assert.deepEqual(E.cpuLevels[0], [1, 1, 2, 3, 4, 5, 6, 4, 6]);
+assert.deepEqual(E.cpuLevels[3], [10, 8, 6, 9, 8, 10, 10, 8, 10]);
+assert.equal(E.cpuMaxSpeed(2, 1), 500);
+assert.equal(E.cpuMaxSpeed(10, 3), 520);
+c = E.create(t);
+c.cpuLevel = 2;
+c.cpuSlot = 1;
+c.sourceSpeed = 500;
+assert.equal(E.driveCPU(c, t, player).accel, false);
+c.sourceSpeed = 499;
+assert.equal(E.driveCPU(c, t, player).accel, true);
+c.ticks = 601;
+player.linePosition = c.linePosition;
+E.driveCPU(c, t, player);
+assert.equal(c.catchUp, true);
+player.linePosition = c.linePosition - 4;
+E.driveCPU(c, t, player);
+assert.equal(c.catchUp, false);
+a = E.create(t);
+b = E.create(t);
+b.cpuLevel = 2;
+E.step(a, t, { accel: true }, 1 / 60);
+E.step(b, t, { accel: true }, 1 / 60);
+assert.ok(b.vz > a.vz, "level 2 CPU receives original extra thrust");
+// Fixed-tick camera follows the short arc across +/-pi and banks with the car.
+const camera = { yaw: Math.PI - 0.01, pitch: 0, roll: 0, distance: 0 };
+const pose = {
+  ...E.create(t),
+  heading: -Math.PI + 0.01,
+  pitch: 0.1,
+  roll: 0.2,
+  sourceSpeed: 400,
+};
+E.cameraStep(camera, pose);
+assert.ok(camera.yaw > Math.PI - 0.01);
+assert.ok(camera.pitch > 0 && camera.pitch < pose.pitch);
+assert.ok(camera.roll > 0 && camera.roll < pose.roll);
+assert.equal(camera.distance, 16);
+for (let i = 0; i < 600; i++) E.cameraStep(camera, pose);
+near(E.angle(camera.yaw - pose.heading), 0);
+near(camera.pitch, pose.pitch);
+assert.ok(Math.abs(camera.roll - pose.roll) < (Math.PI * 2) / 4096);
+assert.ok(Math.abs(camera.distance - 800) <= 16);
+console.log(
+  "PASS: goal-floor/32-row guards, all racer collision pairs, source CPU difficulty/speed/assistance, camera angle wrap/bank/distance",
 );

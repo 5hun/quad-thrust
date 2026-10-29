@@ -125,6 +125,7 @@ function select() {
             "</p>";
     $("course").disabled = rules.cup !== null;
     $("ghost-enabled").disabled = rules.recordClass !== "time";
+    $("difficulty").disabled = !rules.opponents;
     if (rules.cup !== null && state === "menu")
         $("course").value = String(rules.cup * 3);
     track = selectedTrack();
@@ -167,6 +168,18 @@ $("mode").onchange = () => {
     select();
 };
 $("course").onchange = select;
+try {
+    const saved = localStorage.getItem("hover-cpu-difficulty");
+    if (saved !== null && /^[0-3]$/.test(saved))
+        $("difficulty").value = saved;
+}
+catch { }
+$("difficulty").onchange = () => {
+    try {
+        localStorage.setItem("hover-cpu-difficulty", $("difficulty").value);
+    }
+    catch { }
+};
 $("machine").onchange = () => {
     if (R.profile($("mode").value).training) {
         const value = $("course").value;
@@ -209,7 +222,10 @@ function start(nextRound = false) {
                 heading: p.heading,
                 lastDistance: 20 + i * 9,
                 progress: 12 + i * 9,
-                pace: 80 + i * 7,
+                cpuLevel: E.cpuLevels[+$("difficulty").value][+$("course").value],
+                cpuSlot: i + 1,
+                lastLine: p.index,
+                linePosition: p.index,
             });
             return b;
         })
@@ -658,7 +674,7 @@ function update(dt) {
             continue;
         const inp = trainingSession
             ? T.drive(bot, track)
-            : E.drive(bot, track, bot.pace);
+            : E.driveCPU(bot, track, car);
         E.step(bot, track, inp, dt, !trainingSession);
         if (trainingSession && bot.events.includes("stop"))
             bot.stopped = true;
@@ -666,9 +682,9 @@ function update(dt) {
             bot.finished = true;
             bot.reason = "finish";
         }
-        E.collide(car, bot);
         bot.events.length = 0;
     }
+    E.collideAll([car, ...bots]);
     if (trainingSession) {
         const rank = 1 + bots.filter((b) => b.progress > car.progress).length;
         T.step(trainingSession, car, currentInput, rank, car.events);
@@ -712,6 +728,8 @@ function frame(ts) {
     accumulator += dt;
     while (accumulator >= 1 / 60) {
         update(1 / 60);
+        if (state !== "paused" && state !== "menu")
+            view.updateCamera(car);
         accumulator -= 1 / 60;
     }
     render();
@@ -737,6 +755,8 @@ window.hoverDiagnostics = () => ({
         : null,
     opponentTypes: bots.map((b) => b.type),
     recordClass: R.profile(mode).recordClass,
+    cpuLevels: bots.map((bot) => bot.cpuLevel ?? null),
+    cameraFollow: { ...view.follow },
     course: track.name,
     energy: car.energy,
     speed: Math.hypot(car.vx, car.vz),

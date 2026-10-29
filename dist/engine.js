@@ -208,6 +208,9 @@ var HoverEngine;
             lastDistance: 8,
             time: 0,
             lapStart: 0,
+            linePosition: p.index,
+            lastLine: p.index,
+            lastGoal: 0,
             laps: [],
             finished: false,
             reason: null,
@@ -245,6 +248,8 @@ var HoverEngine;
             reason: null,
             lastDistance: Math.max(8, car.progress + 8) % track.length,
             recovery: 1,
+            lastLine: p.index,
+            previousTile: track.nodes[p.index].tiles[Math.floor(track.nodes[p.index].tiles.length / 2)],
         });
     }
     HoverEngine.recover = recover;
@@ -268,6 +273,15 @@ var HoverEngine;
             car.damage -= 6 + Math.floor((car.damage * 9) / m.tank);
         const near = nearest(track, car.x, car.z, car.index);
         car.index = near.index;
+        let lines = near.index - car.lastLine;
+        if (!track.training) {
+            if (lines < -track.nodes.length / 2)
+                lines += track.nodes.length;
+            if (lines > track.nodes.length / 2)
+                lines -= track.nodes.length;
+        }
+        car.linePosition += lines;
+        car.lastLine = near.index;
         const inside = near.lane >= 0 && near.lane <= 1;
         const surface = HoverEngine.mix(near.ly, near.ry, HoverEngine.clamp(near.lane, 0, 1)), target = surface + 2;
         car.groundY = surface;
@@ -280,6 +294,20 @@ var HoverEngine;
                 car.damage += 100;
             if (ch === "B")
                 car.damage += 100000;
+        }
+        // CAR_CTR.C: g is a line trigger (also active in the air), with a
+        // 32-row guard against reversing across the same finish line.
+        if (!track.training &&
+            ch === "g" &&
+            car.previousTile !== "g" &&
+            car.linePosition > car.lastGoal + 32) {
+            car.lastGoal = car.linePosition;
+            car.laps.push(car.time - car.lapStart);
+            car.lapStart = car.time;
+            if (car.laps.length >= 3 && !free) {
+                car.finished = true;
+                car.reason = "finish";
+            }
         }
         if (ch !== car.previousTile && car.grip) {
             if (track.training && ch === "g")
@@ -363,6 +391,11 @@ var HoverEngine;
                 car.damage += 48;
                 thrust += Math.max(0, (m.turbo - ((m.turboFall * speed) >> 4)) >> 2);
             }
+            // Original level >= 2 CPU acceleration / catch-up assistance.
+            if ((car.cpuLevel || 0) >= 2) {
+                const extra = Math.max(0, (m.turbo - ((m.turboFall * speed) >> 4)) >> 4);
+                thrust += (extra * (car.catchUp ? 3 : 2)) >> 1;
+            }
             thrust = Math.trunc((thrust * 128) / m.weight);
             if (speed <= 2000)
                 for (const v of [f, b]) {
@@ -428,15 +461,6 @@ var HoverEngine;
             car.progress += delta;
         car.lastDistance = next.distance;
         car.index = next.index;
-        if (!track.training &&
-            car.progress >= (car.laps.length + 1) * track.length) {
-            car.laps.push(car.time - car.lapStart);
-            car.lapStart = car.time;
-            if (car.laps.length >= 3 && !free) {
-                car.finished = true;
-                car.reason = "finish";
-            }
-        }
         if (free)
             car.damage = 0;
         if (car.damage >= m.tank) {
@@ -483,17 +507,93 @@ var HoverEngine;
         }
     }
     HoverEngine.collide = collide;
-    // Browser CPU uses the same physics; only steering decisions are newly implemented.
+    // Resolve each unordered pair once, including CPU/CPU pairs.
+    function collideAll(cars) {
+        for (let i = 0; i < cars.length; i++)
+            for (let j = i + 1; j < cars.length; j++)
+                collide(cars[i], cars[j]);
+    }
+    HoverEngine.collideAll = collideAll;
+    // GAME.C lev[difficulty + 1][course], CAR_CTR.C car_init.
+    HoverEngine.cpuLevels = [
+        [1, 1, 2, 3, 4, 5, 6, 4, 6],
+        [2, 2, 3, 4, 5, 6, 7, 5, 7],
+        [4, 4, 4, 7, 6, 7, 8, 6, 8],
+        [10, 8, 6, 9, 8, 10, 10, 8, 10],
+    ];
+    function cpuMaxSpeed(level, slot) {
+        return [350, 330, 310, 260][slot] * 2 - (10 - level) * 20;
+    }
+    HoverEngine.cpuMaxSpeed = cpuMaxSpeed;
+    function driveCPU(car, track, player) {
+        car.catchUp =
+            car.ticks > 600 && player.linePosition - car.linePosition > -4;
+        // Steering still adapts the converted track geometry; speed/assistance
+        // use original source units rather than the old 80/87/94 world-unit caps.
+        const input = drive(car, track, Infinity);
+        input.accel =
+            input.accel &&
+                !input.brake &&
+                car.sourceSpeed < cpuMaxSpeed(car.cpuLevel, car.cpuSlot);
+        // Restore the source controller's wall-clearance strafe. Without it the
+        // look-ahead steering can balance against a wall indefinitely at a bend.
+        const near = nearest(track, car.x, car.z, car.index);
+        if (car.sourceSpeed < 200 && (near.lane < 0.2 || near.lane > 0.8)) {
+            const headingError = HoverEngine.angle(near.heading - car.heading);
+            if (Math.abs(headingError) > 0.1) {
+                input.steer = Math.sign(headingError);
+                input.l1 = input.r2 = headingError > 0;
+                input.r1 = input.l2 = headingError < 0;
+                input.accel = false;
+            }
+            else {
+                input.l1 = input.l2 = near.lane < 0.2;
+                input.r1 = input.r2 = near.lane > 0.8;
+            }
+        }
+        return input;
+    }
+    HoverEngine.driveCPU = driveCPU;
+    function cameraStep(current, car) {
+        const follow = (value, target, step, divisor) => {
+            const difference = HoverEngine.angle(target - value) / UNIT;
+            return (value +
+                (Math.abs(difference) <= step
+                    ? difference
+                    : Math.sign(difference) *
+                        step *
+                        (1 + Math.trunc(Math.abs(difference) / divisor))) *
+                    UNIT);
+        };
+        current.yaw = follow(current.yaw, car.heading, 5, Math.trunc((4096 * 6) / 360));
+        current.pitch = follow(current.pitch, car.pitch || 0, 1, Math.trunc((4096 * 12) / 360));
+        const roll = HoverEngine.angle((car.roll || 0) - current.roll) / UNIT;
+        current.roll +=
+            Math.sign(roll) *
+                (Math.abs(roll) > Math.trunc((4096 * 30) / 360)
+                    ? 5
+                    : Math.abs(roll) > 0
+                        ? 1
+                        : 0) *
+                UNIT;
+        const target = (car.sourceSpeed || 0) * 2;
+        if (current.distance > target + 16)
+            current.distance -= 16;
+        if (current.distance < target - 16)
+            current.distance += 16;
+    }
+    HoverEngine.cameraStep = cameraStep;
+    // Generic autopilot, also used by circuit completion tests.
     function drive(car, track, pace = 70) {
-        const speed = Math.hypot(car.vx, car.vz), near = nearest(track, car.x, car.z, car.index), p = at(track, near.distance + Math.max(20, speed * 0.45)), err = HoverEngine.angle(Math.atan2(p.x - car.x, p.z - car.z) - car.heading), drift = HoverEngine.angle(car.heading - Math.atan2(car.vx, car.vz)), turn = HoverEngine.clamp(err * 3 + drift * 0.5, -1, 1);
+        const speed = Math.hypot(car.vx, car.vz), near = nearest(track, car.x, car.z, car.index), p = at(track, near.distance + Math.max(20, speed * 0.45)), err = HoverEngine.angle(Math.atan2(p.x - car.x, p.z - car.z) - car.heading), drift = HoverEngine.angle(car.heading - Math.atan2(car.vx, car.vz)), turn = HoverEngine.clamp(err * 3 + drift * 0.5, -1, 1), thrusterThreshold = HoverEngine.MACHINES[car.type].rudder ? 0.5 : 0.06;
         return {
             accel: speed < pace && Math.abs(err) < 1,
             steer: Math.abs(turn) > 0.06 ? Math.sign(turn) : 0,
             brake: (Math.abs(err) > 0.3 && speed > 35) || speed > pace + 20,
-            l1: turn > 0.5,
-            r2: turn > 0.5,
-            r1: turn < -0.5,
-            l2: turn < -0.5,
+            l1: turn > thrusterThreshold,
+            r2: turn > thrusterThreshold,
+            r1: turn < -thrusterThreshold,
+            l2: turn < -thrusterThreshold,
         };
     }
     HoverEngine.drive = drive;

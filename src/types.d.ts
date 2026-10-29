@@ -78,6 +78,12 @@ interface Car extends Pose {
   lastDistance: number;
   time: number;
   lapStart: number;
+  linePosition: number;
+  lastLine: number;
+  lastGoal: number;
+  cpuLevel?: number;
+  cpuSlot?: number;
+  catchUp?: boolean;
   laps: number[];
   finished: boolean;
   reason: "finish" | "destroyed" | "course-out" | null;
