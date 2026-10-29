@@ -6,13 +6,22 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node tools/test-assets.cjs && node tools/test-training.cjs && node tools/test.cjs && node tools/test-circuits.cjs",
-    "start": "python3 start-server.py"
+    "start": "python3 start-server.py",
+    "lint": "eslint src tools/*.cjs eslint.config.mjs --max-warnings=0",
+    "lint:fix": "npm run lint -- --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "private": true,
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.5",
     "@types/three": "^0.180.0",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
     "prettier": "^3.9.10",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1"
   }
 }

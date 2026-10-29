@@ -126,7 +126,7 @@ export class HoverRenderer {
     this.trackGroup = new THREE.Group();
     this.scene.add(this.trackGroup);
     this.scene.add(new THREE.AmbientLight(0xffffff, 1.6));
-    let light = new THREE.DirectionalLight(0xffffff, 1.5);
+    const light = new THREE.DirectionalLight(0xffffff, 1.5);
     light.position.set(-100, 180, 100);
     this.scene.add(light);
     this.cache = new Map();
@@ -220,7 +220,7 @@ export class HoverRenderer {
       if (row === ys - 1) return [r[0], r[1] + 5.12, r[2]];
       if (row === ys)
         return [r[0] + dx * 10.24, r[1] - 2.56, r[2] + dz * 10.24];
-      let t = (row - 2) / (ys - 4);
+      const t = (row - 2) / (ys - 4);
       return l.map((x, i) => E.mix(x, r[i], t));
     };
     for (let i = 0; i < track.nodes.length; i++) {
@@ -265,7 +265,7 @@ export class HoverRenderer {
         ["color", 3],
         ["uv", 2],
       ] as ["position" | "normal" | "color" | "uv", number][]) {
-        let a = attrs[key].slice();
+        const a = attrs[key].slice();
         if (key === "position" || key === "normal")
           for (let j = 2; j < a.length; j += 3) a[j] *= -1;
         geometry.setAttribute(key, new THREE.Float32BufferAttribute(a, size));
@@ -301,8 +301,8 @@ export class HoverRenderer {
     root.add(body);
     let flames: THREE.Group[] = [],
       sides: THREE.Group[] = [],
-      rudders: THREE.Group[] = [],
-      limbs: { arm: THREE.Group; leg: THREE.Group; s: number }[] = [];
+      rudders: THREE.Group[] = [];
+    const limbs: { arm: THREE.Group; leg: THREE.Group; s: number }[] = [];
     if (type === 5) {
       const torso = this.modelObject(name, 2, ghost);
       body.add(torso);
@@ -453,7 +453,7 @@ export class HoverRenderer {
       g.rotation.x = (-tick * 165 * Math.PI * 2) / 4096;
     });
     ship.limbs.forEach(({ arm, leg, s }) => {
-      let phase = time * ((p.sourceSpeed ?? 0) > 40 ? 12 : 3);
+      const phase = time * ((p.sourceSpeed ?? 0) > 40 ? 12 : 3);
       arm.rotation.x = Math.sin(phase) * s * 0.6;
       leg.rotation.x = -Math.sin(phase) * s * 0.6;
     });
@@ -475,14 +475,14 @@ export class HoverRenderer {
     this.setTrack(track);
     const racers = [car, ...bots, ...(ghost ? [ghost] : [])];
     while (this.ships.length > racers.length) {
-      let s = this.ships.pop()!;
+      const s = this.ships.pop()!;
       this.scene.remove(s.root);
       if (s.shadow) this.scene.remove(s.shadow);
       this.clear(s.root);
       if (s.shadow) this.clear(s.shadow);
     }
     racers.forEach((p, i) => {
-      let g = i === racers.length - 1 && !!ghost;
+      const g = i === racers.length - 1 && !!ghost;
       if (
         !this.ships[i] ||
         this.ships[i].type !== p.type ||
@@ -532,8 +532,8 @@ export class HoverRenderer {
     this.renderer.autoClear = true;
     if (this.countdown !== null && this.countdown !== undefined) {
       const n = this.countdown;
-      let i = Math.floor(n / 60),
-        j = n % 60;
+      let i = Math.floor(n / 60);
+      const j = n % 60;
       if (i < 4) {
         if (j <= 20 && i !== 0) i--;
         this.countDigits.forEach((m, k) => {

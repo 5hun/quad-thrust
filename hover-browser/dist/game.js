@@ -8,7 +8,6 @@ import { HoverRenderer } from "./renderer.js";
 import { OriginalSound } from "./sound.js";
 import { OriginalHUD } from "./hud.js";
 const originalSound = new OriginalSound();
-("use strict");
 const E = HoverEngine, R = HoverRules, T = HoverTraining, B = HoverRecords, canvas = $("game"), tracks = HOVER_TRACKS.map(E.prepare);
 const trainingTracks = HOVER_TRAINING_TRACKS.map(E.prepare);
 let trainingSession = null;
@@ -22,11 +21,11 @@ catch (error) {
     $("start").disabled = true;
     throw error;
 }
-let track = tracks[0], car = E.create(track), mode = "time", state = "menu", countdown = 5, last = 0, accumulator = 0, worldTime = 0, demoDistance = 100, camYaw = 0, keys = {}, bots = [], sound = true, padPause = false, toastTimer = 0;
+let track = tracks[0], car = E.create(track), mode = "time", state = "menu", countdown = 5, last = 0, accumulator = 0, worldTime = 0, demoDistance = 100, keys = {}, bots = [], sound = true, padPause = false, toastTimer = 0;
 const format = (t) => {
     if (!Number.isFinite(t))
         return "—";
-    let ms = Math.round(t * 1000);
+    const ms = Math.round(t * 1000);
     return (String(Math.floor(ms / 60000)).padStart(2, "0") +
         ":" +
         String(Math.floor(ms / 1000) % 60).padStart(2, "0") +
@@ -94,7 +93,7 @@ function mapDraw(c, t, player = null, others = []) {
         g.closePath();
     g.stroke();
     for (const p of [t.nodes[0], ...others, ...(player ? [player] : [])]) {
-        let [x, y] = xy(p);
+        const [x, y] = xy(p);
         g.fillStyle =
             p === player ? "#b3ff65" : p === t.nodes[0] ? "white" : "#ff9777";
         g.beginPath();
@@ -131,8 +130,7 @@ function select() {
     track = selectedTrack();
     car = E.create(track, +$("machine").value);
     demoDistance = track.length * 0.08;
-    camYaw = E.at(track, demoDistance).heading;
-    let m = E.MACHINES[car.type];
+    const m = E.MACHINES[car.type];
     $("machine-description").textContent = m.desc;
     $("course-number").textContent =
         String(+$("course").value + 1).padStart(2, "0") + " / 09";
@@ -356,7 +354,7 @@ function finish() {
     $("touch").hidden = true;
     $("result").hidden = false;
     $("message").textContent = "";
-    let rank = 1 + bots.filter((b) => b.progress > car.progress).length;
+    const rank = 1 + bots.filter((b) => b.progress > car.progress).length;
     const failed = car.reason !== "finish";
     if (!failed) {
         const best = Math.min(...car.laps);
@@ -528,7 +526,7 @@ function render() {
         state !== "menu" &&
         ghostFrames.length &&
         $("ghost-enabled").checked) {
-        let k = Math.floor(car.time * 10), a = ghostFrames[k], b = ghostFrames[k + 1];
+        const k = Math.floor(car.time * 10), a = ghostFrames[k], b = ghostFrames[k + 1];
         if (a && b) {
             const t = (car.time * 10) % 1;
             ghost = {
@@ -593,7 +591,7 @@ function update(dt) {
             }
             currentInput = car.active || {};
         }
-        let before = Math.ceil(countdown);
+        const before = Math.ceil(countdown);
         countdown -= dt;
         if (Math.ceil(countdown) !== before && countdown > 0 && countdown < 3.01)
             beep();
@@ -629,7 +627,7 @@ function update(dt) {
     const previousProgress = car.progress;
     if (car.energy < 12.5 && car.ticks % 60 === 0)
         originalSound.effect(70, 40);
-    let laps = car.laps.length;
+    const laps = car.laps.length;
     E.step(car, track, currentInput, dt, mode === "free");
     if (car.progress < previousProgress)
         car.wrongFrames = (car.wrongFrames || 0) + 1;
@@ -708,7 +706,7 @@ function update(dt) {
     }
 }
 function frame(ts) {
-    let dt = Math.min((ts - last) / 1000 || 0, 0.1);
+    const dt = Math.min((ts - last) / 1000 || 0, 0.1);
     last = ts;
     worldTime += dt;
     accumulator += dt;

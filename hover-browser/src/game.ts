@@ -57,7 +57,6 @@ import { HoverRenderer } from "./renderer.js";
 import { OriginalSound } from "./sound.js";
 import { OriginalHUD } from "./hud.js";
 const originalSound = new OriginalSound();
-("use strict");
 const E = HoverEngine,
   R = HoverRules,
   T = HoverTraining,
@@ -84,7 +83,6 @@ let track = tracks[0],
   accumulator = 0,
   worldTime = 0,
   demoDistance = 100,
-  camYaw = 0,
   keys: Record<string, boolean> = {},
   bots: Car[] = [],
   sound = true,
@@ -92,7 +90,7 @@ let track = tracks[0],
   toastTimer = 0;
 const format = (t: number) => {
   if (!Number.isFinite(t)) return "—";
-  let ms = Math.round(t * 1000);
+  const ms = Math.round(t * 1000);
   return (
     String(Math.floor(ms / 60000)).padStart(2, "0") +
     ":" +
@@ -187,7 +185,7 @@ function mapDraw(
   if (!t.training) g.closePath();
   g.stroke();
   for (const p of [t.nodes[0], ...others, ...(player ? [player] : [])]) {
-    let [x, y] = xy(p);
+    const [x, y] = xy(p);
     g.fillStyle =
       p === player ? "#b3ff65" : p === t.nodes[0] ? "white" : "#ff9777";
     g.beginPath();
@@ -228,8 +226,7 @@ function select() {
   track = selectedTrack();
   car = E.create(track, +$("machine").value);
   demoDistance = track.length * 0.08;
-  camYaw = E.at(track, demoDistance).heading;
-  let m = E.MACHINES[car.type];
+  const m = E.MACHINES[car.type];
   $("machine-description").textContent = m.desc;
   $("course-number").textContent =
     String(+$("course").value + 1).padStart(2, "0") + " / 09";
@@ -464,7 +461,7 @@ function finish() {
   $("touch").hidden = true;
   $("result").hidden = false;
   $("message").textContent = "";
-  let rank = 1 + bots.filter((b) => b.progress > car.progress).length;
+  const rank = 1 + bots.filter((b) => b.progress > car.progress).length;
   const failed = car.reason !== "finish";
   if (!failed) {
     const best = Math.min(...car.laps);
@@ -638,7 +635,7 @@ function render() {
     ghostFrames.length &&
     $("ghost-enabled").checked
   ) {
-    let k = Math.floor(car.time * 10),
+    const k = Math.floor(car.time * 10),
       a = ghostFrames[k],
       b = ghostFrames[k + 1];
     if (a && b) {
@@ -724,7 +721,7 @@ function update(dt: number) {
       }
       currentInput = car.active || {};
     }
-    let before = Math.ceil(countdown);
+    const before = Math.ceil(countdown);
     countdown -= dt;
     if (Math.ceil(countdown) !== before && countdown > 0 && countdown < 3.01)
       beep();
@@ -755,7 +752,7 @@ function update(dt: number) {
     currentInput.accel || car.turbo ? 64 : Math.max(0, (car.fireTail || 0) - 1);
   const previousProgress = car.progress;
   if (car.energy < 12.5 && car.ticks % 60 === 0) originalSound.effect(70, 40);
-  let laps = car.laps.length;
+  const laps = car.laps.length;
   E.step(car, track, currentInput, dt, mode === "free");
   if (car.progress < previousProgress)
     car.wrongFrames = (car.wrongFrames || 0) + 1;
@@ -826,7 +823,7 @@ function update(dt: number) {
   }
 }
 function frame(ts: number) {
-  let dt = Math.min((ts - last) / 1000 || 0, 0.1);
+  const dt = Math.min((ts - last) / 1000 || 0, 0.1);
   last = ts;
   worldTime += dt;
   accumulator += dt;

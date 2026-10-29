@@ -37,7 +37,7 @@ export class OriginalHUD {
         }
     }
     time(seconds, x, y) {
-        let t = Math.floor((Math.round(seconds * 60) * 100) / 60);
+        const t = Math.floor((Math.round(seconds * 60) * 100) / 60);
         const s = String(Math.floor(t / 6000)).padStart(2, "0") +
             "'" +
             String(Math.floor(t / 100) % 60).padStart(2, "0") +
@@ -92,7 +92,7 @@ export class OriginalHUD {
             this.sprite(64, 152, 64, 8, 232, 8, "red");
             const row = car.laps.length % 3;
             for (let i = 0; i < 3; i++) {
-                let t = 0;
+                let t;
                 if (mode === "free") {
                     const completed = car.laps.length - 1 - ((car.laps.length - 1 - i + 3) % 3);
                     t =

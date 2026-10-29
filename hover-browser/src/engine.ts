@@ -156,12 +156,12 @@ namespace HoverEngine {
   ): Nearest {
     let best: Nearest | null = null;
     const n = track.nodes.length;
-    let ids =
+    const ids =
       hint === null
         ? track.nodes.map((_, i) => i)
         : Array.from({ length: 25 }, (_, j) => (hint + j - 12 + n) % n);
     for (const i of ids) {
-      let p = track.nodes[i],
+      const p = track.nodes[i],
         q = p.end || track.nodes[(i + 1) % n],
         dx = q.x - p.x,
         dz = q.z - p.z,
@@ -176,7 +176,7 @@ namespace HoverEngine {
       if (!best || dist < best.dist) {
         const l = p.l.map((v, k) => mix(v, q.l[k], t)),
           r = p.r.map((v, k) => mix(v, q.r[k], t));
-        let wx = r[0] - l[0],
+        const wx = r[0] - l[0],
           wz = r[2] - l[2],
           lane = ((x - l[0]) * wx + (z - l[2]) * wz) / (wx * wx + wz * wz || 1);
         best = {
@@ -285,7 +285,7 @@ namespace HoverEngine {
     );
     const speed = car.sourceSpeed;
     if (car.damage > 4) car.damage -= 6 + Math.floor((car.damage * 9) / m.tank);
-    let near = nearest(track, car.x, car.z, car.index);
+    const near = nearest(track, car.x, car.z, car.index);
     car.index = near.index;
     const inside = near.lane >= 0 && near.lane <= 1;
     const surface = mix(near.ly, near.ry, clamp(near.lane, 0, 1)),
@@ -342,7 +342,7 @@ namespace HoverEngine {
       car.events.push("land");
     } else if (inside && car.y <= target) {
       const depth = Math.max(0, Math.round((target - car.y) * 100));
-      let lift = Math.max(
+      const lift = Math.max(
         -8 * gravity,
         ((-25 - ((depth * depth) >> 2)) * m.weight) >> 7,
       );
@@ -436,7 +436,7 @@ namespace HoverEngine {
     } else car.roll *= 0.985;
     const nx = car.x + (f[0] + b[0]) / 1600,
       nz = car.z + (f[2] + b[2]) / 1600;
-    let next = nearest(track, nx, nz, car.index);
+    const next = nearest(track, nx, nz, car.index);
     const crossed =
       inside &&
       (next.lane < 0.025 || next.lane > 0.975) &&
@@ -451,7 +451,7 @@ namespace HoverEngine {
         hr = (speed >> 4) + 3,
         normalX = (right ? -1 : 1) * tz,
         normalZ = (right ? 1 : -1) * tx;
-      let tangent = (f[0] * tx + f[2] * tz) * (speed > 80 ? 180 / 256 : 1);
+      const tangent = (f[0] * tx + f[2] * tz) * (speed > 80 ? 180 / 256 : 1);
       f[0] = b[0] = Math.round(tangent * tx + normalX * hr * 16);
       f[2] = b[2] = Math.round(tangent * tz + normalZ * hr * 16);
       const offset = (right ? 1 : -1) * (next.width / 2 - 1.5);

@@ -1,1 +1,19 @@
-const E=require('../dist/engine.js'),vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');const b={window:{}};vm.runInNewContext(fs.readFileSync(__dirname+'/../dist/tracks.js','utf8'),b);for(const raw of b.window.HOVER_TRACKS){const t=E.prepare(raw),c=E.create(t);for(let i=0;i<60000&&!c.finished;i++){E.step(c,t,E.drive(c,t),1/60,true);if(c.laps.length>=3)break;}assert.equal(c.laps.length,3,t.name+' must be completable');console.log(t.name,'laps',c.laps.length,'seconds',c.time.toFixed(1));}
+const E = require("../dist/engine.js"),
+  vm = require("node:vm"),
+  fs = require("node:fs"),
+  assert = require("node:assert/strict");
+const b = { window: {} };
+vm.runInNewContext(
+  fs.readFileSync(__dirname + "/../dist/tracks.js", "utf8"),
+  b,
+);
+for (const raw of b.window.HOVER_TRACKS) {
+  const t = E.prepare(raw),
+    c = E.create(t);
+  for (let i = 0; i < 60000 && !c.finished; i++) {
+    E.step(c, t, E.drive(c, t), 1 / 60, true);
+    if (c.laps.length >= 3) break;
+  }
+  assert.equal(c.laps.length, 3, t.name + " must be completable");
+  console.log(t.name, "laps", c.laps.length, "seconds", c.time.toFixed(1));
+}
