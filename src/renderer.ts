@@ -118,6 +118,7 @@ export class HoverRenderer {
   countDigits: THREE.Group[];
   skyGroup: THREE.Group;
   countdown: number | null = null;
+  finishCamera = false;
   retroUniform = { value: 1 };
   // COURCE.C DQA * H * 65536 / 4096^2, with PS1 units / 100.
   sourceDepth = { value: 96 };
@@ -738,7 +739,8 @@ export class HoverRenderer {
       );
       if (this.replayDirector.mode !== 33)
         E.cameraStep(this.follow, car, 0, this.replayDirector.mode);
-    } else E.cameraStep(this.follow, car, startCount);
+    } else
+      E.cameraStep(this.follow, car, startCount, this.finishCamera ? 17 : 0);
     this.wasReplay = this.replayView;
     this.yaw = this.follow.yaw;
   }
@@ -777,12 +779,7 @@ export class HoverRenderer {
         }
         this.ships[i] = this.makeShip(p.type, g);
       }
-      this.updateShip(
-        this.ships[i],
-        p,
-        i === 0 ? input : p.active || { accel: true },
-        time,
-      );
+      this.updateShip(this.ships[i], p, i === 0 ? input : p.active || {}, time);
     });
     if (state !== "falling" && !this.holdCamera) {
       if (this.yaw === null) this.updateCamera(car, this.countdown || 0);
@@ -790,7 +787,8 @@ export class HoverRenderer {
         distance = menu
           ? 24
           : 35 +
-            this.follow.distance / (this.replayView ? 100 : 400) +
+            this.follow.distance /
+              (this.replayView || this.finishCamera ? 100 : 400) +
             (this.countdown || 0);
       const yaw = menu ? car.heading - 0.42 : this.follow.yaw,
         sy = Math.sin(yaw),
@@ -803,9 +801,13 @@ export class HoverRenderer {
       const pitch = menu
         ? -0.18
         : this.follow.pitch *
-            (this.replayView && this.replayDirector.mode === 17 ? -1 : 1) -
+            (this.finishCamera ||
+            (this.replayView && this.replayDirector.mode === 17)
+              ? -1
+              : 1) -
           (Math.trunc((4096 * 7) / 360) * Math.PI * 2) / 4096;
-      const roll = menu || this.replayView ? 0 : this.follow.roll;
+      const roll =
+        menu || this.replayView || this.finishCamera ? 0 : this.follow.roll;
       this.camera.up.set(
         -Math.cos(yaw) * Math.sin(roll),
         Math.cos(roll),

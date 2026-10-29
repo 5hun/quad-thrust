@@ -311,3 +311,69 @@ for (const raw of gridData.window.HOVER_TRACKS) {
 console.log(
   "PASS: source starting grid on nine courses, damage lighting/transparency, 64-tick exhaust tail",
 );
+
+// GAME.C: goal text keeps car_enemy/physics alive but freezes race records.
+{
+  const car = E.create(t);
+  E.step(car, t, { accel: true }, 1 / 60);
+  car.finished = true;
+  car.reason = "finish";
+  car.laps = [10, 11, 12];
+  const time = car.time,
+    ticks = car.ticks,
+    z = car.z;
+  E.step(car, t, { accel: true }, 1 / 60);
+  assert.equal(car.ticks, ticks, "normal race stepping stops at the finish");
+  for (let i = 0; i < 30; i++)
+    E.step(car, t, { accel: true }, 1 / 60, false, false);
+  assert.equal(car.ticks, ticks + 30);
+  assert.ok(car.z > z, "post-finish physics continues moving the car");
+  assert.equal(car.time, time, "presentation ticks do not change total time");
+  assert.deepEqual(car.laps, [10, 11, 12]);
+  assert.equal(car.reason, "finish");
+  for (const reason of ["destroyed", "course-out"]) {
+    car.reason = reason;
+    E.step(car, t, { accel: true }, 1 / 60, false, false);
+    assert.equal(car.ticks, ticks + 30, "failures cannot enter goal driving");
+  }
+  const cpu = E.create(t);
+  cpu.cpuLevel = 2;
+  E.step(cpu, t, {}, 1 / 60);
+  assert.equal(
+    cpu.fireTail,
+    64,
+    "car_enemy draws CPU exhaust even without thrust",
+  );
+}
+{
+  const track = tileTrack("g");
+  track.training = false;
+  const car = E.create(track);
+  car.previousTile = ".";
+  car.linePosition = 100;
+  car.laps = [10, 11, 12];
+  car.finished = true;
+  car.reason = "finish";
+  E.step(car, track, {}, 1 / 60, false, false);
+  assert.deepEqual(
+    car.laps,
+    [10, 11, 12],
+    "goal driving cannot register another lap",
+  );
+}
+
+{
+  const car = E.create(t);
+  car.cpuLevel = 0;
+  car.cpuSlot = 0;
+  const input = E.driveCPU(car, t, car);
+  assert.equal(input.brake, true, "lev=0 post-goal controller brakes");
+  assert.ok(!input.accel && !input.l1 && !input.l2 && !input.r1 && !input.r2);
+  car.fireRemaining = 64;
+  E.step(car, t, input, 1 / 60, false, false);
+  assert.equal(
+    car.fireTail,
+    0,
+    "lev=0 car_enemy does not draw residual exhaust",
+  );
+}

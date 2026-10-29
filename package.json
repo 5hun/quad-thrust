@@ -15,7 +15,8 @@
     "test:browser": "node tests/test-browser-fidelity.cjs",
     "test:menu": "node tests/test-browser-menu.cjs",
     "test:postrace": "node tests/test-browser-postrace.cjs",
-    "test:credits": "node tests/test-browser-credits.cjs"
+    "test:credits": "node tests/test-browser-credits.cjs",
+    "test:phases": "node tests/test-browser-race-phases.cjs"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

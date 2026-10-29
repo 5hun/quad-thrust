@@ -25,6 +25,7 @@ catch (error) {
     throw error;
 }
 let track = tracks[0], car = E.create(track), mode = "time", state = "menu", countdown = 5, last = 0, accumulator = 0, worldTime = 0, keys = {}, bots = [], sound = true, padPause = false, toastTimer = 0;
+let finishRank = 1;
 const format = (t) => {
     if (!Number.isFinite(t))
         return "—";
@@ -297,6 +298,7 @@ function start(nextRound = false) {
     }
     catch { }
     state = "countdown";
+    finishRank = 1;
     countdown = 5;
     accumulator = 0;
     keys = {};
@@ -451,6 +453,7 @@ function finish() {
     $("result").hidden = true;
     $("message").textContent = "";
     const failed = car.reason !== "finish";
+    finishRank = 1 + bots.filter((b) => b.progress > car.progress).length;
     if (!failed) {
         const best = Math.min(...car.laps);
         saveBest(best);
@@ -729,7 +732,7 @@ function render() {
                 resultFrames < 180
                 ? {
                     text: mode.startsWith("gp")
-                        ? ["1ST", "2ND", "3RD", "4TH"][bots.filter((b) => b.progress > car.progress).length]
+                        ? ["1ST", "2ND", "3RD", "4TH"][finishRank - 1]
                         : "FINISH",
                     frame: resultFrames,
                 }
@@ -737,11 +740,7 @@ function render() {
     view.holdCamera =
         state === "falling" ||
             (state === "finished" && car.reason === "course-out");
-    view.draw(track, display, state === "menu" ? [] : replayBots, state, worldTime, state === "menu"
-        ? { accel: true }
-        : postrace.phase
-            ? display.active || {}
-            : currentInput, ghost);
+    view.draw(track, display, state === "menu" ? [] : replayBots, state, worldTime, display.active || {}, ghost);
     if (postrace.phase)
         postrace.draw();
 }
@@ -773,6 +772,44 @@ function hud() {
         .forEach((el) => el.classList.toggle("on", !!currentInput[m[el.dataset.thruster]]));
     mapDraw($("minimap"), track, car, bots);
 }
+// The original keeps every car moving during goal text and failure waits.
+function updateBots(dt, racing = true) {
+    for (const bot of bots) {
+        if (bot.finished && bot.reason !== "finish") {
+            E.recover(bot, track);
+            bot.damage = 0;
+        }
+        const inp = trainingSession
+            ? bot.stopped
+                ? {}
+                : T.drive(bot, track)
+            : E.driveCPU(bot, track, car);
+        E.step(bot, track, inp, dt, !trainingSession, racing && !bot.finished);
+        if (trainingSession && bot.events.includes("stop"))
+            bot.stopped = true;
+        if (bot.laps.length >= 3) {
+            bot.finished = true;
+            bot.reason = "finish";
+        }
+        bot.events.length = 0;
+    }
+}
+function updateGoalDrive(dt) {
+    if (car.reason === "finish" || (trainingSession && !car.finished)) {
+        car.cpuSlot = 0;
+        car.cpuLevel =
+            trainingSession?.status === "complete" ||
+                (!trainingSession && mode.startsWith("gp") && finishRank === 1)
+                ? 10
+                : 0;
+        car.repairFrames = Math.max(0, (car.repairFrames || 0) - 1);
+        car.lapDraw = Math.max(0, (car.lapDraw || 0) - 1);
+        E.step(car, track, E.driveCPU(car, track, car), dt, false, false);
+        car.events.length = 0;
+    }
+    updateBots(dt, false);
+    E.collideAll([car, ...bots]);
+}
 function update(dt) {
     currentInput = input();
     if (state === "finished") {
@@ -780,6 +817,7 @@ function update(dt) {
             postrace.tick();
             return;
         }
+        updateGoalDrive(dt);
         if (!document.getElementById("continue-panel").hidden) {
             if (continueRotation) {
                 continueRotation -= Math.sign(continueRotation);
@@ -800,7 +838,7 @@ function update(dt) {
             mode.startsWith("gp") &&
             car.reason === "finish" &&
             resultFrames === 180 &&
-            !bots.some((b) => b.progress > car.progress)) {
+            finishRank === 1) {
             if (gpRound < 2) {
                 gpRound++;
                 start(true);
@@ -816,7 +854,7 @@ function update(dt) {
             mode.startsWith("gp") &&
             car.reason === "finish" &&
             resultFrames === 180 &&
-            bots.some((b) => b.progress > car.progress)) {
+            finishRank !== 1) {
             showContinue();
             return;
         }
@@ -876,6 +914,7 @@ function update(dt) {
         return;
     }
     if (state === "falling") {
+        updateBots(dt);
         const m = E.MACHINES[car.type];
         const gravity = (m.weight * 3) >> 4;
         for (const vector of [car.front, car.rear])
@@ -889,6 +928,7 @@ function update(dt) {
         return;
     }
     if (state === "destroyed") {
+        updateBots(dt);
         E.stepDebris(car);
         car.explosionFrames = (car.explosionFrames ?? 0) + 1;
         // GAME.C retriggers the burst every eight frames while over > 64,
@@ -916,25 +956,7 @@ function update(dt) {
         $("best").textContent = "BEST " + format(getBest());
         car.lapDraw = 180;
     }
-    for (const bot of bots) {
-        if (bot.finished && bot.reason !== "finish") {
-            E.recover(bot, track);
-            bot.damage = 0;
-        }
-        if (trainingSession && bot.stopped)
-            continue;
-        const inp = trainingSession
-            ? T.drive(bot, track)
-            : E.driveCPU(bot, track, car);
-        E.step(bot, track, inp, dt, !trainingSession);
-        if (trainingSession && bot.events.includes("stop"))
-            bot.stopped = true;
-        if (bot.laps.length >= 3) {
-            bot.finished = true;
-            bot.reason = "finish";
-        }
-        bot.events.length = 0;
-    }
+    updateBots(dt);
     E.collideAll([car, ...bots]);
     if (!trainingSession && car.time >= ghostClock) {
         recording.push(captureReplay(car));
@@ -994,6 +1016,15 @@ function frame(ts) {
     if (postrace.phase)
         replayClock += dt;
     view.replayView = !!postrace.phase;
+    // GAME.C view_set(17): front chase except a winning GP; TRAINIG.C
+    // uses it only for MISS. Keep the live camera through CONTINUE?.
+    view.finishCamera =
+        state === "finished" &&
+            !postrace.phase &&
+            (trainingSession
+                ? trainingSession.status === "miss"
+                : car.reason === "finish" &&
+                    (!mode.startsWith("gp") || finishRank !== 1));
     accumulator += dt;
     while (accumulator >= 1 / 60) {
         update(1 / 60);
@@ -1016,6 +1047,15 @@ window.hoverDiagnostics = () => ({
     state,
     mode,
     gpRound,
+    finishRank,
+    finishCamera: view.finishCamera,
+    opponents: bots.map((b) => ({
+        x: b.x,
+        y: b.y,
+        z: b.z,
+        ticks: b.ticks,
+        progress: b.progress,
+    })),
     gpRecordCourses: gpRecords.map((r) => r.course),
     postrace: postrace.phase,
     replayClock,
@@ -1048,6 +1088,7 @@ window.hoverDiagnostics = () => ({
     progress: car.progress,
     lap: car.laps.length,
     time: car.time,
+    ticks: car.ticks,
     ...view.diagnostics(),
     ...originalSound.diagnostics(),
     displaySpeed: car.sourceSpeed >> 1,

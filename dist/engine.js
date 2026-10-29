@@ -303,10 +303,11 @@ var HoverEngine;
         car.energy = HoverEngine.clamp(100 * (1 - car.damage / m.tank), 0, 100);
     }
     HoverEngine.sync = sync;
-    function tick(car, track, input, free) {
+    function tick(car, track, input, free, racing = true) {
         const m = HoverEngine.MACHINES[car.type], f = car.front, b = car.rear;
         car.ticks++;
-        car.time = car.ticks / 60;
+        if (racing)
+            car.time = car.ticks / 60;
         car.flash = Math.max(0, car.flash - 1 / 60);
         car.recovery = Math.max(0, car.recovery - 1 / 60);
         car.sourceSpeed = Math.floor(Math.hypot(f[0] + b[0], f[1] + b[1], f[2] + b[2]) / Math.sqrt(128));
@@ -339,7 +340,12 @@ var HoverEngine;
         car.damageSemi =
             ch === "d" && car.grip && !car.cpuLevel && (car.ticks & 1) === 0;
         car.turbo = !!input.turbo && m.turbo > 0;
-        car.fireTail = input.accel || car.turbo ? 64 : car.fireRemaining || 0;
+        car.fireTail =
+            !racing && !car.cpuLevel
+                ? 0
+                : car.cpuLevel || input.accel || car.turbo
+                    ? 64
+                    : car.fireRemaining || 0;
         car.fireRemaining =
             input.accel || car.turbo ? 64 : Math.max(0, (car.fireRemaining || 0) - 1);
         if (car.grip) {
@@ -350,7 +356,8 @@ var HoverEngine;
         }
         // CAR_CTR.C: g is a line trigger (also active in the air), with a
         // 32-row guard against reversing across the same finish line.
-        if (!track.training &&
+        if (racing &&
+            !track.training &&
             ch === "g" &&
             car.previousTile !== "g" &&
             car.linePosition > car.lastGoal + 32) {
@@ -546,10 +553,10 @@ var HoverEngine;
             const startEdge = right ? node.r : node.l, endEdge = right ? end.r : end.l;
             const edge = endEdge.map((v, k) => (v - startEdge[k]) * (k === 1 ? -50 : 50));
             const len = Math.hypot(edge[0], edge[2]) || 1;
-            const tx = edge[0] / len, tz = edge[2] / len, hr = car.cpuLevel ? 0 : (speed >> 4) + 3, normalX = (right ? -1 : 1) * tz, normalZ = (right ? 1 : -1) * tx;
+            const tx = edge[0] / len, tz = edge[2] / len, hr = car.cpuLevel || !racing ? 0 : (speed >> 4) + 3, normalX = (right ? -1 : 1) * tz, normalZ = (right ? 1 : -1) * tx;
             let projection = Math.trunc((64 * (edge[0] * f[0] + edge[1] * f[1] + edge[2] * f[2])) /
                 (edge.reduce((s, v) => s + v * v, 0) || 1));
-            if (speed > 80 && !car.cpuLevel)
+            if (speed > 80 && !car.cpuLevel && racing)
                 projection = (projection * 180) >> 8;
             f[0] = b[0] =
                 ((edge[0] * projection) >> 6) +
@@ -586,18 +593,22 @@ var HoverEngine;
         sync(car);
     }
     HoverEngine.tick = tick;
-    function step(car, track, input, dt, free = false) {
-        if (car.finished)
+    function step(car, track, input, dt, free = false, racing = true) {
+        // GAME.C keeps car_enemy running after the finish, while total_time
+        // and the completed lap records stay fixed. Failures still stop physics.
+        const canStep = () => !car.finished || (!racing && car.reason === "finish");
+        if (!canStep())
             return;
         car.accumulator += dt;
-        while (car.accumulator >= 1 / 60 - 1e-9 && !car.finished) {
-            tick(car, track, input, free);
+        while (car.accumulator >= 1 / 60 - 1e-9 && canStep()) {
+            tick(car, track, input, free, racing);
             car.accumulator -= 1 / 60;
         }
     }
     HoverEngine.step = step;
     function collide(a, b) {
-        if (a.finished || b.finished)
+        if ((a.finished && a.reason !== "finish") ||
+            (b.finished && b.reason !== "finish"))
             return;
         const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z, d = Math.floor(Math.hypot(dx, dy, dz) * 100);
         if (d >= 512)
@@ -684,6 +695,10 @@ var HoverEngine;
         // Steering still adapts the converted track geometry; speed/assistance
         // use original source units rather than the old 80/87/94 world-unit caps.
         const input = drive(car, track, Infinity);
+        // CAR_CTR.C car_control: lev==0 clears thrust/side boosters and brakes.
+        // Only a GP winner (or successful training) changes to lev=10.
+        if (car.cpuLevel === 0)
+            return { steer: input.steer, brake: true };
         input.accel =
             input.accel &&
                 !input.brake &&
