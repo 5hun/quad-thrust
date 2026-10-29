@@ -513,7 +513,11 @@ export class OriginalMenu {
           kind,
         )[0];
         this.text(i ? "TOTAL RECORD" : "BESTLAP RECORD", 8 + i * 176, 192);
-        this.text(this.time(row?.time), 32 + i * 176, 204);
+        this.text(
+          this.time(row?.time) + " " + (row?.name || "---"),
+          32 + i * 176,
+          204,
+        );
         if (row)
           this.text(HoverEngine.MACHINES[row.machine].name, 32 + i * 176, 216);
       });
@@ -575,7 +579,11 @@ export class OriginalMenu {
           kind,
         );
         for (let i = 0; i < 6; i++) {
-          this.text(`${i + 1} ${this.time(rows[i]?.time)}`, x, 72 + i * 24);
+          this.text(
+            `${i + 1} ${this.time(rows[i]?.time)} ${rows[i]?.name || "---"}`,
+            x,
+            72 + i * 24,
+          );
           if (rows[i])
             this.text(
               HoverEngine.MACHINES[rows[i].machine].name,

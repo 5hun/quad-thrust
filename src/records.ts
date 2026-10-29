@@ -12,7 +12,7 @@ namespace HoverRecords {
     category: string | null,
     course: string | number,
     kind: string,
-  ): { time: number; machine: number }[] {
+  ): { time: number; machine: number; name?: string }[] {
     if (!category) return [];
     try {
       const data = JSON.parse(
@@ -39,10 +39,13 @@ namespace HoverRecords {
     kind: string,
     time: number,
     machine: number,
+    name?: string,
   ) {
     if (!category || !Number.isFinite(time) || time <= 0) return;
     const rows = read(category, course, kind);
-    rows.push({ time, machine });
+    rows.push(
+      name ? { time, machine, name: name.slice(0, 3) } : { time, machine },
+    );
     rows.sort((a, b) => a.time - b.time);
     try {
       localStorage.setItem(

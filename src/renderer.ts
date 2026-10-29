@@ -104,6 +104,7 @@ export class HoverRenderer {
   follow = { yaw: 0, pitch: 0, roll: 0, distance: 0 };
   retro: boolean;
   frames: number;
+  holdCamera = false;
   errors: string[];
   canvas: HTMLCanvasElement;
   countScene: THREE.Scene;
@@ -112,7 +113,20 @@ export class HoverRenderer {
   skyGroup: THREE.Group;
   countdown: number | null = null;
   retroUniform = { value: 1 };
-  result: { text: "COMPLETE" | "MISS"; frame: number } | null = null;
+  result: {
+    text: "COMPLETE" | "MISS" | "FINISH" | "1ST" | "2ND" | "3RD" | "4TH";
+    frame: number;
+  } | null = null;
+  nameEntry: {
+    indices: number[];
+    selected: number;
+    rotation: number;
+    frame: number;
+  } | null = null;
+  nameLetters = new THREE.Group();
+  nameKey = "";
+  continuePrompt: { choice: number; rotation: number } | null = null;
+  continueLetters = new THREE.Group();
   resultText = "";
   resultLetters = new THREE.Group();
 
@@ -658,33 +672,36 @@ export class HoverRenderer {
         time,
       );
     });
-    if (this.yaw === null) this.updateCamera(car, this.countdown || 0);
-    const menu = state === "menu",
-      distance = menu
-        ? 24
-        : 35 + this.follow.distance / 400 + (this.countdown || 0);
-    const yaw = menu ? car.heading - 0.42 : this.follow.yaw,
-      sy = Math.sin(yaw),
-      cy = Math.cos(yaw);
-    this.camera.position.set(
-      car.x - sy * distance,
-      car.y + (menu ? 10 : 8.5),
-      -car.z + cy * distance,
-    );
-    const pitch = menu
-      ? -0.18
-      : this.follow.pitch - (Math.trunc((4096 * 7) / 360) * Math.PI * 2) / 4096;
-    const roll = menu ? 0 : this.follow.roll;
-    this.camera.up.set(
-      -Math.cos(yaw) * Math.sin(roll),
-      Math.cos(roll),
-      Math.sin(yaw) * Math.sin(roll),
-    );
-    this.camera.lookAt(
-      car.x + sy * 30,
-      car.y + 8.5 + Math.tan(pitch) * (distance + 30),
-      -car.z - cy * 30,
-    );
+    if (state !== "falling" && !this.holdCamera) {
+      if (this.yaw === null) this.updateCamera(car, this.countdown || 0);
+      const menu = state === "menu",
+        distance = menu
+          ? 24
+          : 35 + this.follow.distance / 400 + (this.countdown || 0);
+      const yaw = menu ? car.heading - 0.42 : this.follow.yaw,
+        sy = Math.sin(yaw),
+        cy = Math.cos(yaw);
+      this.camera.position.set(
+        car.x - sy * distance,
+        car.y + (menu ? 10 : 8.5),
+        -car.z + cy * distance,
+      );
+      const pitch = menu
+        ? -0.18
+        : this.follow.pitch -
+          (Math.trunc((4096 * 7) / 360) * Math.PI * 2) / 4096;
+      const roll = menu ? 0 : this.follow.roll;
+      this.camera.up.set(
+        -Math.cos(yaw) * Math.sin(roll),
+        Math.cos(roll),
+        Math.sin(yaw) * Math.sin(roll),
+      );
+      this.camera.lookAt(
+        car.x + sy * 30,
+        car.y + 8.5 + Math.tan(pitch) * (distance + 30),
+        -car.z - cy * 30,
+      );
+    }
     this.skyGroup.position.set(car.x, 0, -car.z);
     this.renderer.autoClear = true;
     this.background.draw(this.renderer, this.camera, track.theme, time);
@@ -692,6 +709,8 @@ export class HoverRenderer {
     this.renderer.clearDepth();
     this.renderer.render(this.scene, this.camera);
     this.renderer.autoClear = true;
+    this.nameLetters.visible = !!this.nameEntry;
+    this.continueLetters.visible = !!this.continuePrompt;
     this.resultLetters.visible = !!this.result;
     if (this.countdown !== null && this.countdown !== undefined) {
       const n = this.countdown;
@@ -721,8 +740,12 @@ export class HoverRenderer {
           const first = ch <= "O" ? "A" : "P";
           this.resultLetters.add(
             this.modelObject(
-              first === "A" ? "ALP_A_O" : "ALP_P_O",
-              ch.charCodeAt(0) - first.charCodeAt(0),
+              /[0-9]/.test(ch)
+                ? "ALP_0_9"
+                : first === "A"
+                  ? "ALP_A_O"
+                  : "ALP_P_O",
+              /[0-9]/.test(ch) ? +ch : ch.charCodeAt(0) - first.charCodeAt(0),
             ),
           );
         }
@@ -733,9 +756,14 @@ export class HoverRenderer {
       // Y rotation 4096/5 per tick while approaching the final position.
       this.resultLetters.children.forEach((m, i) => {
         const age = frame - (i + 1) * 8;
-        const steps = Math.min(10, Math.max(0, age + 1));
+        const training = text === "COMPLETE" || text === "MISS";
+        const steps = Math.min(training ? 10 : 5, Math.max(0, age + 1));
         m.visible = age >= 0;
-        m.position.set((i - (text.length - 1) / 2) * 6, 0, -80 + steps * 2);
+        m.position.set(
+          (i - (text.length - 1) / 2) * 6,
+          training || text === "FINISH" ? 0 : 6,
+          -(training ? 80 : 50) + steps * 2,
+        );
         m.rotation.y = (-steps * 819 * Math.PI * 2) / 4096;
       });
       this.renderer.autoClear = false;
@@ -743,6 +771,83 @@ export class HoverRenderer {
       this.renderer.render(this.countScene, this.countCamera);
       this.renderer.autoClear = true;
     } else this.resultLetters.visible = false;
+    this.continueLetters.visible = !!this.continuePrompt;
+    if (this.continuePrompt) {
+      if (!this.continueLetters.children.length) {
+        [..."CONTINUE?YESNO"].forEach((ch, i) => {
+          const first = ch <= "O" ? "A" : "P";
+          const letter = this.modelObject(
+            ch === "?" ? "ALP_0_9" : first === "A" ? "ALP_A_O" : "ALP_P_O",
+            ch === "?" ? 12 : ch.charCodeAt(0) - first.charCodeAt(0),
+          );
+          letter.position.set(
+            i < 9 ? -24 + i * 6 : i < 12 ? -6 + (i - 9) * 6 : -3 + (i - 12) * 6,
+            i < 9 ? 10 : -10,
+            i < 9 ? -60 : -50,
+          );
+          this.continueLetters.add(letter);
+        });
+        this.countScene.add(this.continueLetters);
+      }
+      this.countDigits.forEach((m) => (m.visible = false));
+      this.resultLetters.visible = false;
+      this.continueLetters.children.forEach((letter, i) => {
+        letter.visible =
+          i < 9 || (this.continuePrompt!.choice === 0 ? i < 12 : i >= 12);
+        letter.rotation.y = i < 9 ? 0 : this.continuePrompt!.rotation;
+      });
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this.countScene, this.countCamera);
+      this.renderer.autoClear = true;
+    }
+    if (this.nameEntry) {
+      const entry = this.nameEntry,
+        key = entry.indices.join(",");
+      if (this.nameKey !== key) {
+        this.clear(this.nameLetters);
+        this.nameKey = key;
+        entry.indices.forEach((index) =>
+          this.nameLetters.add(
+            this.modelObject(
+              ["ALP_A_O", "ALP_P_O", "ALP_0_9"][Math.floor(index / 15)],
+              index % 15,
+            ),
+          ),
+        );
+        if (!this.nameLetters.parent) this.countScene.add(this.nameLetters);
+      }
+      this.countDigits.forEach((m) => (m.visible = false));
+      this.resultLetters.visible = false;
+      this.continueLetters.visible = false;
+      this.nameLetters.visible = true;
+      const sine = (rate: number, offset = 0) =>
+        Math.sin(((entry.frame * rate + offset) * Math.PI * 2) / 720);
+      this.nameLetters.children.forEach((letter, i) => {
+        const selected = i === entry.selected;
+        letter.position.set(
+          i * 8 - 8 + (selected ? sine(1) * 0.64 : 0),
+          selected ? -sine(7) * 0.64 : 0,
+          -50 + (selected ? 10 + sine(1, 45) * 0.16 : 0),
+        );
+        const rotation = entry.rotation;
+        letter.rotation.set(
+          selected && rotation ? (sine(3) * Math.PI * 2) / 64 : 0,
+          selected
+            ? ((Math.abs(rotation) > 8
+                ? -Math.sign(rotation) * (16 - Math.abs(rotation))
+                : rotation) *
+                Math.PI) /
+                16
+            : 0,
+          selected && rotation ? (sine(5) * Math.PI * 2) / 64 : 0,
+        );
+      });
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this.countScene, this.countCamera);
+      this.renderer.autoClear = true;
+    }
   }
   // Dedicated black-background selection pass. Reuse original TMD letters and
   // the actual course mesh instead of a browser illustration of the course.

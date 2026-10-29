@@ -21,3 +21,6 @@ png(OUT/"bomb.png",64,128,b"".join(rgba(pixel(0x96,492<<6,u,v)) for v in range(1
 # MENU_ETC.C title() uses TITLE.TIM (TITLE=1 is disabled in GP1.H).
 # The logo is two strips, source Y=128 and Y=206, drawn at (40,8)/(40,58).
 png(OUT/'title.png',256,128,b''.join(rgba(pixel(0x85,482<<6,u,v+128)) for v in range(128) for u in range(256)))
+
+# DRAW_SP.C best_draw / total_draw: original 24x16 machine portraits.
+png(OUT/'minicars.png',24,96,b''.join(rgba(pixel(0x116,0,u+32,v)) for v in range(96) for u in range(24)))

@@ -131,23 +131,36 @@
             >
           </div>
         </section>
-        <section id="pause-panel" class="modal" hidden>
-          <div class="eyebrow">HOVER RACING</div>
-          <h2>PAUSE</h2>
-          <p>慣性をつかんで、次のコーナーへ。</p>
-          <button id="resume" class="primary">CONTINUE</button
-          ><button id="restart" class="secondary">リトライ</button
-          ><button id="back" class="secondary">EXIT</button>
+        <section id="pause-panel" hidden aria-label="ポーズメニュー">
+          <canvas
+            id="pause-menu"
+            width="320"
+            height="240"
+            aria-hidden="true"
+          ></canvas>
+          <button id="resume" aria-label="CONTINUE">CONTINUE</button>
+          <button id="restart" aria-label="RESTART">RESTART</button>
+          <button id="back" aria-label="EXIT">EXIT</button>
         </section>
-        <section id="result" class="modal" hidden>
-          <div class="eyebrow" id="result-tag">RACE COMPLETE</div>
-          <h2 id="result-title">FINISH</h2>
-          <p id="result-text"></p>
-          <div id="lap-times"></div>
-          <button id="next-race" class="primary" hidden>次のコースへ ↗</button
-          ><button id="again" class="primary">もう一度走る ↗</button
-          ><button id="result-back" class="secondary">タイトルに戻る</button>
+        <section id="continue-panel" hidden aria-label="CONTINUE?">
+          <button id="continue-toggle" aria-label="YES / NO 切り替え">
+            YES / NO
+          </button>
+          <button id="continue-confirm" aria-label="CONTINUE 決定">決定</button>
         </section>
+        <section id="postrace" hidden aria-label="レース記録">
+          <canvas
+            id="postrace-canvas"
+            width="320"
+            height="240"
+            aria-hidden="true"
+          ></canvas>
+          <button id="postrace-prev" aria-label="前の文字">◀</button>
+          <button id="postrace-next" aria-label="次の文字">▶</button>
+          <button id="postrace-confirm" aria-label="記録の決定">決定</button>
+          <button id="postrace-exit" aria-label="記録表示を終了">戻る</button>
+        </section>
+        <section id="result" hidden inert></section>
         <div id="touch" hidden>
           <div>
             <button data-key="KeyQ">L1</button

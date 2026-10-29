@@ -129,6 +129,10 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       );
       await press("Escape");
       await page.locator("#back").click();
+      await screen("training");
+      await press("Escape");
+      await press("Escape");
+      await press("Escape");
       await screen("title");
     }
     await choose("TRAINING");

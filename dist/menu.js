@@ -425,7 +425,7 @@ export class OriginalMenu {
             ["lap", "total"].forEach((kind, i) => {
                 const row = HoverRecords.read(this.mode === "time" ? "time" : "gp", course, kind)[0];
                 this.text(i ? "TOTAL RECORD" : "BESTLAP RECORD", 8 + i * 176, 192);
-                this.text(this.time(row?.time), 32 + i * 176, 204);
+                this.text(this.time(row?.time) + " " + (row?.name || "---"), 32 + i * 176, 204);
                 if (row)
                     this.text(HoverEngine.MACHINES[row.machine].name, 32 + i * 176, 216);
             });
@@ -459,7 +459,7 @@ export class OriginalMenu {
                 this.text(col ? "TOTAL RECORDS" : "BESTLAP RECORDS", x, 48);
                 const rows = HoverRecords.read(this.recordClass, this.recordCourse, kind);
                 for (let i = 0; i < 6; i++) {
-                    this.text(`${i + 1} ${this.time(rows[i]?.time)}`, x, 72 + i * 24);
+                    this.text(`${i + 1} ${this.time(rows[i]?.time)} ${rows[i]?.name || "---"}`, x, 72 + i * 24);
                     if (rows[i])
                         this.text(HoverEngine.MACHINES[rows[i].machine].name, x + 16, 82 + i * 24);
                 }

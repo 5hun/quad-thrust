@@ -26,11 +26,11 @@ var HoverRecords;
         }
     }
     HoverRecords.read = read;
-    function save(category, course, kind, time, machine) {
+    function save(category, course, kind, time, machine, name) {
         if (!category || !Number.isFinite(time) || time <= 0)
             return;
         const rows = read(category, course, kind);
-        rows.push({ time, machine });
+        rows.push(name ? { time, machine, name: name.slice(0, 3) } : { time, machine });
         rows.sort((a, b) => a.time - b.time);
         try {
             localStorage.setItem(key(category, course, kind), JSON.stringify(rows.slice(0, 6)));

@@ -991,3 +991,115 @@ main > details:not(.browser-options) {
     padding: 0 12px;
   }
 }
+
+/* GAME.C pause(): retain the frozen race and original sprite coordinates. */
+#pause-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: transparent;
+}
+#pause-menu {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+#pause-panel button {
+  position: absolute;
+  left: 30%;
+  width: 40%;
+  height: 6.6667%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  font-size: 0;
+}
+#pause-panel #resume {
+  top: 26.6667%;
+}
+#pause-panel #restart {
+  top: 40%;
+  left: 32.5%;
+}
+#pause-panel #back {
+  top: 53.3333%;
+}
+#pause-panel button:focus-visible {
+  outline: 1px solid #00ff00;
+}
+
+#continue-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+}
+#continue-panel button {
+  position: absolute;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  font-size: 0;
+}
+#continue-toggle {
+  left: 0;
+  top: 35%;
+  width: 25%;
+  height: 60%;
+}
+#continue-confirm {
+  left: 25%;
+  top: 35%;
+  width: 75%;
+  height: 60%;
+}
+#continue-panel button:focus-visible {
+  outline: 1px solid #00ff00;
+}
+
+#postrace {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+}
+#postrace-canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+#postrace button {
+  position: absolute;
+  background: transparent;
+  border: 0;
+  color: transparent;
+  font-size: 0;
+}
+#postrace-prev {
+  left: 0;
+  top: 30%;
+  width: 25%;
+  height: 50%;
+}
+#postrace-next {
+  right: 0;
+  top: 30%;
+  width: 25%;
+  height: 50%;
+}
+#postrace-confirm {
+  left: 25%;
+  top: 30%;
+  width: 50%;
+  height: 50%;
+}
+#postrace-exit {
+  right: 0;
+  bottom: 0;
+  width: 25%;
+  height: 20%;
+}
+#postrace button:focus-visible {
+  outline: 1px solid #00ff00;
+}

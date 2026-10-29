@@ -291,8 +291,12 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       () => window.hoverDiagnostics().state === "finished",
     );
     assert.equal(await page.locator("#result").isVisible(), false);
-    await page.waitForFunction(() => !document.querySelector("#result").hidden);
-    assert.equal(await page.locator("#result-title").textContent(), "COMPLETE");
+    await page.waitForFunction(
+      () =>
+        window.hoverDiagnostics().state === "menu" &&
+        window.hoverDiagnostics().menuScreen === "training",
+    );
+    assert.equal(await page.locator("#result").isVisible(), false);
     assert.deepEqual(errors, []);
     console.log(
       "PASS: real Chromium RETRO/HD shader compilation, 64 debris particles, bomb visibility, articulated Suzuki, audible AudioWorklet output, warning/damage key-on/off, audio pause; no console/page errors",
