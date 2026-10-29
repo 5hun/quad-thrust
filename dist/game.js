@@ -8,7 +8,7 @@ import { HoverRenderer } from "./renderer.js";
 import { OriginalSound } from "./sound.js";
 import { OriginalHUD } from "./hud.js";
 import { OriginalMenu } from "./menu.js";
-import { sampleReplay } from "./replay.js";
+import { sampleReplay, captureReplay } from "./replay.js";
 import { OriginalPostrace } from "./postrace.js";
 const originalSound = new OriginalSound();
 const E = HoverEngine, R = HoverRules, T = HoverTraining, B = HoverRecords, canvas = $("game"), tracks = HOVER_TRACKS.map(E.prepare);
@@ -132,7 +132,7 @@ function select() {
     if (rules.cup !== null && state === "menu")
         $("course").value = String(rules.cup * 3);
     track = selectedTrack();
-    car = E.create(track, +$("machine").value);
+    car = E.placeOnGrid(E.create(track, +$("machine").value), track);
     const m = E.MACHINES[car.type];
     $("machine-description").textContent = m.desc;
     $("course-number").textContent =
@@ -221,7 +221,7 @@ const originalMenu = new OriginalMenu({
     },
     sound(kind) {
         initAudio();
-        originalSound.ready?.then(() => originalSound.effect(kind === "ok" ? 72 : kind === "cancel" ? 74 : 73, kind === "ok" ? 50 : 40));
+        originalSound.ready?.then(() => originalSound.effect(kind === "ok" ? 72 : kind === "cancel" ? 74 : 73, kind === "ok" ? 50 : 40, kind === "ok" ? 80 : 127));
     },
     music(name) {
         if (name)
@@ -258,24 +258,12 @@ function start(nextRound = false) {
         $("course").value = String(gpCup * 3 + gpRound);
     }
     track = selectedTrack();
-    car = E.create(track, +$("machine").value);
+    car = E.placeOnGrid(E.create(track, +$("machine").value), track);
     bots = R.profile(mode).opponents
         ? R.opponents(car.type).map((type, i) => {
-            const b = E.create(track, type);
-            const p = E.at(track, 20 + i * 9);
-            Object.assign(b, {
-                x: p.x,
-                z: p.z,
-                y: p.y + 2,
-                index: p.index,
-                heading: p.heading,
-                lastDistance: 20 + i * 9,
-                progress: 12 + i * 9,
-                cpuLevel: E.cpuLevels[+$("difficulty").value][+$("course").value],
-                cpuSlot: i + 1,
-                lastLine: p.index,
-                linePosition: p.index,
-            });
+            const b = E.placeOnGrid(E.create(track, type), track, i + 1);
+            b.cpuLevel = E.cpuLevels[+$("difficulty").value][+$("course").value];
+            b.cpuSlot = i + 1;
             return b;
         })
         : [];
@@ -288,10 +276,8 @@ function start(nextRound = false) {
             : [];
         trainingSession = T.create(stage, car.heading);
     }
-    recording = [[0, car.x, car.y, car.z, car.heading, car.pitch, car.roll]];
-    botRecordings = bots.map((b) => [
-        [0, b.x, b.y, b.z, b.heading, b.pitch, b.roll],
-    ]);
+    recording = [captureReplay(car, 0)];
+    botRecordings = bots.map((b) => [captureReplay(b, 0)]);
     replayClock = 0;
     ghostClock = 0.1;
     ghostFrames = [];
@@ -301,7 +287,9 @@ function start(nextRound = false) {
             const g = JSON.parse(localStorage.getItem(ghostKey()) || "[]");
             const frames = Array.isArray(g) ? g : g.frames;
             if (Array.isArray(frames) &&
-                frames.every((f) => Array.isArray(f) && f.length === 7 && f.every(Number.isFinite))) {
+                frames.every((f) => Array.isArray(f) &&
+                    (f.length === 7 || f.length === 12) &&
+                    f.every(Number.isFinite))) {
                 ghostFrames = frames;
                 ghostBestTime = Number(g.time) || frames.at(-1)?.[0] || Infinity;
             }
@@ -456,7 +444,7 @@ function finish() {
         return;
     }
     if (car.reason !== "finish" && !car.explosionPlayed)
-        originalSound.effect(68, 30);
+        originalSound.effect(68, 30, 90);
     state = "finished";
     resultFrames = 0;
     $("touch").hidden = true;
@@ -720,19 +708,8 @@ function render() {
         state !== "menu" &&
         ghostFrames.length &&
         $("ghost-enabled").checked) {
-        const k = Math.floor(car.time * 10), a = ghostFrames[k], b = ghostFrames[k + 1];
-        if (a && b) {
-            const t = (car.time * 10) % 1;
-            ghost = {
-                type: car.type,
-                x: E.mix(a[1], b[1], t),
-                y: E.mix(a[2], b[2], t),
-                z: E.mix(a[3], b[3], t),
-                heading: a[4] + E.angle(b[4] - a[4]) * t,
-                pitch: E.mix(a[5], b[5], t),
-                roll: E.mix(a[6], b[6], t),
-            };
-        }
+        if (car.time < ghostFrames[ghostFrames.length - 1][0])
+            ghost = sampleReplay(ghostFrames, car.time, car.type);
     }
     view.nameEntry = postrace.entry;
     view.continuePrompt = document.getElementById("continue-panel").hidden
@@ -760,7 +737,11 @@ function render() {
     view.holdCamera =
         state === "falling" ||
             (state === "finished" && car.reason === "course-out");
-    view.draw(track, display, state === "menu" ? [] : replayBots, state, worldTime, state === "menu" ? { accel: true } : currentInput, ghost);
+    view.draw(track, display, state === "menu" ? [] : replayBots, state, worldTime, state === "menu"
+        ? { accel: true }
+        : postrace.phase
+            ? display.active || {}
+            : currentInput, ghost);
     if (postrace.phase)
         postrace.draw();
 }
@@ -910,6 +891,12 @@ function update(dt) {
     if (state === "destroyed") {
         E.stepDebris(car);
         car.explosionFrames = (car.explosionFrames ?? 0) + 1;
+        // GAME.C retriggers the burst every eight frames while over > 64,
+        // releasing it on phase seven. The last 64 frames remain silent.
+        if (car.explosionFrames < 236 && car.explosionFrames % 8 === 0)
+            originalSound.effect(68, 30, 90);
+        if (car.explosionFrames % 8 === 7)
+            originalSound.continuous(68, 30, 90, false);
         if (car.explosionFrames >= 300)
             finish();
         return;
@@ -918,8 +905,6 @@ function update(dt) {
         return;
     car.repairFrames = Math.max(0, (car.repairFrames || 0) - 1);
     car.lapDraw = Math.max(0, (car.lapDraw || 0) - 1);
-    car.fireTail =
-        currentInput.accel || car.turbo ? 64 : Math.max(0, (car.fireTail || 0) - 1);
     const previousProgress = car.progress;
     const laps = car.laps.length;
     E.step(car, track, currentInput, dt, mode === "free");
@@ -952,24 +937,8 @@ function update(dt) {
     }
     E.collideAll([car, ...bots]);
     if (!trainingSession && car.time >= ghostClock) {
-        recording.push([
-            car.time,
-            car.x,
-            car.y,
-            car.z,
-            car.heading,
-            car.pitch,
-            car.roll,
-        ]);
-        bots.forEach((bot, i) => botRecordings[i].push([
-            car.time,
-            bot.x,
-            bot.y,
-            bot.z,
-            bot.heading,
-            bot.pitch,
-            bot.roll,
-        ]));
+        recording.push(captureReplay(car));
+        bots.forEach((bot, i) => botRecordings[i].push(captureReplay(bot, car.time)));
         ghostClock += 0.1;
     }
     if (trainingSession) {
@@ -1024,6 +993,7 @@ function frame(ts) {
         worldTime += dt;
     if (postrace.phase)
         replayClock += dt;
+    view.replayView = !!postrace.phase;
     accumulator += dt;
     while (accumulator >= 1 / 60) {
         update(1 / 60);

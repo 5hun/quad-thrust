@@ -263,3 +263,51 @@ assert.equal(a.debris.length, 0);
   console.error(e);
   process.exitCode = 1;
 });
+
+// The damage floor toggles DOBJ_C lighting on frames 2/3 and transparency
+// on even frames. Leaving the tile and being airborne must clear both.
+const damageCar = E.create(tileTrack("d"));
+for (let tick = 1; tick <= 4; tick++) {
+  E.step(damageCar, tileTrack("d"), {}, 1 / 60);
+  assert.equal(damageCar.damageLight, (tick & 2) !== 0);
+  assert.equal(damageCar.damageSemi, (tick & 1) === 0);
+}
+damageCar.y = 10;
+E.step(damageCar, tileTrack("d"), {}, 1 / 60);
+assert.equal(damageCar.damageLight, false);
+assert.equal(damageCar.damageSemi, false);
+const tail = E.create(t);
+E.step(tail, t, { accel: true }, 1 / 60);
+for (let size = 64; size >= 0; size--) {
+  E.step(tail, t, {}, 1 / 60);
+  assert.equal(tail.fireTail, size);
+}
+const vm = require("node:vm"),
+  gridData = { window: {} };
+vm.runInNewContext(
+  fs.readFileSync(__dirname + "/../dist/tracks.js", "utf8"),
+  gridData,
+);
+for (const raw of gridData.window.HOVER_TRACKS) {
+  const track = E.prepare(raw);
+  for (let slot = 0; slot < 4; slot++) {
+    const car = E.placeOnGrid(E.create(track, slot), track, slot);
+    assert.deepEqual(
+      [car.x, car.y, car.z, car.heading],
+      [slot % 2 ? 25 : 10, 2, slot * 30, 0],
+    );
+    assert.equal(
+      car.linePosition,
+      0,
+      "first crossing of the nearby goal is not a lap",
+    );
+    assert.ok(
+      car.progress < 300,
+      "grid rank must not start almost a full lap ahead",
+    );
+    assert.ok(E.nearest(track, car.x, car.z).lane > 0);
+  }
+}
+console.log(
+  "PASS: source starting grid on nine courses, damage lighting/transparency, 64-tick exhaust tail",
+);

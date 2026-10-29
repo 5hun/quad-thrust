@@ -121,6 +121,7 @@ namespace HoverTraining {
       groundY: p.y,
       previousTile: p.tile,
       pace: 160 + tasks[stage].cpuLevel * 8,
+      cpuSlot: slot,
     });
     return car;
   }

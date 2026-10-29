@@ -10,6 +10,7 @@ interface Boundary extends RawBoundary {
   width: number;
 }
 interface RawSample {
+  part?: number;
   l: Vec3;
   r: Vec3;
   tiles: string;
@@ -53,11 +54,16 @@ interface Pose {
   roll?: number;
   sourceSpeed?: number;
   ticks?: number;
+  energy?: number;
+  damageLight?: boolean;
+  damageSemi?: boolean;
+  cpuSlot?: number;
   turbo?: boolean;
   rudderAngle?: number;
   explosionFrames?: number;
   repairFrames?: number;
   fireTail?: number;
+  fireRemaining?: number;
   groundY?: number;
   groundNormal?: Vec3;
   onRoad?: boolean;

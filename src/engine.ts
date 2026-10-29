@@ -268,6 +268,30 @@ namespace HoverEngine {
       events: [],
     };
   }
+  // GAME.C game_init VZ / CAR_CTR.C car_position: authored world coordinates,
+  // not offsets along the centreline. Heading starts at zero on every course.
+  export function placeOnGrid(car: Car, track: Track, slot = 0) {
+    const x = slot % 2 ? 25 : 10,
+      z = slot * 30;
+    const p = nearest(track, x, z);
+    Object.assign(car, {
+      x,
+      z,
+      y: 2,
+      heading: 0,
+      index: p.index,
+      lastDistance: p.distance,
+      progress:
+        p.distance > track.length / 2 ? p.distance - track.length : p.distance,
+      lastLine: p.index,
+      linePosition: 0,
+      groundY: p.surface,
+      groundNormal: p.normal,
+      onRoad: true,
+      previousTile: p.tile,
+    });
+    return car;
+  }
   export function recover(car: Car, track: Track) {
     const p = at(track, Math.max(8, car.progress + 8));
     Object.assign(car, {
@@ -334,7 +358,15 @@ namespace HoverEngine {
     car.grip = inside && car.y <= target + 1.5 && car.y >= surface - 1;
     const ch = inside ? near.tile : "outside";
     car.tile = ch;
+    // DOBJ_C bit 6 disables lighting; bit 30 enables semitransparency.
+    car.damageLight =
+      ch === "d" && car.grip && !car.cpuLevel && (car.ticks & 2) !== 0;
+    car.damageSemi =
+      ch === "d" && car.grip && !car.cpuLevel && (car.ticks & 1) === 0;
     car.turbo = !!input.turbo && m.turbo > 0;
+    car.fireTail = input.accel || car.turbo ? 64 : car.fireRemaining || 0;
+    car.fireRemaining =
+      input.accel || car.turbo ? 64 : Math.max(0, (car.fireRemaining || 0) - 1);
     if (car.grip) {
       if (ch === "d" && !car.cpuLevel) car.damage += 100;
       if (ch === "B") car.damage += 100000;
@@ -420,6 +452,7 @@ namespace HoverEngine {
       car.tei = 16;
       car.damage += 100;
       car.events.push("land");
+      car.damageLight = true;
     } else if (inside && car.y <= target) {
       const depth = Math.max(0, Math.round((target - car.y) * 100));
       const lift = Math.max(
@@ -488,7 +521,7 @@ namespace HoverEngine {
         (-20 * Math.PI) / 180,
         (20 * Math.PI) / 180,
       );
-    car.active = { accel: !!(input.accel || car.turbo) };
+    car.active = { ...input, accel: !!(input.accel || car.turbo) };
     if (car.type !== 5)
       for (const [key, side, yaw, vector] of [
         ["r1", -1, -1, f],
@@ -720,6 +753,7 @@ namespace HoverEngine {
     current: { yaw: number; pitch: number; roll: number; distance: number },
     car: Pose,
     startCount = 0,
+    replayMode = 0,
   ) {
     const follow = (
       value: number,
@@ -738,12 +772,15 @@ namespace HoverEngine {
           UNIT
       );
     };
-    const yawTarget = car.heading - Math.max(0, startCount - 120) * 16 * UNIT;
+    const yawTarget =
+      car.heading +
+      (replayMode === 17 ? Math.PI : 0) -
+      Math.max(0, startCount - 120) * 16 * UNIT;
     // view_set snaps to the ship heading (without the start offset) when
     // the wrapped error is within the five-unit step.
     current.yaw =
       Math.abs(angle(yawTarget - current.yaw) / UNIT) <= 5
-        ? car.heading
+        ? car.heading + (replayMode === 17 ? Math.PI : 0)
         : follow(current.yaw, yawTarget, 5, Math.trunc((4096 * 6) / 360));
     current.pitch = follow(
       current.pitch,
@@ -760,9 +797,10 @@ namespace HoverEngine {
           ? 1
           : 0) *
       UNIT;
-    const target = (car.sourceSpeed || 0) * 2;
-    if (current.distance > target + 16) current.distance -= 16;
-    if (current.distance < target - 16) current.distance += 16;
+    const increment = replayMode ? 8 : 16;
+    const target = (car.sourceSpeed || 0) * (replayMode ? 1 : 2);
+    if (current.distance > target + increment) current.distance -= increment;
+    if (current.distance < target - increment) current.distance += increment;
   }
   // Generic autopilot, also used by circuit completion tests.
   export function drive(car: Car, track: Track, pace = 70): Input {

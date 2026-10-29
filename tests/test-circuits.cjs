@@ -9,7 +9,7 @@ vm.runInNewContext(
 );
 for (const raw of b.window.HOVER_TRACKS) {
   const t = E.prepare(raw),
-    c = E.create(t);
+    c = E.placeOnGrid(E.create(t), t);
   for (let i = 0; i < 60000 && !c.finished; i++) {
     E.step(c, t, E.drive(c, t), 1 / 60, true);
     if (c.laps.length >= 3) break;
@@ -23,7 +23,7 @@ for (let difficulty = 0; difficulty < 4; difficulty++) {
   for (const [course, raw] of b.window.HOVER_TRACKS.entries()) {
     const t = E.prepare(raw);
     for (let slot = 1; slot <= 3; slot++) {
-      const c = E.create(t, slot);
+      const c = E.placeOnGrid(E.create(t, slot), t, slot);
       c.cpuLevel = E.cpuLevels[difficulty][course];
       c.cpuSlot = slot;
       let recoveries = 0;

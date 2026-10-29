@@ -1,6 +1,7 @@
 // Source: src/renderer.ts. Build with npm run build; do not edit dist/renderer.js directly.
 import * as THREE from "./vendor/three.module.js";
 import { OriginalBackground } from "./background.js";
+import { ReplayDirector } from "./replay.js";
 const E = window.HoverEngine;
 const TILE = {
     ".": 0,
@@ -90,6 +91,8 @@ MOUNTS.push(MOUNTS[2], MOUNTS[1]);
 export class HoverRenderer {
     renderer;
     scene;
+    ambient;
+    sunlight;
     camera;
     trackGroup;
     cache;
@@ -103,6 +106,9 @@ export class HoverRenderer {
     retro;
     frames;
     holdCamera = false;
+    replayView = false;
+    replayDirector = new ReplayDirector();
+    wasReplay = false;
     errors;
     canvas;
     countScene;
@@ -111,6 +117,8 @@ export class HoverRenderer {
     skyGroup;
     countdown = null;
     retroUniform = { value: 1 };
+    // COURCE.C DQA * H * 65536 / 4096^2, with PS1 units / 100.
+    sourceDepth = { value: 96 };
     result = null;
     nameEntry = null;
     nameLetters = new THREE.Group();
@@ -130,13 +138,12 @@ export class HoverRenderer {
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.NoToneMapping;
         this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(42, 4 / 3, 0.15, 6000);
+        this.camera = new THREE.PerspectiveCamera((2 * Math.atan(120 / 320) * 180) / Math.PI, 4 / 3, 0.15, 6000);
         this.trackGroup = new THREE.Group();
         this.scene.add(this.trackGroup);
-        this.scene.add(new THREE.AmbientLight(0xffffff, 1.6));
-        const light = new THREE.DirectionalLight(0xffffff, 1.5);
-        light.position.set(-100, 180, 100);
-        this.scene.add(light);
+        this.ambient = new THREE.AmbientLight(0xffffff, 1);
+        this.sunlight = new THREE.DirectionalLight(0xffffff, Math.PI);
+        this.scene.add(this.ambient, this.sunlight);
         this.cache = new Map();
         this.modelCache = new Map();
         this.loader = new THREE.TextureLoader();
@@ -178,7 +185,14 @@ export class HoverRenderer {
     sourceMaterial(material) {
         material.onBeforeCompile = (shader) => {
             shader.uniforms.sourceRetro = this.retroUniform;
-            const header = "uniform float sourceRetro;\nvarying float sourceW;\n";
+            shader.uniforms.sourceDepth = this.sourceDepth;
+            shader.uniforms.sourceAmbient = { value: this.ambient.color };
+            shader.uniforms.sourceCameraLight =
+                material.userData.sourceCameraLight ||= { value: 0 };
+            shader.uniforms.sourceUnlit = material.userData.sourceUnlit ||= {
+                value: 0,
+            };
+            const header = "uniform float sourceRetro;\nuniform float sourceDepth;\nuniform float sourceUnlit;\nuniform float sourceCameraLight;\nuniform vec3 sourceAmbient;\nvarying float sourceW;\n";
             shader.vertexShader =
                 header +
                     shader.vertexShader.replace("#include <project_vertex>", `
@@ -196,12 +210,33 @@ export class HoverRenderer {
                 header +
                     shader.fragmentShader
                         .replace("#include <map_fragment>", THREE.ShaderChunk.map_fragment.replace("vMapUv", "(vMapUv / sourceW)"))
+                        .replace("#include <opaque_fragment>", `
+            #ifdef LAMBERT
+              vec3 cameraLight = sourceAmbient + vec3(120.0 / 255.0) * max(dot(normal, normalize(vec3(0.0,128.0,32.0))), 0.0);
+              outgoingLight = mix(outgoingLight, diffuseColor.rgb * cameraLight, sourceCameraLight);
+            #endif
+            outgoingLight = mix(outgoingLight, diffuseColor.rgb, sourceUnlit);
+            #include <opaque_fragment>
+          `)
+                        .replace("#include <fog_fragment>", `
+            #ifdef USE_FOG
+              float fogFactor = (1.0 - sourceUnlit) * clamp(1.25 - sourceDepth / max(vFogDepth, 0.0001), 0.0, 1.0);
+              // GTE depth-cues the lighting colour before the GPU modulates
+              // it with the texture (0x80 means unchanged texture brightness).
+              #ifdef USE_MAP
+                vec3 farTexture = linearToOutputTexel(sampledDiffuseColor).rgb * fogColor * 2.0;
+                gl_FragColor.rgb = mix(gl_FragColor.rgb, farTexture, fogFactor);
+              #else
+                gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
+              #endif
+            #endif
+          `)
                         .replace("#include <dithering_fragment>", `
           #include <dithering_fragment>
           if (sourceRetro > 0.5) gl_FragColor.rgb = floor(clamp(gl_FragColor.rgb, 0.0, 1.0) * 31.0 + 0.5) / 31.0;
         `);
         };
-        material.customProgramCacheKey = () => "hover-source-raster-v1";
+        material.customProgramCacheKey = () => "hover-source-raster-v3";
         return material;
     }
     resize() {
@@ -235,7 +270,26 @@ export class HoverRenderer {
         this.clear(this.skyGroup);
         const theme = THEMES[track.theme];
         this.scene.background = null;
-        this.scene.fog = new THREE.Fog(theme.fog, 700, 2300);
+        // COURCE.C / TRAINIG.C: ROCK selects GsSetLightMode(0), without fog.
+        this.scene.fog = track.theme === 1 ? null : new THREE.Fog(theme.fog);
+        this.sourceDepth.value = [96, 160, 144, 144, 144][track.theme];
+        const ambient = [
+            [0.75, 0.75, 0.75],
+            [0.75, 0.75, 0.75],
+            [0.375, 0.375, 0.375],
+            [0.5, 0.5, 0.5],
+            [0.4375, 0.375, 0.375],
+        ][track.theme];
+        this.ambient.color.setRGB(ambient[0], ambient[1], ambient[2]);
+        const light = [
+            [40, 40, 40],
+            [120, 120, 120],
+            [70, 70, 70],
+            [60, 60, 60],
+            [90, 60, 60],
+        ][track.theme];
+        this.sunlight.color.setRGB(light[0] / 255, light[1] / 255, light[2] / 255);
+        this.sunlight.position.set(track.theme === 4 ? -40 : 0, track.theme === 4 ? 32 : 128, 128);
         const buffers = new Map();
         const add = (a, b, c, d, t) => {
             const bucket = buffers.get(t) || { p: [], uv: [] };
@@ -284,7 +338,7 @@ export class HoverRenderer {
         }
         this.yaw = null;
     }
-    modelObject(name, index, ghost = false) {
+    modelObject(name, index, translucent = false) {
         const group = new THREE.Group();
         const data = window.HOVER_MODELS[name][index];
         for (const [material, attrs] of Object.entries(data)) {
@@ -306,22 +360,17 @@ export class HoverRenderer {
                 (name !== "YAKA_MAN" &&
                     !name.startsWith("ALP_") &&
                     (index === 2 || index === 3));
-            const Material = fx ? THREE.MeshBasicMaterial : THREE.MeshLambertMaterial;
-            const mat = new Material({
+            const mat = new THREE.MeshLambertMaterial({
                 map: textureName === "solid" ? null : this.texture(textureName),
                 vertexColors: true,
                 side: THREE.DoubleSide,
-                transparent: ghost || !!semi,
-                opacity: ghost ? 0.28 : semi ? 0.5 : 1,
-                depthWrite: !ghost && !semi,
+                transparent: translucent || !!semi,
+                opacity: translucent || semi ? 0.5 : 1,
+                depthWrite: !translucent && !semi,
                 alphaTest: 0.01,
             });
+            mat.userData.sourceCameraLight = { value: fx ? 1 : 0 };
             this.sourceMaterial(mat);
-            if (ghost) {
-                mat.color.set(0x70edff);
-                if (mat instanceof THREE.MeshLambertMaterial)
-                    mat.emissive.set(0x194251);
-            }
             group.add(new THREE.Mesh(geometry, mat));
         }
         return group;
@@ -332,27 +381,27 @@ export class HoverRenderer {
         let flames = [], sides = [], rudders = [];
         const limbs = [];
         if (type === 5) {
-            const torso = this.modelObject(name, 2, ghost);
+            const torso = this.modelObject(name, 2);
             body.add(torso);
-            body.add(this.modelObject(name, 6, ghost));
+            body.add(this.modelObject(name, 6));
             for (const s of [-1, 1]) {
                 const arm = new THREE.Group();
                 arm.position.set(s * 1.2675, -0.6104, 0);
-                arm.add(this.modelObject(name, 0, ghost));
-                const fore = this.modelObject(name, 1, ghost);
+                arm.add(this.modelObject(name, 0));
+                const fore = this.modelObject(name, 1);
                 fore.position.y = -1.05;
                 arm.add(fore);
-                const hand = this.modelObject(name, 5, ghost);
+                const hand = this.modelObject(name, 5);
                 hand.position.y = -1.3056;
                 fore.add(hand);
                 body.add(arm);
                 const leg = new THREE.Group();
                 leg.position.set(s * 0.489, -2.4472, -0.0555);
-                leg.add(this.modelObject(name, 3, ghost));
-                const knee = this.modelObject(name, 4, ghost);
+                leg.add(this.modelObject(name, 3));
+                const knee = this.modelObject(name, 4);
                 knee.position.y = -2.265;
                 leg.add(knee);
-                const foot = this.modelObject(name, 8, ghost);
+                const foot = this.modelObject(name, 8);
                 foot.position.y = -1.815;
                 knee.add(foot);
                 body.add(leg);
@@ -361,9 +410,9 @@ export class HoverRenderer {
             body.position.y = 4.5;
         }
         else {
-            body.add(this.modelObject(name, 0, ghost));
+            body.add(this.modelObject(name, 0));
             const mounts = MOUNTS[type], mount = (index, p) => {
-                const g = this.modelObject(name, index, ghost);
+                const g = this.modelObject(name, index);
                 g.position.set(p[0] / 100, -p[1] / 100, -p[2] / 100);
                 body.add(g);
                 return g;
@@ -416,7 +465,23 @@ export class HoverRenderer {
         body.add(power);
         power.visible = false;
         this.scene.add(root);
-        const debris = new THREE.InstancedMesh(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([-0.16, 0, 0, 0.16, 0, 0, 0, 0.3, 0], 3)), new THREE.MeshBasicMaterial({ color: 0xb0b0b0, side: THREE.DoubleSide }), 64);
+        // GP1_MAIN.C o1/o2/o3 and GAME.C make_chip_tmd's white/gold faces.
+        const debrisMaterial = new THREE.MeshLambertMaterial({
+            color: 0xffffff,
+            side: THREE.DoubleSide,
+        });
+        this.sourceMaterial(debrisMaterial);
+        const compileDebris = debrisMaterial.onBeforeCompile;
+        debrisMaterial.onBeforeCompile = (shader, renderer) => {
+            compileDebris(shader, renderer);
+            shader.fragmentShader = shader.fragmentShader.replace("#include <color_fragment>", `
+        #include <color_fragment>
+        diffuseColor.rgb *= gl_FrontFacing ? vec3(1.0) : vec3(1.0, 0.57758044, 0.0);
+      `);
+        };
+        debrisMaterial.customProgramCacheKey = () => "hover-source-debris-v1";
+        const debris = new THREE.InstancedMesh(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([0, -0.15, 0, -0.1, 0.1, 0, 0.1, 0.1, 0], 3)), debrisMaterial, 64);
+        debris.geometry.computeVertexNormals();
         debris.count = 0;
         debris.frustumCulled = false;
         root.add(debris);
@@ -424,6 +489,7 @@ export class HoverRenderer {
             type,
             root,
             body,
+            hull: type === 5 ? null : body.children[0],
             flames,
             sides,
             rudders,
@@ -443,9 +509,25 @@ export class HoverRenderer {
         const explosion = p.explosionFrames;
         // Original over counts down from 300; car_draw hides the last 120 ticks.
         ship.body.visible = explosion === undefined || explosion <= 180;
+        // CAR_CTR.C changes the hull only; rudders, jets and shadow keep their attributes.
+        ship.hull?.traverse((o) => {
+            if (!(o instanceof THREE.Mesh))
+                return;
+            const mat = o.material;
+            const critical = (p.energy ?? 100) < 12.5 && explosion === undefined && !p.cpuSlot;
+            (mat.userData.sourceUnlit ||= { value: 0 }).value =
+                p.damageLight || (critical && (tick & 7) === 0) ? 1 : 0;
+            const semi = ship.ghost || !!p.damageSemi;
+            if (mat.transparent !== semi) {
+                mat.transparent = semi;
+                mat.needsUpdate = true;
+            }
+            mat.opacity = semi ? 0.5 : 1;
+            mat.depthWrite = !semi;
+        });
         ship.explosions.forEach((s, i) => {
             const t = p.explosionFrames ?? Infinity;
-            s.visible = Number.isFinite(t) && t < 300;
+            s.visible = Number.isFinite(t) && t < 236;
             if (s.visible) {
                 const phase = (t + i * 2) % 8;
                 const cycle = Math.floor((t + i * 2) / 8);
@@ -467,13 +549,15 @@ export class HoverRenderer {
             g.rotation.y = (-(p.rudderAngle || 0) * Math.PI * 2) / 4096;
         const size = (input.accel || p.turbo ? 64 : p.fireTail || 0) + (p.turbo ? 16 : 0);
         for (const g of ship.flames) {
-            g.visible = size > 0 && (tick & 1) === 0;
+            g.visible = size > 0 && ((tick + (p.cpuSlot || 0)) & 1) === 0;
             g.scale.setScalar(size / 64);
             g.rotation.z = (-Math.floor(tick / 2) * 165 * Math.PI * 2) / 4096;
             g.traverse((o) => {
                 if (o instanceof THREE.Mesh) {
-                    o.material.transparent = !!p.turbo;
-                    o.material.opacity = p.turbo ? 0.5 : 1;
+                    // Turbo sets DOBJ_FIRE bit 6 (lighting off), not bit 30.
+                    // The flame becomes full-bright; it does not become translucent.
+                    const mat = o.material;
+                    (mat.userData.sourceUnlit ||= { value: 0 }).value = p.turbo ? 1 : 0;
                 }
             });
         }
@@ -483,7 +567,7 @@ export class HoverRenderer {
         ship.power.rotation.y = (-(effect - 1) * Math.PI) / 4;
         const names = ["l1", "l2", "r1", "r2"];
         ship.sides.forEach((g, i) => {
-            g.visible = !!input[names[i]] && (tick & 1) === 1;
+            g.visible = !p.cpuSlot && !!input[names[i]] && (tick & 1) === 1;
             g.rotation.x = (-tick * 165 * Math.PI * 2) / 4096;
         });
         if (ship.motionTick !== tick) {
@@ -543,7 +627,16 @@ export class HoverRenderer {
                 distance: 0,
             };
         }
-        E.cameraStep(this.follow, car, startCount);
+        if (this.replayView && this.track) {
+            if (!this.wasReplay)
+                this.replayDirector.reset();
+            this.replayDirector.step(this.track, E.nearest(this.track, car.x, car.z).index);
+            if (this.replayDirector.mode !== 33)
+                E.cameraStep(this.follow, car, 0, this.replayDirector.mode);
+        }
+        else
+            E.cameraStep(this.follow, car, startCount);
+        this.wasReplay = this.replayView;
         this.yaw = this.follow.yaw;
     }
     draw(track, car, bots, state, time, input, ghost = null) {
@@ -582,16 +675,25 @@ export class HoverRenderer {
                 this.updateCamera(car, this.countdown || 0);
             const menu = state === "menu", distance = menu
                 ? 24
-                : 35 + this.follow.distance / 400 + (this.countdown || 0);
+                : 35 +
+                    this.follow.distance / (this.replayView ? 100 : 400) +
+                    (this.countdown || 0);
             const yaw = menu ? car.heading - 0.42 : this.follow.yaw, sy = Math.sin(yaw), cy = Math.cos(yaw);
             this.camera.position.set(car.x - sy * distance, car.y + (menu ? 10 : 8.5), -car.z + cy * distance);
             const pitch = menu
                 ? -0.18
-                : this.follow.pitch -
+                : this.follow.pitch *
+                    (this.replayView && this.replayDirector.mode === 17 ? -1 : 1) -
                     (Math.trunc((4096 * 7) / 360) * Math.PI * 2) / 4096;
-            const roll = menu ? 0 : this.follow.roll;
+            const roll = menu || this.replayView ? 0 : this.follow.roll;
             this.camera.up.set(-Math.cos(yaw) * Math.sin(roll), Math.cos(roll), Math.sin(yaw) * Math.sin(roll));
             this.camera.lookAt(car.x + sy * 30, car.y + 8.5 + Math.tan(pitch) * (distance + 30), -car.z - cy * 30);
+        }
+        if (this.replayView && this.replayDirector.anchor && !this.holdCamera) {
+            const anchor = this.replayDirector.anchor;
+            this.camera.position.set(anchor.x, anchor.y, -anchor.z);
+            this.camera.up.set(0, 1, 0);
+            this.camera.lookAt(car.x, car.y, -car.z);
         }
         this.skyGroup.position.set(car.x, 0, -car.z);
         this.renderer.autoClear = true;
@@ -830,6 +932,7 @@ export class HoverRenderer {
             backgroundTheme: this.background.theme,
             groundBands: this.background.ground.length,
             searchlights: this.background.beams.length,
+            replayCameraMode: this.replayView ? this.replayDirector.mode : null,
             drawCalls: this.renderer.info.render.calls,
             triangles: this.renderer.info.render.triangles,
             geometries: this.renderer.info.memory.geometries,

@@ -52,12 +52,22 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       const { r } = window.fidelity;
       return {
         debris: r.ships[0].debris.count,
+        chipVertices: Array.from(
+          r.ships[0].debris.geometry.attributes.position.array,
+          (v) => Math.round(v * 100),
+        ),
+        sourceFov: r.camera.fov,
         bombs: r.ships[0].explosions.filter((s) => s.visible).length,
         retro: r.retroUniform.value,
         errors: r.errors,
       };
     });
     assert.equal(result.debris, 64);
+    assert.deepEqual(result.chipVertices, [0, -15, 0, -10, 10, 0, 10, 10, 0]);
+    assert.ok(
+      Math.abs(result.sourceFov - (2 * Math.atan(120 / 320) * 180) / Math.PI) <
+        1e-10,
+    );
     assert.equal(result.bombs, 4);
     assert.equal(result.retro, 1);
     assert.deepEqual(result.errors, []);
@@ -109,8 +119,213 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       overlayPixels > 20,
       `explosion hidden behind opaque geometry: ${overlayPixels}`,
     );
+    // Test actual GPU output: the source reciprocal depth curve starts at
+    // 76.8 units in CITY and reaches full depth cue at 384, in RETRO and HD.
+    const depthPixels = await page.evaluate(async () => {
+      const THREE = await import("./vendor/three.module.js");
+      const { r } = window.fidelity;
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.Fog(0x202020);
+      const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 1000);
+      const texture = new THREE.DataTexture(
+        new Uint8Array([255, 255, 255, 255, 0, 0, 0, 255]),
+        2,
+        1,
+      );
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.magFilter = texture.minFilter = THREE.NearestFilter;
+      texture.needsUpdate = true;
+      const mat = new THREE.MeshBasicMaterial({ map: texture });
+      r.sourceMaterial(mat);
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), mat);
+      scene.add(plane);
+      const values = [];
+      r.renderer.setRenderTarget(null);
+      r.renderer.setSize(16, 16, false);
+      const gl = r.renderer.getContext();
+      for (const retro of [0, 1]) {
+        r.retroUniform.value = retro;
+        for (const depth of [50, 96, 192, 384]) {
+          plane.position.z = -depth;
+          r.renderer.render(scene, camera);
+          const white = new Uint8Array(4),
+            black = new Uint8Array(4);
+          gl.readPixels(2, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, white);
+          gl.readPixels(13, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, black);
+          values.push({ retro, depth, white: white[0], black: black[0] });
+        }
+      }
+      mat.userData.sourceUnlit.value = 1;
+      r.renderer.render(scene, camera);
+      const unlit = new Uint8Array(4);
+      gl.readPixels(2, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, unlit);
+      values.push({ retro: 2, depth: 384, white: unlit[0], black: 0 });
+      r.resize();
+      plane.geometry.dispose();
+      mat.dispose();
+      texture.dispose();
+      return values;
+    });
+    assert.equal(
+      depthPixels.at(-1).white,
+      255,
+      "unlit damage attribute bypasses depth cueing",
+    );
+    for (const retro of [0, 1]) {
+      const pixels = depthPixels.filter((p) => p.retro === retro);
+      assert.ok(pixels[0].white > 245, JSON.stringify(pixels));
+      assert.ok(
+        pixels[1].white > pixels[2].white && pixels[2].white > pixels[3].white,
+        JSON.stringify(pixels),
+      );
+      assert.ok(Math.abs(pixels[3].white - 64) < 6, JSON.stringify(pixels));
+      assert.ok(
+        pixels.every((p) => p.black === 0),
+        "depth cue must preserve texture contrast",
+      );
+    }
+    const themes = await page.evaluate(() => {
+      const { r, t } = window.fidelity;
+      const values = [];
+      for (let theme = 0; theme < 5; theme++) {
+        r.setTrack({ ...t, theme });
+        values.push({
+          fog: !!r.scene.fog,
+          ambient: r.ambient.color.toArray(),
+          light: r.sunlight.color.toArray(),
+        });
+      }
+      r.setTrack(t);
+      return values;
+    });
+    assert.deepEqual(
+      themes.map((t) => t.fog),
+      [true, false, true, true, true],
+    );
+    assert.deepEqual(themes[2].ambient, [0.375, 0.375, 0.375]);
+    assert.deepEqual(themes[4].ambient, [0.4375, 0.375, 0.375]);
+    assert.deepEqual(themes[4].light, [90 / 255, 60 / 255, 60 / 255]);
+    const ghostHull = await page.evaluate(() => {
+      const { r, c } = window.fidelity;
+      const ghost = r.makeShip(0, true);
+      r.updateShip(ghost, { ...c, explosionFrames: undefined }, {}, 0);
+      const hull = ghost.hull.children[0].material;
+      const rudder = ghost.rudders[0].children[0].material;
+      const result = {
+        color: hull.color.getHex(),
+        opacity: hull.opacity,
+        rudder: rudder.opacity,
+      };
+      r.scene.remove(ghost.root, ghost.shadow);
+      r.clear(ghost.root);
+      r.clear(ghost.shadow);
+      return result;
+    });
+    assert.deepEqual(
+      ghostHull,
+      { color: 0xffffff, opacity: 0.5, rudder: 1 },
+      "source ghost changes hull blend only",
+    );
+    const bombLifetime = await page.evaluate(() => {
+      const { r, c } = window.fidelity;
+      return [235, 236, 299].map((explosionFrames) => {
+        r.updateShip(r.ships[0], { ...c, explosionFrames }, {}, 0);
+        return r.ships[0].explosions.filter((s) => s.visible).length;
+      });
+    });
+    assert.deepEqual(
+      bombLifetime,
+      [4, 0, 0],
+      "bomb sprites stop when source over <= 64",
+    );
+    const damageDisplay = await page.evaluate(() => {
+      const { r, c } = window.fidelity;
+      const ship = r.ships[0];
+      delete c.explosionFrames;
+      const material = ship.hull.children[0].material;
+      const result = [];
+      for (const p of [
+        { ticks: 2, damageLight: true, damageSemi: true, energy: 100 },
+        { ticks: 3, damageLight: true, damageSemi: false, energy: 100 },
+        { ticks: 8, damageLight: false, damageSemi: false, energy: 5 },
+        { ticks: 9, damageLight: false, damageSemi: false, energy: 5 },
+        { ticks: 16, damageLight: false, damageSemi: false, energy: 100 },
+      ]) {
+        r.updateShip(ship, { ...c, ...p }, {}, 0);
+        result.push([material.userData.sourceUnlit.value, material.opacity]);
+      }
+      const tail = [];
+      for (const slot of [0, 1, 2, 3]) {
+        r.updateShip(
+          ship,
+          { ...c, ticks: 2, cpuSlot: slot, fireTail: 32 },
+          {},
+          0,
+        );
+        tail.push(ship.flames[0].visible);
+      }
+      return { result, tail };
+    });
+    assert.deepEqual(damageDisplay.result, [
+      [1, 0.5],
+      [1, 1],
+      [1, 1],
+      [0, 1],
+      [0, 1],
+    ]);
+    assert.deepEqual(damageDisplay.tail, [true, false, true, false]);
+    const turboFlame = await page.evaluate(() => {
+      const { r, c } = window.fidelity,
+        ship = r.ships[0];
+      return [false, true, false].map((turbo) => {
+        r.updateShip(ship, { ...c, turbo, ticks: 2 }, { accel: true }, 0);
+        const mat = ship.flames[0].children[0].material;
+        return [
+          mat.opacity,
+          mat.transparent,
+          mat.userData.sourceUnlit.value,
+          mat.userData.sourceCameraLight.value,
+        ];
+      });
+    });
+    assert.deepEqual(
+      turboFlame,
+      [
+        [1, false, 0, 1],
+        [1, false, 1, 1],
+        [1, false, 0, 1],
+      ],
+      "turbo disables flame lighting without changing blend mode",
+    );
+    const replayView = await page.evaluate(async () => {
+      const { ReplayDirector } = await import("./replay.js");
+      const { r, t, c } = window.fidelity;
+      r.replayView = true;
+      r.replayDirector = new ReplayDirector(() => 0);
+      r.updateCamera(c);
+      r.draw(t, c, [], "finished", 0, {});
+      const before = r.camera.position.toArray();
+      c.x += 2;
+      r.updateCamera(c);
+      r.draw(t, c, [], "finished", 0, {});
+      const after = r.camera.position.toArray();
+      c.x -= 2;
+      r.replayDirector = new ReplayDirector(() => 0.75);
+      for (let i = 0; i < 240; i++) r.updateCamera(c);
+      r.draw(t, c, [], "finished", 0, {});
+      const frontZ = r.camera.position.z + c.z;
+      r.replayView = false;
+      r.updateCamera(c);
+      return { before, after, frontZ };
+    });
+    assert.deepEqual(replayView.before, replayView.after);
+    assert.ok(
+      replayView.frontZ < 0,
+      "front chase camera must look back toward the ship",
+    );
     const startView = await page.evaluate(() => {
       const { r, t, c } = window.fidelity;
+      c.explosionFrames = 32;
       c.heading = 0;
       r.follow = { yaw: 0, pitch: 0, roll: 0, distance: 0 };
       r.yaw = 0;
@@ -197,6 +412,38 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       f.sound.master.connect(f.analyser);
       f.sound.playCourse(0);
     });
+    await page.evaluate(() => {
+      const f = window.fidelity;
+      f.sound.update(
+        { ...f.c, type: 0, energy: 100, sourceSpeed: 320, turbo: false },
+        { l1: true },
+        true,
+      );
+    });
+    await page.waitForTimeout(300);
+    const stereo = await page.evaluate(() =>
+      window.fidelity.sound.loops.map(({ name, gain, pan }) => {
+        const angle = ((pan.pan.value + 1) * Math.PI) / 4;
+        return {
+          name,
+          left: gain.gain.value * Math.cos(angle) * 127,
+          right: gain.gain.value * Math.sin(angle) * 127,
+        };
+      }),
+    );
+    for (const [name, left, right] of [
+      ["wind", 10, 10],
+      ["left", 40, 10],
+      ["right", 0, 0],
+      ["rear", 0, 0],
+    ]) {
+      const loop = stereo.find((x) => x.name === name);
+      assert.ok(
+        Math.abs(loop.left - left) < 0.01 &&
+          Math.abs(loop.right - right) < 0.01,
+        JSON.stringify(loop),
+      );
+    }
     await page.waitForTimeout(1000);
     result = await page.evaluate(() => {
       const f = window.fidelity,
@@ -299,7 +546,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     assert.equal(await page.locator("#result").isVisible(), false);
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: real Chromium RETRO/HD shader compilation, 64 debris particles, bomb visibility, articulated Suzuki, audible AudioWorklet output, warning/damage key-on/off, audio pause; no console/page errors",
+      "PASS: real Chromium RETRO/HD depth pixels, five source lighting themes, damage/ghost materials, exhaust phases, 64 debris particles, bomb lifetime/overlay, articulated Suzuki, AudioWorklet stereo levels, warning/damage key-on/off, audio pause; no console/page errors",
     );
   } finally {
     await browser.close();

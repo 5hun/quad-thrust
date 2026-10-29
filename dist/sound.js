@@ -84,7 +84,7 @@ export class OriginalSound {
                     pan.pan.value = name === "left" ? -0.6 : name === "right" ? 0.6 : 0;
                     gain.gain.value = 0;
                     source.start();
-                    this.loops.push({ name, source, gain });
+                    this.loops.push({ name, source, gain, pan });
                 }
                 this.timer = setInterval(() => this.schedule(), 25);
             });
@@ -318,7 +318,7 @@ export class OriginalSound {
             return;
         this.continuous(70, 40, 80, running && car.energy < 12.5);
         this.continuous(71, 90, 64, running && car.grip && car.tile === "d");
-        for (const { name, source, gain } of this.loops) {
+        for (const { name, source, gain, pan } of this.loops) {
             const note = name === "wind" ? 8 : name === "rear" && car.turbo ? 32 : 20;
             let volume = 0;
             if (running) {
@@ -333,7 +333,13 @@ export class OriginalSound {
                             : 40 / 127
                         : 0;
             }
-            gain.gain.setTargetAtTime(volume, this.context.currentTime, 0.02);
+            // SsUtSetVVol supplies independent L/R amplitudes. StereoPanner uses
+            // equal-power gains, so preserve (40,10)/(10,40), not just a pan guess.
+            const left = name === "right" ? volume / 4 : volume;
+            const right = name === "left" ? volume / 4 : volume;
+            gain.gain.setTargetAtTime(Math.hypot(left, right), this.context.currentTime, 0.02);
+            if (volume > 0)
+                pan.pan.setTargetAtTime((4 * Math.atan2(right, left)) / Math.PI - 1, this.context.currentTime, 0.02);
             source.playbackRate.setTargetAtTime(2 ** ((note - window.HOVER_SOUNDS[65].note) / 12), this.context.currentTime, 0.02);
         }
     }

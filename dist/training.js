@@ -112,6 +112,7 @@ var HoverTraining;
             groundY: p.y,
             previousTile: p.tile,
             pace: 160 + HoverTraining.tasks[stage].cpuLevel * 8,
+            cpuSlot: slot,
         });
         return car;
     }

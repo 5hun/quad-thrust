@@ -34,7 +34,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
               car.reason = reason;
               car.laps = reason === "finish" ? [10, 11, 12] : [];
               car.time = 33;
-              car.progress = winner ? 1e9 : -100;
+              car.progress = winner ? 1e9 : -1e9;
             }
           };
         },
@@ -70,9 +70,25 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await key("Enter");
     await wait("countdown");
     await wait("running");
+    await page.evaluate(async () => {
+      const { OriginalSound } = await import("./sound.js");
+      const effect = OriginalSound.prototype.effect;
+      window.bombEvents = [];
+      OriginalSound.prototype.effect = function (id, note, volume, sustained) {
+        if (id === 68) window.bombEvents.push({ note, volume });
+        return effect.call(this, id, note, volume, sustained);
+      };
+    });
     await force("destroyed");
     await wait("destroyed");
     await wait("finished");
+    const bursts = await page.evaluate(() => window.bombEvents);
+    assert.equal(
+      bursts.length,
+      30,
+      "initial burst plus 29 retriggers at eight-tick intervals",
+    );
+    assert.ok(bursts.every((b) => b.note === 30 && b.volume === 90));
     await key("ArrowRight");
     await page.waitForFunction(
       () => window.hoverDiagnostics().continueChoice === 1,
@@ -165,6 +181,9 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     }
     await page.waitForFunction(
       () => window.hoverDiagnostics().postrace === "credits",
+    );
+    await page.waitForFunction(() =>
+      [1, 17, 33].includes(window.hoverDiagnostics().replayCameraMode),
     );
     const motion = await page.evaluate(async () => {
       const poses = [];
