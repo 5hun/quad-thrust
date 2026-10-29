@@ -14,6 +14,24 @@ Windows は `py start-server.py` でも起動できます。PC内だけの `http
 
 **ES modulesと音声読み込みを使うため、前版と異なり `index.html` の直接ダブルクリックでは動きません。HTTP経由で開いてください。** WebGL 2対応ブラウザが必要です。
 
+## TypeScript開発
+
+ゲーム本体は `src/*.ts`、共通の状態・原作データ・ブラウザAPIの型は `src/types.d.ts` にあります。Node.js 22以降とnpmで開発できます。
+
+```sh
+npm ci
+npm run typecheck  # strictモードで型チェック
+npm run build      # src/*.ts → dist/*.js
+npm test           # ビルドして既存の全テストを実行
+npm start          # Python 3でローカルサーバーを起動
+```
+
+編集対象は `src/` です。`dist/` のゲーム本体JavaScriptはビルド生成物として同梱しているため、遊ぶだけなら引き続きPython 3のみで起動できます。TypeScriptを変更した場合は `npm run build` を実行し、生成された `dist/*.js` も一緒に更新してください。
+
+`dist/` 内のHTML/CSS、原作データの変換ツールが生成するデータJavaScript・画像・音声、同梱Three.jsは引き続き配信用ファイルです。TypeScriptのビルドはこれらを削除・再生成しません。原作データの再生成には下記のPythonツールを使います。既存の検証ツールはCommonJS (`tools/*.cjs`) を維持しています。
+
+物理・ルール・記録・トレーニングはブラウザの通常スクリプトとNode.jsの既存テストの双方で使うため、TypeScriptのnamespaceから従来のグローバルAPIとCommonJS APIを生成します。描画・音声・HUD・ゲーム画面はES modulesです。Three.jsの型定義は同梱r180に合わせています。実行時にnpmやCDNへの接続は不要です。
+
 ## 原作から復元したデータ
 
 - 9コースの直線・楕円境界、高低差、全床パターン、側壁4列。`MAKEMAP.C` の構成に合わせてメッシュ化。

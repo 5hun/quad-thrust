@@ -1,6 +1,6 @@
 # Hover Racing browser port
 
-PS1版Hover Racingの提供ソースとデータを参考にしたThree.js版です。
+PS1版Hover Racingの提供ソースとデータを参考にしたTypeScript / Three.js版です。
 
 - `HOVER_SOURCE/`: 原作ソース
 - `HOVER120/`: 原作データ
@@ -12,3 +12,5 @@ PS1版Hover Racingの提供ソースとデータを参考にしたThree.js版で
 cd hover-browser
 python3 start-server.py
 ```
+
+開発時は `hover-browser/src/` を編集し、`npm ci` → `npm run build` で配信用JavaScriptを生成します。`npm test` でビルドと既存テストを実行します。

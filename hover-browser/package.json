@@ -1,0 +1,18 @@
+{
+  "name": "hover-browser",
+  "version": "1.0.0",
+  "description": "提供された `HOVER_SOURCE` と `HOVER120/HOVER.PAC` をもとにしたブラウザ移植です。前版の Canvas 2D 疑似3Dを撤去し、**Three.js r180 / WebGL 2** に変更しました。",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node tools/test-assets.cjs && node tools/test-training.cjs && node tools/test.cjs && node tools/test-circuits.cjs",
+    "start": "python3 start-server.py"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/three": "^0.180.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3"
+  }
+}
