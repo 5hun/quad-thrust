@@ -748,10 +748,9 @@ function update(dt: number) {
       }
       currentInput = car.active || {};
     }
-    const before = Math.ceil(countdown);
-    countdown -= dt;
-    if (Math.ceil(countdown) !== before && countdown > 0 && countdown < 3.01)
-      beep();
+    const remaining = Math.max(0, Math.round(countdown * 60) - 1);
+    countdown = remaining / 60;
+    if (remaining > 0 && remaining <= 180 && remaining % 60 === 0) beep();
     $("message").textContent = "";
     if (countdown <= 0) {
       state = "running";
@@ -858,7 +857,11 @@ function frame(ts: number) {
   accumulator += dt;
   while (accumulator >= 1 / 60) {
     update(1 / 60);
-    if (state !== "paused" && state !== "menu") view.updateCamera(car);
+    if (state !== "paused" && state !== "menu")
+      view.updateCamera(
+        car,
+        state === "countdown" ? Math.round(countdown * 60) : 0,
+      );
     accumulator -= 1 / 60;
   }
   render();

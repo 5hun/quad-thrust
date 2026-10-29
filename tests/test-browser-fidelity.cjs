@@ -107,6 +107,26 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       overlayPixels > 20,
       `explosion hidden behind opaque geometry: ${overlayPixels}`,
     );
+    const startView = await page.evaluate(() => {
+      const { r, t, c } = window.fidelity;
+      c.heading = 0;
+      r.follow = { yaw: 0, pitch: 0, roll: 0, distance: 0 };
+      r.yaw = 0;
+      r.countdown = 300;
+      r.draw(t, c, [], "countdown", 0, {});
+      const startZ = r.camera.position.z;
+      r.countdown = null;
+      r.draw(t, c, [], "running", 0, {});
+      const raceZ = r.camera.position.z;
+      r.updateCamera(c, 300);
+      const startYaw = r.follow.yaw;
+      r.follow.yaw = 0;
+      r.updateCamera(c, 120);
+      return { distance: startZ - raceZ, startYaw, raceYaw: r.follow.yaw };
+    });
+    assert.equal(startView.distance, 300, "start_count*100 in PS1 world units");
+    assert.ok(Math.abs(startView.startYaw - (90 * Math.PI * 2) / 4096) < 1e-10);
+    assert.equal(startView.raceYaw, 0);
     await page.screenshot({ path: "/tmp/hover-source-retro.png" });
     await page.evaluate(() => {
       const { r, t, c } = window.fidelity;

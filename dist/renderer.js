@@ -528,16 +528,16 @@ export class HoverRenderer {
         }
         ship.debris.instanceMatrix.needsUpdate = true;
     }
-    updateCamera(car) {
+    updateCamera(car, startCount = 0) {
         if (this.yaw === null) {
             this.follow = {
-                yaw: car.heading,
-                pitch: car.pitch || 0,
-                roll: car.roll || 0,
+                yaw: startCount > 0 ? 0 : car.heading,
+                pitch: startCount > 0 ? 0 : car.pitch || 0,
+                roll: startCount > 0 ? 0 : car.roll || 0,
                 distance: 0,
             };
         }
-        E.cameraStep(this.follow, car);
+        E.cameraStep(this.follow, car, startCount);
         this.yaw = this.follow.yaw;
     }
     draw(track, car, bots, state, time, input, ghost = null) {
@@ -572,8 +572,10 @@ export class HoverRenderer {
             this.updateShip(this.ships[i], p, i === 0 ? input : p.active || { accel: true }, time);
         });
         if (this.yaw === null)
-            this.updateCamera(car);
-        const menu = state === "menu", distance = menu ? 24 : 35 + this.follow.distance / 400;
+            this.updateCamera(car, this.countdown || 0);
+        const menu = state === "menu", distance = menu
+            ? 24
+            : 35 + this.follow.distance / 400 + (this.countdown || 0);
         const yaw = menu ? car.heading - 0.42 : this.follow.yaw, sy = Math.sin(yaw), cy = Math.cos(yaw);
         this.camera.position.set(car.x - sy * distance, car.y + (menu ? 10 : 8.5), -car.z + cy * distance);
         const pitch = menu

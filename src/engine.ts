@@ -336,7 +336,7 @@ namespace HoverEngine {
     car.tile = ch;
     car.turbo = !!input.turbo && m.turbo > 0;
     if (car.grip) {
-      if (ch === "d") car.damage += 100;
+      if (ch === "d" && !car.cpuLevel) car.damage += 100;
       if (ch === "B") car.damage += 100000;
     }
     // CAR_CTR.C: g is a line trigger (also active in the air), with a
@@ -355,32 +355,46 @@ namespace HoverEngine {
         car.reason = "finish";
       }
     }
-    if (ch !== car.previousTile && car.grip) {
+    if (ch !== car.previousTile) {
       if (track.training && ch === "g") car.events.push("goal");
       if (track.training && ch === "s") car.events.push("stop");
-      if (ch === "P") {
+      if (ch === "P" && car.grip) {
         car.damage = Math.max(0, car.damage - 6000);
         car.events.push("repair");
       }
-      if (ch === "J") {
+      if (ch === "J" && car.grip) {
         if (track.training) f[1] = b[1] = 0;
         f[1] -= 1500;
         b[1] -= 1500;
         car.events.push("jump");
       }
-      if (ch === ">") {
+      if (ch === ">" && car.grip) {
+        const node = track.nodes[near.index],
+          end = node.end || track.nodes[(near.index + 1) % track.nodes.length],
+          lane =
+            Math.floor(clamp(near.lane, 0, 0.9999) * node.tiles.length) /
+            node.tiles.length;
+        // Vp[1]-Vp[0] follows the current cell's longitudinal edge,
+        // which differs from the centreline on curves and changing banks.
+        const edge = node.l.map(
+          (v, k) => mix(end.l[k], end.r[k], lane) - mix(v, node.r[k], lane),
+        );
         for (const v of [f, b]) {
-          v[0] += Math.trunc(near.dx * 100);
-          v[1] -= Math.trunc(near.dy * 100);
-          v[2] += Math.trunc(near.dz * 100);
+          v[0] += Math.trunc(edge[0] * 100);
+          v[1] -= Math.trunc(edge[1] * 100);
+          v[2] += Math.trunc(edge[2] * 100);
         }
         car.events.push("boost");
       }
     }
-    car.previousTile = ch;
+    // In car_chipeffect only J leaves ccc unchanged while airborne, so
+    // landing on that same jump tile must still fire the jump.
+    if (ch !== "J" || car.grip) car.previousTile = ch;
     const drag = Math.trunc((speed * m.drag) / (m.weight * (speed + 1))),
       horizontal =
-        drag + (input.brake ? 240 : 0) + (ch === "*" && car.grip ? 240 : 0);
+        drag +
+        (input.brake ? 240 : 0) +
+        (ch === "*" && car.grip && !car.cpuLevel ? 240 : 0);
     for (const v of [f, b])
       for (let j = 0; j < 3; j++) {
         const old = v[j];
@@ -424,7 +438,7 @@ namespace HoverEngine {
       if (car.tei > 0) car.tei--;
     }
     car.grip = inside && car.y <= target + 1.5;
-    if (car.grip && !car.cpuLevel) {
+    if (car.grip) {
       const [nx, ny, nz] = near.normal;
       // CAR_CTR2.C car_bank, including its formerly missing Y component.
       const bank = [
@@ -705,6 +719,7 @@ namespace HoverEngine {
   export function cameraStep(
     current: { yaw: number; pitch: number; roll: number; distance: number },
     car: Pose,
+    startCount = 0,
   ) {
     const follow = (
       value: number,
@@ -723,12 +738,13 @@ namespace HoverEngine {
           UNIT
       );
     };
-    current.yaw = follow(
-      current.yaw,
-      car.heading,
-      5,
-      Math.trunc((4096 * 6) / 360),
-    );
+    const yawTarget = car.heading - Math.max(0, startCount - 120) * 16 * UNIT;
+    // view_set snaps to the ship heading (without the start offset) when
+    // the wrapped error is within the five-unit step.
+    current.yaw =
+      Math.abs(angle(yawTarget - current.yaw) / UNIT) <= 5
+        ? car.heading
+        : follow(current.yaw, yawTarget, 5, Math.trunc((4096 * 6) / 360));
     current.pitch = follow(
       current.pitch,
       car.pitch || 0,

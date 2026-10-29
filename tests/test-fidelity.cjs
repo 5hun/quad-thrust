@@ -17,6 +17,83 @@ const flat = (width = 20, rise = 0, bank = 0) =>
     ],
   });
 const t = flat();
+const tileTrack = (symbol) => {
+  const track = flat();
+  track.nodes[0].tiles = symbol.repeat(4);
+  return track;
+};
+// CAR_CTR.C car_chipeffect stores P/> on airborne entry, but defers J
+// until grip returns. Adjacent equal letters must still be one trigger.
+for (const symbol of ["J", "P", ">", "g", "s"]) {
+  const track = tileTrack(symbol),
+    car = E.create(track);
+  car.previousTile = ".";
+  car.y = 10;
+  E.step(car, track, {}, 1 / 60);
+  assert.equal(car.previousTile === symbol, symbol !== "J");
+  assert.equal(car.events.includes("goal"), symbol === "g");
+  assert.equal(car.events.includes("stop"), symbol === "s");
+  car.y = 2;
+  car.front.fill(0);
+  car.rear.fill(0);
+  car.events.length = 0;
+  E.step(car, track, {}, 1 / 60);
+  assert.equal(car.events.includes("jump"), symbol === "J");
+  assert.ok(!car.events.includes("repair") && !car.events.includes("boost"));
+  car.events.length = 0;
+  E.step(car, track, {}, 1 / 60);
+  assert.ok(!car.events.includes("jump"), "J fires once after landing");
+}
+for (const symbol of ["d", "*", "B"]) {
+  const track = tileTrack(symbol),
+    car = E.create(track),
+    control = E.create(t);
+  car.cpuLevel = control.cpuLevel = 2;
+  car.front[2] = car.rear[2] = control.front[2] = control.rear[2] = 1600;
+  E.step(car, track, {}, 1 / 60);
+  E.step(control, t, {}, 1 / 60);
+  if (symbol === "B") assert.equal(car.reason, "destroyed");
+  else {
+    assert.equal(car.damage, 0, "CPU is immune to damage tiles");
+    assert.equal(car.front[2], control.front[2], "CPU ignores rough floor");
+  }
+}
+// Widening, banking boost tile: current left cell edge is (0,20,100),
+// not the centreline's (10,30,100). VP stores half-scale PS1 vertices.
+const boostTrack = tileTrack(">");
+boostTrack.nodes[0].end.r = [30, 40, 100];
+boostTrack.nodes[0].end.l = [-10, 20, 100];
+const boost = E.create(boostTrack);
+boost.x = -6;
+boost.y = E.nearest(boostTrack, boost.x, boost.z).surface + 2;
+const unboostedTrack = structuredClone(boostTrack);
+unboostedTrack.nodes[0].tiles = "....";
+const unboosted = structuredClone(boost);
+E.step(boost, boostTrack, {}, 1 / 60);
+E.step(unboosted, unboostedTrack, {}, 1 / 60);
+assert.ok(boost.events.includes("boost"));
+assert.equal(boost.front[0], 0, "boost follows left edge, not centreline");
+assert.equal(boost.front[2] - unboosted.front[2], 10000);
+assert.equal(
+  boost.front[1] - unboosted.front[1],
+  -2000,
+  "boost includes the current edge's rise",
+);
+const unit = (Math.PI * 2) / 4096;
+const startCamera = { yaw: 0, pitch: 0, roll: 0, distance: 0 };
+E.cameraStep(startCamera, E.create(t), 300);
+// Wrapped difference to target -2880 is +1216: 5*(1+floor(1216/68)).
+assert.equal(startCamera.yaw, 90 * unit);
+const raceCamera = { yaw: 0, pitch: 0, roll: 0, distance: 0 };
+E.cameraStep(raceCamera, E.create(t), 120);
+assert.equal(raceCamera.yaw, 0, "last two seconds track the ship heading");
+raceCamera.yaw = -16 * unit;
+E.cameraStep(raceCamera, E.create(t), 121);
+assert.equal(
+  raceCamera.yaw,
+  0,
+  "source snap branch drops the start yaw offset",
+);
 // Source collisions use a 512-unit sphere, not a cylinder; Y inertia is down-positive.
 let a = E.create(t),
   b = E.create(t, 2);
@@ -50,6 +127,16 @@ assert.equal(a.front[0], 0);
 const slope = flat(20, 20, 10);
 const n = E.nearest(slope, 0, 30);
 assert.ok(Math.abs(n.surface - 11) < 0.01);
+const cpuSlope = E.create(slope),
+  playerSlope = E.create(slope);
+cpuSlope.cpuLevel = 2;
+E.step(cpuSlope, slope, {}, 1 / 60);
+E.step(playerSlope, slope, {}, 1 / 60);
+assert.deepEqual(
+  cpuSlope.front,
+  playerSlope.front,
+  "CPU also receives slope forces",
+);
 a = E.create(slope);
 E.step(a, slope, {}, 1 / 60);
 assert.ok(a.front[0] < 0 && a.front[2] < 0);
