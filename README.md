@@ -40,6 +40,8 @@ npm test           # ビルドして既存の全テストを実行
 npm start          # Python 3でローカルサーバーを起動
 ```
 
+`npm ci`（または `npm install`）でコミット前のフックを有効にします。コミット時にはHuskyとlint-stagedがステージ済みファイルにPrettierを実行し、整形結果をコミットに含めます。`.prettierignore` の対象とPrettier非対応形式はスキップし、整形に失敗した場合はコミットを中止します。手動で整形する場合は `npm run format`、チェックのみの場合は `npm run format:check` を実行してください。
+
 編集対象は `src/` です。`dist/` のゲーム本体JavaScriptはビルド生成物として同梱しているため、遊ぶだけなら引き続きPython 3のみで起動できます。TypeScriptを変更した場合は `npm run build` を実行し、生成された `dist/*.js` も一緒に更新してください。
 
 `dist/` 内のHTML/CSS、原作データの変換ツールが生成するデータJavaScript・画像・音声、同梱Three.jsは引き続き配信用ファイルです。TypeScriptのビルドはこれらを削除・再生成しません。原作データの再生成には下記のPythonツールを使います。既存の検証ツールはCommonJS (`tests/*.cjs`) を維持しています。

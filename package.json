@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "提供された `HOVER_SOURCE` と `HOVER120/HOVER.PAC` をもとにしたブラウザ移植です。前版の Canvas 2D 疑似3Dを撤去し、**Three.js r180 / WebGL 2** に変更しました。",
   "scripts": {
+    "prepare": "husky",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node tests/test-assets.cjs && node tests/test-training.cjs && node tests/test.cjs && node tests/test-circuits.cjs",
@@ -12,6 +13,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
+  "lint-staged": {
+    "*": "prettier --write --ignore-unknown"
+  },
   "private": true,
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -20,6 +24,8 @@
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
     "prettier": "^3.9.10",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.1"
