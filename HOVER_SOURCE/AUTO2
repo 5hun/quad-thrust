@@ -1,0 +1,4 @@
+local dload ..\packed\TIM_TMD.LZS 80170000
+local dload ..\packed\script.lzs 80180000
+local load gp1_main
+go

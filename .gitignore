@@ -1,0 +1,8 @@
+.agents/
+.codex/
+.aws/
+**/node_modules/
+**/__pycache__/
+*.pyc
+hover-browser/extracted/
+hover-racing-html.zip

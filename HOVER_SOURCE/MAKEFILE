@@ -1,0 +1,13 @@
+CFLAGS	= -O9 -Wall
+LINKER  = -Xlinker -Ttext -Xlinker 80090000 -Xlinker -Map -Xlinker test.map
+RM	= del
+
+PROG	= hover
+OBJS    = gp1_main.o car_ctr.o lib.o game.o cource.o unpack.o menu_etc.o draw_sp.o makemap.o car_ctr2.o memory_c.o otr_mode.o trainig.o omake.o
+
+$(PROG): $(OBJS)
+	$(CC) $(LINKER) -o $@ $(OBJS) $(OBJSE)
+	strip $(PROG)
+clean:
+	$(RM) $(PROG)
+	$(RM) $(OBJS)
