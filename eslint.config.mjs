@@ -32,7 +32,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["tools/**/*.cjs"],
+    files: ["tests/**/*.cjs"],
     languageOptions: {
       sourceType: "commonjs",
       globals: {

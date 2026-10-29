@@ -8,7 +8,8 @@ PS1版Hover Racingの提供ソースとデータを参考にしたTypeScript / T
 - `HOVER120/`: 原作データ
 - `src/`: ブラウザ版のTypeScriptソース
 - `dist/`: 配信用ファイル・アセット
-- `tools/`: 原作データの変換・検証ツール
+- `tools/`: 原作データの抽出・変換ツール
+- `tests/`: ゲームロジック・アセット・コースのテストスクリプト
 - `extracted/`: 原作データの展開先（Git管理対象外）
 
 以下のコマンドはすべてリポジトリのルートで実行します。
@@ -41,7 +42,7 @@ npm start          # Python 3でローカルサーバーを起動
 
 編集対象は `src/` です。`dist/` のゲーム本体JavaScriptはビルド生成物として同梱しているため、遊ぶだけなら引き続きPython 3のみで起動できます。TypeScriptを変更した場合は `npm run build` を実行し、生成された `dist/*.js` も一緒に更新してください。
 
-`dist/` 内のHTML/CSS、原作データの変換ツールが生成するデータJavaScript・画像・音声、同梱Three.jsは引き続き配信用ファイルです。TypeScriptのビルドはこれらを削除・再生成しません。原作データの再生成には下記のPythonツールを使います。既存の検証ツールはCommonJS (`tools/*.cjs`) を維持しています。
+`dist/` 内のHTML/CSS、原作データの変換ツールが生成するデータJavaScript・画像・音声、同梱Three.jsは引き続き配信用ファイルです。TypeScriptのビルドはこれらを削除・再生成しません。原作データの再生成には下記のPythonツールを使います。既存の検証ツールはCommonJS (`tests/*.cjs`) を維持しています。
 
 物理・ルール・記録・トレーニングはブラウザの通常スクリプトとNode.jsの既存テストの双方で使うため、TypeScriptのnamespaceから従来のグローバルAPIとCommonJS APIを生成します。描画・音声・HUD・ゲーム画面はES modulesです。Three.jsの型定義は同梱r180に合わせています。実行時にnpmやCDNへの接続は不要です。
 
@@ -111,10 +112,10 @@ python3 tools/convert_audio.py
 python3 tools/convert_music.py
 python3 tools/convert_hud.py
 python3 tools/convert_background.py
-node tools/test-assets.cjs
-node tools/test-training.cjs
-node tools/test.cjs
-node tools/test-circuits.cjs
+node tests/test-assets.cjs
+node tests/test-training.cjs
+node tests/test.cjs
+node tests/test-circuits.cjs
 ```
 
 `extract.py` は原作の加算チェックサムを照合。モデル変換は各プリミティブの頂点参照と形式を検査。
