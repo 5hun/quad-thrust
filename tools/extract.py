@@ -35,4 +35,4 @@ def scan(data):
   print(name,len(raw))
   if b'Lzs5' in raw:scan(raw)
   pos+=36+packed
-if __name__=='__main__':scan((ROOT.parent/'HOVER120/HOVER.PAC').read_bytes())
+if __name__=='__main__':scan((ROOT/'HOVER120/HOVER.PAC').read_bytes())

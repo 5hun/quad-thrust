@@ -1,6 +1,0 @@
-extracted/
-*.zip
-*.tar.gz
-node_modules/
-__pycache__/
-*.pyc

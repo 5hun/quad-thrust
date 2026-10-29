@@ -3,3 +3,9 @@ dist/**
 !dist/index.html
 !dist/style.css
 package-lock.json
+HOVER_SOURCE/
+HOVER120/
+extracted/
+.agents/
+.codex/
+.aws/
