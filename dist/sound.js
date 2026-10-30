@@ -12,6 +12,7 @@ export class OriginalSound {
     ready;
     timer;
     pendingCourse = null;
+    musicLoop = true;
     songName;
     cursor;
     epoch;
@@ -93,7 +94,7 @@ export class OriginalSound {
         await this.ready;
         this.master.gain.value = this.enabled ? 0.35 : 0;
         if (this.pendingCourse != null && !this.song)
-            this.playCourse(this.pendingCourse);
+            this.playCourse(this.pendingCourse, this.musicLoop);
     }
     envelope(t, when, source) {
         const node = new AudioWorkletNode(this.context, "hover-spu-envelope", {
@@ -171,13 +172,14 @@ export class OriginalSound {
         this.voices.clear();
         this.song = null;
     }
-    playCourse(index) {
+    playCourse(index, loop = true) {
+        this.musicLoop = loop;
         this.stopMusic();
         this.pendingCourse = index;
         if (!this.ready)
             return;
         this.ready.then(() => {
-            if (this.pendingCourse !== index)
+            if (this.pendingCourse !== index || this.musicLoop !== loop)
                 return;
             this.songName =
                 typeof index === "string" ? index : window.HOVER_MUSIC.courses[index];
@@ -308,6 +310,11 @@ export class OriginalSound {
                             this.release(v, when);
             }
             if (this.cursor === this.song.events.length) {
+                if (!this.musicLoop) {
+                    this.pendingCourse = null;
+                    this.song = null;
+                    break;
+                }
                 this.cursor = 0;
                 this.epoch += this.song.duration;
             }
@@ -356,6 +363,7 @@ export class OriginalSound {
             audioState: this.context?.state || "not-started",
             music: this.song ? this.songName : null,
             musicNotes: this.notesPlayed,
+            musicLoop: this.musicLoop,
             musicVoices: this.voices.size,
             audioBuffers: this.buffers.size,
         };
