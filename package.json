@@ -19,7 +19,8 @@
     "test:phases": "node tests/test-browser-race-phases.cjs",
     "test:attract": "node tests/test-browser-attract.cjs",
     "test:help": "node tests/test-browser-help.cjs",
-    "test:replay": "node tests/test-browser-replay.cjs"
+    "test:replay": "node tests/test-browser-replay.cjs",
+    "test:ghost": "node tests/test-browser-ghost.cjs"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

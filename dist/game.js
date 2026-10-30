@@ -8,8 +8,8 @@ import { HoverRenderer } from "./renderer.js";
 import { OriginalSound } from "./sound.js";
 import { OriginalHUD } from "./hud.js";
 import { OriginalMenu } from "./menu.js";
-import { sampleReplay, captureReplay } from "./replay.js";
-import { ReplayRecorder, InputReplay, } from "./input-replay.js";
+import { ReplayMemory } from "./replay-memory.js";
+import { ReplayRecorder, InputReplay, GhostReplay } from "./input-replay.js";
 import { OriginalPostrace } from "./postrace.js";
 const originalSound = new OriginalSound();
 const E = HoverEngine, R = HoverRules, T = HoverTraining, B = HoverRecords, canvas = $("game"), tracks = HOVER_TRACKS.map(E.prepare);
@@ -41,9 +41,6 @@ const format = (t) => {
 // Original TimeMode keeps GP (including PRACTICE) and Time Attack records apart.
 function recordKey() {
     return R.recordKey($("mode").value, $("course").value);
-}
-function ghostKey() {
-    return "hover-v2-" + $("course").value + "-" + $("machine").value + "-ghost";
 }
 function getBest() {
     try {
@@ -234,6 +231,9 @@ const originalMenu = new OriginalMenu({
     ending() {
         playReplay("ending");
     },
+    exit() {
+        quit();
+    },
     sound(kind) {
         initAudio();
         originalSound.ready?.then(() => originalSound.effect(kind === "ok" ? 72 : kind === "cancel" ? 74 : 73, kind === "ok" ? 50 : 40, kind === "ok" ? 80 : 127));
@@ -252,25 +252,26 @@ $("quality").onchange = () => {
 };
 function resize() {
     view.resize();
+    if (state === "exited")
+        view.drawBlank();
 }
 new ResizeObserver(resize).observe(canvas);
 const gpRecords = [];
-let fallFrames = 0, gpRound = 0, resultFrames = 0, gpCup = 0, ghostFrames = [], recording = [], replayClock = 0, ghostClock = 0, ghostBestTime = Infinity;
+let fallFrames = 0, gpRound = 0, resultFrames = 0, gpCup = 0, replayClock = 0;
 let inputRecording = null;
 let recordingLevel = -1;
-let lastReplay = null;
-let lastReplayRecorder = null;
-let recentReplay = null;
+const replayMemory = new ReplayMemory();
+let ghostReplay = null;
 let postraceReplay = null;
 let replayRun = null;
 let replayKind = null;
 function preparePostraceReplay() {
     if (postraceReplay ||
-        !recentReplay ||
+        !replayMemory.recent ||
         !postrace.phase ||
         state !== "finished")
         return;
-    postraceReplay = new InputReplay(recentReplay, tracks[recentReplay.course]);
+    postraceReplay = new InputReplay(replayMemory.recent, tracks[replayMemory.recent.course]);
     view.setTrack(postraceReplay.track);
     view.yaw = null;
     view.replayDirector.reset();
@@ -286,19 +287,10 @@ function rememberReplay() {
         totalTicks: Math.round(car.time * 60),
         level: recordingLevel,
     });
-    recentReplay = tape;
-    // With a TA ghost, the source keeps the faster recording in REPLAY_BUFF.
-    if (mode === "time" &&
-        lastReplay?.gameMode === 4 &&
-        lastReplay.course === tape.course &&
-        lastReplayRecorder !== inputRecording &&
-        lastReplay.totalTicks <= tape.totalTicks)
-        return;
-    lastReplay = tape;
-    lastReplayRecorder = inputRecording;
+    replayMemory.complete(tape);
 }
 function playReplay(kind) {
-    if (!lastReplay) {
+    if (!replayMemory.saved) {
         originalMenu.message("リプレイデータがありません", kind === "view" ? "option" : "slots");
         return;
     }
@@ -306,8 +298,9 @@ function playReplay(kind) {
     originalSound.cancel();
     originalSound.pause(false);
     originalSound.playCourse(kind === "view" ? "ENTRY1" : "SAMPLE19", kind === "view");
+    ghostReplay = null;
     replayKind = kind;
-    replayRun = new InputReplay(lastReplay, tracks[lastReplay.course]);
+    replayRun = new InputReplay(replayMemory.saved, tracks[replayMemory.saved.course]);
     track = replayRun.track;
     car = replayRun.car;
     bots = replayRun.bots;
@@ -386,25 +379,9 @@ function start(nextRound = false) {
     }
     recordingLevel = +$("difficulty").value - 1;
     inputRecording = R.profile(mode).recordClass ? new ReplayRecorder() : null;
-    recording = [captureReplay(car, 0)];
     replayClock = 0;
-    ghostClock = 0.1;
-    ghostFrames = [];
-    ghostBestTime = Infinity;
-    try {
-        if (mode === "time") {
-            const g = JSON.parse(localStorage.getItem(ghostKey()) || "[]");
-            const frames = Array.isArray(g) ? g : g.frames;
-            if (Array.isArray(frames) &&
-                frames.every((f) => Array.isArray(f) &&
-                    (f.length === 7 || f.length === 12) &&
-                    f.every(Number.isFinite))) {
-                ghostFrames = frames;
-                ghostBestTime = Number(g.time) || frames.at(-1)?.[0] || Infinity;
-            }
-        }
-    }
-    catch { }
+    const ghostTape = replayMemory.beginRace(tracks.indexOf(track), car.type, R.profile(mode).sourceMode, $("ghost-enabled").checked);
+    ghostReplay = ghostTape ? new GhostReplay(ghostTape, track) : null;
     state = "countdown";
     finishRank = 1;
     countdown = 5;
@@ -429,7 +406,32 @@ function start(nextRound = false) {
     if (matchMedia("(max-width:600px)").matches)
         requestAnimationFrame(() => document.querySelector(".game-wrap").scrollIntoView({ block: "start" }));
 }
+// GP1_MAIN.C main: EXIT stops the game and clears the display. Browsers
+// cannot close a page they did not open; reloading relaunches the game.
+function quit() {
+    originalSound.cancel();
+    originalSound.pause(true);
+    postrace.close();
+    state = "exited";
+    keys = {};
+    ghostReplay = null;
+    replayRun = null;
+    replayKind = null;
+    postraceReplay = null;
+    for (const id of ["hud", "pause-panel", "result", "touch"])
+        $(id).hidden = true;
+    document.getElementById("continue-panel").hidden = true;
+    document.getElementById("menu-controls").hidden = true;
+    $("message").textContent = "";
+    $("menu").hidden = false;
+    $("menu").dataset.screen = "exited";
+    $("menu").setAttribute("aria-label", "EXIT");
+    originalMenu.buttons.replaceChildren();
+    originalMenu.g.clearRect(0, 0, 320, 240);
+    view.drawBlank();
+}
 function menu() {
+    ghostReplay = null;
     postraceReplay = null;
     if (state === "finished")
         rememberReplay();
@@ -452,6 +454,7 @@ function menu() {
 }
 // GP1_MAIN.C main / GAME.C gamedemo: live CPU race, not a recording.
 function beginDemo() {
+    ghostReplay = null;
     postrace.close();
     trainingSession = null;
     state = "demo";
@@ -657,11 +660,6 @@ function finish() {
         showContinue();
     if (!gp && failed)
         returnToSelection();
-    if (!failed && mode === "time" && car.time < ghostBestTime)
-        try {
-            localStorage.setItem(ghostKey(), JSON.stringify({ time: car.time, frames: recording }));
-        }
-        catch { }
 }
 const handled = [
     "ArrowUp",
@@ -684,6 +682,8 @@ const handled = [
     "Enter",
 ];
 window.addEventListener("keydown", (e) => {
+    if (state === "exited")
+        return;
     if (/SELECT|INPUT|TEXTAREA/.test(e.target.tagName))
         return;
     if (handled.includes(e.code))
@@ -931,14 +931,9 @@ function render() {
     preparePostraceReplay();
     const display = postraceReplay?.car || car;
     const replayBots = postraceReplay?.bots || bots;
-    let ghost = null;
-    if (mode === "time" &&
-        state !== "menu" &&
-        ghostFrames.length &&
-        $("ghost-enabled").checked) {
-        if (car.time < ghostFrames[ghostFrames.length - 1][0])
-            ghost = sampleReplay(ghostFrames, car.time, car.type);
-    }
+    const ghost = !postrace.phase && $("ghost-enabled").checked
+        ? ghostReplay?.car || null
+        : null;
     view.nameEntry = postrace.entry;
     view.continuePrompt = document.getElementById("continue-panel").hidden
         ? null
@@ -970,7 +965,7 @@ function render() {
         postrace.draw();
 }
 function hud() {
-    originalHUD.draw(car, track, bots, mode, getBest(), state, countdown, trainingSession);
+    originalHUD.draw(car, track, bots, mode, getBest(), state, countdown, trainingSession, $("ghost-enabled").checked ? ghostReplay?.car || null : null);
     const speed = car.sourceSpeed >> 1;
     $("speed").textContent = String(speed).padStart(3, "0");
     $("time").textContent = format(car.time);
@@ -1032,6 +1027,7 @@ function updateGoalDrive(dt) {
         E.step(car, track, E.driveCPU(car, track, car), dt, false, false);
         car.events.length = 0;
     }
+    ghostReplay?.step(true);
     updateBots(dt, false);
     E.collideAll([car, ...bots]);
 }
@@ -1195,6 +1191,7 @@ function update(dt) {
         return;
     }
     if (state === "falling") {
+        ghostReplay?.step();
         updateBots(dt);
         const m = E.MACHINES[car.type];
         const gravity = (m.weight * 3) >> 4;
@@ -1209,6 +1206,7 @@ function update(dt) {
         return;
     }
     if (state === "destroyed") {
+        ghostReplay?.step();
         updateBots(dt);
         E.stepDebris(car);
         car.explosionFrames = (car.explosionFrames ?? 0) + 1;
@@ -1230,6 +1228,7 @@ function update(dt) {
     const laps = car.laps.length;
     inputRecording?.record(currentInput);
     E.step(car, track, currentInput, dt, mode === "free");
+    ghostReplay?.step();
     if (car.progress < previousProgress)
         car.wrongFrames = (car.wrongFrames || 0) + 1;
     else if (car.progress > previousProgress)
@@ -1240,10 +1239,6 @@ function update(dt) {
     }
     updateBots(dt);
     E.collideAll([car, ...bots]);
-    if (!trainingSession && car.time >= ghostClock) {
-        recording.push(captureReplay(car));
-        ghostClock += 0.1;
-    }
     if (trainingSession) {
         const rank = 1 + bots.filter((b) => b.progress > car.progress).length;
         T.step(trainingSession, car, currentInput, rank, car.events);
@@ -1290,6 +1285,8 @@ function update(dt) {
     }
 }
 function frame(ts) {
+    if (state === "exited")
+        return;
     const dt = Math.min((ts - last) / 1000 || 0, 0.1);
     last = ts;
     if (state !== "paused")
@@ -1368,13 +1365,13 @@ window.hoverDiagnostics = () => ({
             machine: replayRun.tape.machine,
         }
         : null,
-    lastReplay: lastReplay
+    lastReplay: replayMemory.saved
         ? {
-            course: lastReplay.course,
-            machine: lastReplay.machine,
-            frames: lastReplay.frames,
-            bytes: lastReplay.words.length * 2,
-            totalTicks: lastReplay.totalTicks,
+            course: replayMemory.saved.course,
+            machine: replayMemory.saved.machine,
+            frames: replayMemory.saved.frames,
+            bytes: replayMemory.saved.words.length * 2,
+            totalTicks: replayMemory.saved.totalTicks,
         }
         : null,
     help: originalMenu.screen === "help"
@@ -1388,7 +1385,22 @@ window.hoverDiagnostics = () => ({
             annotations: originalMenu.help.annotations.map((a) => ({ ...a })),
         }
         : null,
-    sourceMode: R.profile(mode).sourceMode,
+    sourceMode: mode === "time" && ghostReplay ? 5 : R.profile(mode).sourceMode,
+    ghost: ghostReplay
+        ? {
+            machine: ghostReplay.car.type,
+            frame: ghostReplay.reader.frame,
+            ticks: ghostReplay.car.ticks,
+            x: ghostReplay.car.x,
+            y: ghostReplay.car.y,
+            z: ghostReplay.car.z,
+            heading: ghostReplay.car.heading,
+            laps: ghostReplay.car.laps.length,
+            finished: ghostReplay.car.finished,
+            repairFrames: ghostReplay.car.repairFrames || 0,
+            active: { ...ghostReplay.car.active },
+        }
+        : null,
     training: trainingSession
         ? {
             stage: trainingSession.task.id,

@@ -255,7 +255,7 @@ export class OriginalMenu {
                     }
                 }
                 else
-                    this.message("終了しました。\n決定でタイトル画面に戻ります。", "title");
+                    this.hooks.exit();
                 break;
             case "modes":
                 if (i === 0)
@@ -288,7 +288,7 @@ export class OriginalMenu {
                     this.hooks.ending();
                     break;
                 }
-                this.message("MEMORY CARD\n記録・ゴースト・課題クリアは\nこのブラウザに自動保存します。\nPS1のカード形式は未対応です。", "slots");
+                this.message("MEMORY CARD\n記録・課題クリアは\nこのブラウザに自動保存します。\nリプレイはセッション中保持します。\nPS1のカード形式は未対応です。", "slots");
                 break;
             case "record-kind":
                 this.recordClass = i === 0 ? "gp" : "time";

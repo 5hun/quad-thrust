@@ -22,6 +22,7 @@ interface MenuHooks {
   start(): void;
   replay(): void;
   ending(): void;
+  exit(): void;
   sound(kind: "move" | "ok" | "cancel"): void;
   music(name: string | null): void;
 }
@@ -321,11 +322,7 @@ export class OriginalMenu {
             this.show("help");
             this.hooks.music("SAMPLE26");
           }
-        } else
-          this.message(
-            "終了しました。\n決定でタイトル画面に戻ります。",
-            "title",
-          );
+        } else this.hooks.exit();
         break;
       case "modes":
         if (i === 0) this.show("gp");
@@ -352,7 +349,7 @@ export class OriginalMenu {
           break;
         }
         this.message(
-          "MEMORY CARD\n記録・ゴースト・課題クリアは\nこのブラウザに自動保存します。\nPS1のカード形式は未対応です。",
+          "MEMORY CARD\n記録・課題クリアは\nこのブラウザに自動保存します。\nリプレイはセッション中保持します。\nPS1のカード形式は未対応です。",
           "slots",
         );
         break;

@@ -227,6 +227,36 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       (await page.evaluate(() => window.hoverDiagnostics())).menuSelection,
       1,
     );
+    await title();
+    await click("EXIT");
+    await page.waitForFunction(
+      () => window.hoverDiagnostics().state === "exited",
+    );
+    assert.equal(await page.locator("#menu-controls").isVisible(), false);
+    assert.equal(await page.locator("#menu nav button").count(), 0);
+    assert.equal(
+      await page.evaluate(() => window.hoverDiagnostics().music),
+      null,
+    );
+    assert.equal(
+      await page.evaluate(() => {
+        const data = document
+          .getElementById("original-menu")
+          .getContext("2d")
+          .getImageData(0, 0, 320, 240).data;
+        return data.every((value, i) => i % 4 !== 3 || value === 0);
+      }),
+      true,
+      "no substitute notice is drawn after EXIT",
+    );
+    await press("Enter");
+    await press("Escape");
+    assert.equal(
+      await page.evaluate(() => window.hoverDiagnostics().state),
+      "exited",
+    );
+    await page.screenshot({ path: "/tmp/hover-exited.png" });
+    await title();
     assert.deepEqual(errors, []);
     console.log(
       "PASS: original title tree; all machines/courses; GP, practice, training and free-run selection order; cancel; race start; records/music/help; keyboard, gamepad and mobile controls",

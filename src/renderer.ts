@@ -658,7 +658,10 @@ export class HoverRenderer {
     ship.power.rotation.y = (-(effect - 1) * Math.PI) / 4;
     const names: (keyof Input)[] = ["l1", "l2", "r1", "r2"];
     ship.sides.forEach((g, i) => {
-      g.visible = !p.cpuSlot && !!input[names[i]] && (tick & 1) === 1;
+      g.visible =
+        (!p.cpuSlot || ship.ghost) &&
+        !!input[names[i]] &&
+        ((tick + (p.cpuSlot || 0)) & 1) === 1;
       g.rotation.x = (-tick * 165 * Math.PI * 2) / 4096;
     });
     if (ship.motionTick !== tick) {
@@ -1200,6 +1203,10 @@ export class HoverRenderer {
     }
     this.renderer.autoClear = true;
     this.frames++;
+  }
+  drawBlank() {
+    this.renderer.setClearColor(0x000000, 1);
+    this.renderer.clear(true, true, true);
   }
   diagnostics() {
     return {

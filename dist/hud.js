@@ -69,7 +69,7 @@ export class OriginalHUD {
             g.closePath();
         g.stroke();
     }
-    draw(car, track, bots, mode, best, state, countdown, training = null) {
+    draw(car, track, bots, mode, best, state, countdown, training = null, ghost = null) {
         const g = this.g;
         g.clearRect(0, 0, 320, 240);
         g.imageSmoothingEnabled = false;
@@ -127,7 +127,7 @@ export class OriginalHUD {
             this.mapTrack(track);
         const mapY = training ? 0 : 32;
         g.drawImage(this.map, 8, mapY);
-        for (const p of [...bots, car]) {
+        for (const p of [...bots, ...(ghost ? [ghost] : []), car]) {
             const x = 40 + (p.x - this.mx) * this.scale, y = mapY + 32 - (p.z - this.mz) * this.scale;
             g.save();
             g.translate(Math.round(x), Math.round(y));
@@ -135,8 +135,11 @@ export class OriginalHUD {
             if (p === car)
                 this.sprite(64 + 8 * p.type, 184, 8, 8, -4, -4, 497);
             else {
-                g.fillStyle = "#ddd";
-                g.fillRect(-2, -2, 4, 4);
+                // DRAW_SP.C draw_map: every other racer, including the TA ghost,
+                // uses its own machine portrait at half size rather than a square.
+                const image = this.images["hud-497"];
+                if (image.complete && image.naturalWidth)
+                    g.drawImage(image, 64 + 8 * p.type, 184, 8, 8, -2, -2, 4, 4);
             }
             g.restore();
         }
