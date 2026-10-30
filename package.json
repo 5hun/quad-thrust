@@ -13,6 +13,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:browser": "node tests/test-browser-fidelity.ts",
+    "test:fullscreen": "node tests/test-browser-fullscreen.ts",
     "test:menu": "node tests/test-browser-menu.ts",
     "test:postrace": "node tests/test-browser-postrace.ts",
     "test:credits": "node tests/test-browser-credits.ts",
