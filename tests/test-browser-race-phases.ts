@@ -207,7 +207,16 @@ module.exports = async function verify({
     for (const reason of ["destroyed", "course-out"] as const) {
       await start("practice");
       await wait("running");
-      await page.evaluate((reason) => {
+      await page.evaluate(async (reason) => {
+        const { OriginalSound } = (await import(
+          "./sound.js" as string
+        )) as typeof import("../src/sound");
+        const effect = OriginalSound.prototype.effect;
+        window.bombSounds = 0;
+        OriginalSound.prototype.effect = function (id, ...args) {
+          if (id === 68) window.bombSounds++;
+          return effect.call(this, id, ...args);
+        };
         const step = window.HoverEngine.step;
         let first = true;
         window.HoverEngine.step = (car, ...args) => {
@@ -228,6 +237,18 @@ module.exports = async function verify({
       );
       // A failed practice returns directly to machine selection.
       await wait("menu");
+      const bombSounds = await page.evaluate(() => window.bombSounds);
+      if (reason === "course-out")
+        assert.equal(
+          bombSounds,
+          0,
+          "fall wait ends without an explosion sound",
+        );
+      else
+        assert.ok(
+          bombSounds > 1,
+          "destruction retains repeated explosion sounds",
+        );
     }
     assert.deepEqual(errors, []);
     console.log(

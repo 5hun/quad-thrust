@@ -979,8 +979,8 @@ function finish() {
     return;
   }
 
-  if (car.reason !== "finish" && !car.explosionPlayed)
-    originalSound.effect(68, 30, 90);
+  // GAME.C only plays SND_BOMB during destruction (over > 64).
+  // Completing the course-out wait (negative over) has no impact sound.
   state = "finished";
   resultFrames = 0;
   $("touch").hidden = true;
@@ -1651,7 +1651,6 @@ function update(dt: number) {
     if (car.reason === "destroyed") {
       state = "destroyed";
       car.explosionFrames = 0;
-      car.explosionPlayed = true;
       E.emitDebris(car, 64, 2, [0, 1, 0]);
       originalSound.effect(68, 30, 90);
     } else if (car.reason === "course-out") {

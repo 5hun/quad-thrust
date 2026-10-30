@@ -160,7 +160,6 @@ interface Car extends Pose {
   stopped?: boolean;
   lapDraw?: number;
   wrongFrames?: number;
-  explosionPlayed?: boolean;
 }
 interface Nearest {
   supported: boolean;
