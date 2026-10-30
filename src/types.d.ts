@@ -2,6 +2,7 @@ type Vec3 = number[];
 interface RawBoundary {
   l: Vec3;
   r: Vec3;
+  source?: { origin: Vec3; vertices: Vec3[] };
 }
 interface Boundary extends RawBoundary {
   x: number;
@@ -9,7 +10,9 @@ interface Boundary extends RawBoundary {
   z: number;
   width: number;
 }
-interface RawSample {
+interface RawSample extends RawBoundary {
+  partColumn?: number;
+  sourceNormals?: Vec3[];
   part?: number;
   l: Vec3;
   r: Vec3;
@@ -22,6 +25,15 @@ interface RawTrack {
   theme: number;
   samples: RawSample[];
   training?: boolean;
+  parts?: {
+    id: number;
+    next: number;
+    before: number;
+    writeF: number;
+    writeB: number;
+    extraF: number[];
+    extraB: number[];
+  }[];
 }
 interface TrackNode extends RawSample, Boundary {
   end?: Boundary;
@@ -30,6 +42,10 @@ interface TrackNode extends RawSample, Boundary {
   heading: number;
 }
 interface Track extends RawTrack {
+  sourceParts?: Map<
+    number,
+    { indices: number[]; next: number; before: number }
+  >;
   nodes: TrackNode[];
   length: number;
 }

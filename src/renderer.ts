@@ -374,8 +374,7 @@ export class HoverRenderer {
         );
       // MAKEMAP.C adds a dark, double-sided V-shaped underside. It becomes
       // visible while falling; the textured road faces remain one-sided.
-      const bottom = (v: RawBoundary) =>
-        v.l.map((x, k) => (x + v.r[k]) / 2 - (k === 1 ? 10.24 : 0));
+      const bottom = (v: RawBoundary) => boundary(v, ys + 1, ys);
       add(boundary(p, 0, ys), boundary(q, 0, ys), bottom(p), bottom(q), -1);
       add(bottom(p), bottom(q), boundary(p, ys, ys), boundary(q, ys, ys), -1);
     }
@@ -747,7 +746,9 @@ export class HoverRenderer {
       if (!this.wasReplay) this.replayDirector.reset();
       this.replayDirector.step(
         this.track,
-        E.nearest(this.track, car.x, car.z).index,
+        "index" in car && typeof car.index === "number"
+          ? car.index
+          : E.nearest(this.track, car.x, car.z).index,
       );
       if (this.replayDirector.mode !== 33)
         E.cameraStep(this.follow, car, 0, this.replayDirector.mode);

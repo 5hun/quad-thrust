@@ -90,14 +90,26 @@ export class ReplayDirector {
                     end = next;
                 }
                 const corner = nodes[end].end || nodes[(end + 1) % nodes.length];
-                const side = choice === 0 ? corner.l : corner.r;
-                const width = Math.hypot(corner.r[0] - corner.l[0], corner.r[2] - corner.l[2]) || 1;
-                const outward = choice === 0 ? -10.24 : 10.24;
-                this.anchor = {
-                    x: side[0] + ((corner.r[0] - corner.l[0]) / width) * outward,
-                    y: side[1] + 30 - 2.56,
-                    z: side[2] + ((corner.r[2] - corner.l[2]) / width) * outward,
-                };
+                if (corner.source) {
+                    const { origin, vertices } = corner.source;
+                    const vertex = vertices[choice === 0 ? 0 : vertices.length - 2];
+                    this.anchor = {
+                        x: (origin[0] + vertex[0] * 2) / 100,
+                        y: -(origin[1] + vertex[1] * 2) / 100 + 30,
+                        z: (origin[2] + vertex[2] * 2) / 100,
+                    };
+                }
+                else {
+                    const side = choice === 0 ? corner.l : corner.r;
+                    const width = Math.hypot(corner.r[0] - corner.l[0], corner.r[2] - corner.l[2]) ||
+                        1;
+                    const outward = choice === 0 ? -10.24 : 10.24;
+                    this.anchor = {
+                        x: side[0] + ((corner.r[0] - corner.l[0]) / width) * outward,
+                        y: side[1] + 30 - 2.56,
+                        z: side[2] + ((corner.r[2] - corner.l[2]) / width) * outward,
+                    };
+                }
             }
         }
         this.remaining--;

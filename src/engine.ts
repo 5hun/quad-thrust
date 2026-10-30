@@ -128,7 +128,19 @@ namespace HoverEngine {
       p.heading = Math.atan2(q.x - p.x, q.z - p.z);
       length += p.len;
     });
-    return { ...raw, nodes, length };
+    const sourceParts: Track["sourceParts"] = raw.parts ? new Map() : undefined;
+    for (const part of raw.parts || []) {
+      const indices = nodes
+        .map((node, i) => (node.part === part.id ? i : -1))
+        .filter((i) => i >= 0)
+        .sort((a, b) => nodes[a].partColumn! - nodes[b].partColumn!);
+      sourceParts!.set(part.id, {
+        indices,
+        next: part.next,
+        before: part.before,
+      });
+    }
+    return { ...raw, nodes, length, sourceParts };
   }
   export function at(track: Track, d: number) {
     d = track.training
@@ -155,7 +167,15 @@ namespace HoverEngine {
     row: number,
     ys: number,
   ): Vec3 {
+    if (p.source) {
+      const { origin, vertices } = p.source;
+      return vertices[row].map(
+        (v, k) => ((origin[k] + v * 2) * (k === 1 ? -1 : 1)) / 100,
+      );
+    }
     const { l, r } = p;
+    if (row === ys + 1)
+      return l.map((v, k) => (v + r[k]) / 2 - (k === 1 ? 10.24 : 0));
     const length = Math.hypot(...r.map((v, k) => v - l[k])) || 1;
     const outward = l.map((v, k) => ((v - r[k]) * 10.24) / length);
     if (row === 0)
@@ -166,6 +186,102 @@ namespace HoverEngine {
       return r.map((v, k) => v - outward[k] - (k === 1 ? 2.56 : 0));
     return l.map((v, k) => mix(v, r[k], (row - 2) / (ys - 4)));
   }
+  // CAR_CTR.C car_position / car_getplate. Authored parts, not Euclidean
+  // proximity, determine the current strip at crossings and hairpin bends.
+  function sourceCell(track: Track, x: number, z: number, hint: number | null) {
+    const parts = track.sourceParts;
+    if (!parts?.size) return null;
+    const local = (index: number) => {
+      const origin = track.nodes[index].source!.origin;
+      return [
+        (Math.floor(x * 100 + 1e-8) - origin[0]) >> 1,
+        (Math.floor(z * 100 + 1e-8) - origin[2]) >> 1,
+      ];
+    };
+    const line = (a: Vec3, b: Vec3, p: number[]) =>
+      (Math.imul(b[0] - a[0], p[1] - a[2]) -
+        Math.imul(b[2] - a[2], p[0] - a[0])) |
+      0;
+    const corners = (part: { indices: number[] }) => {
+      const first = track.nodes[part.indices[0]],
+        last = track.nodes[part.indices.at(-1)!].end!;
+      const ys = first.allTiles.length;
+      return [
+        first.source!.vertices[2],
+        last.source!.vertices[2],
+        last.source!.vertices[ys - 2],
+        first.source!.vertices[ys - 2],
+      ];
+    };
+    let part = hint === null ? undefined : parts.get(track.nodes[hint].part!);
+    if (!part) {
+      for (const [, candidate] of [...parts].sort(([a], [b]) => a - b)) {
+        const quad = corners(candidate),
+          point = local(candidate.indices[0]);
+        if (quad.every((a, i) => line(a, quad[(i + 1) % 4], point) <= 0)) {
+          part = candidate;
+          break;
+        }
+      }
+      // Outside the complete course, use the caller's geometric fallback.
+      if (!part) return null;
+    } else {
+      const quad = corners(part),
+        point = local(part.indices[0]);
+      let next = part;
+      if (line(quad[3], quad[0], point) > 0)
+        next = parts.get(part.before) || part;
+      if (line(quad[1], quad[2], point) > 0)
+        next = parts.get(part.next) || part;
+      part = next;
+    }
+    const indices = part.indices,
+      xs = indices.length;
+    const first = track.nodes[indices[0]],
+      ys = first.allTiles.length;
+    const point = local(indices[0]);
+    const vertex = (column: number, row: number) => {
+      // V is a row-major array; the original search can read x==xs+1
+      // on narrow parts, which denotes the first vertex in the next row.
+      const offset = row * (xs + 1) + column;
+      const col = ((offset % (xs + 1)) + xs + 1) % (xs + 1);
+      const r = Math.floor(offset / (xs + 1));
+      return col === xs
+        ? track.nodes[indices[xs - 1]].end!.source!.vertices[r]
+        : track.nodes[indices[col]].source!.vertices[r];
+    };
+    // Preserve the original six-step search and exact boundary tie rules.
+    let up = 31,
+      low = 0,
+      column = 15,
+      step = 8,
+      searches = 0;
+    do {
+      searches++;
+      if (column > xs && step !== 1) {
+        up = column;
+        column -= step;
+        step >>= 1;
+        continue;
+      }
+      const side = line(vertex(column, 2), vertex(column, ys - 2), point);
+      if (side <= 0) {
+        up = column;
+        column -= step;
+      }
+      if (side > 0) {
+        low = column;
+        column += step;
+      }
+      if (step !== 1) step >>= 1;
+    } while (up - low !== 1 && up > low && searches < 6);
+    up = clamp(up, 1, xs);
+    let row = 0;
+    while (row <= ys && line(vertex(up - 1, row), vertex(up, row), point) <= 0)
+      row++;
+    const supported = row > 0 && row <= ys;
+    return { index: indices[up - 1], row: clamp(row, 1, ys) - 1, supported };
+  }
   export function nearest(
     track: Track,
     x: number,
@@ -174,8 +290,10 @@ namespace HoverEngine {
   ): Nearest {
     let best: Nearest | null = null;
     const n = track.nodes.length;
-    const ids =
-      hint === null
+    const cell = sourceCell(track, x, z, hint);
+    const ids = cell
+      ? [cell.index]
+      : hint === null
         ? track.nodes.map((_, i) => i)
         : Array.from(
             new Set(
@@ -222,11 +340,12 @@ namespace HoverEngine {
         // vertex, its next longitudinal vertex and its next lateral vertex.
         const ys = p.allTiles.length;
         const row =
-          lane < 0
+          cell?.row ??
+          (lane < 0
             ? 0
             : lane > 1
               ? ys - 1
-              : 2 + Math.floor(clamp(lane, 0, 0.9999) * p.tiles.length);
+              : 2 + Math.floor(clamp(lane, 0, 0.9999) * p.tiles.length));
         const a = boundaryVertex(p, row, ys);
         const along = boundaryVertex(q, row, ys).map((v, k) => v - a[k]);
         const across = boundaryVertex(p, row + 1, ys).map((v, k) => v - a[k]);
@@ -237,8 +356,9 @@ namespace HoverEngine {
           ((outerPoint[0] - l[0]) * wx + (outerPoint[2] - l[2]) * wz) /
           (width * width || 1);
         const supported =
-          (lane >= 0 && lane <= 1) ||
-          (lane < 0 ? lane >= outerLane : lane <= outerLane);
+          cell?.supported ??
+          ((lane >= 0 && lane <= 1) ||
+            (lane < 0 ? lane >= outerLane : lane <= outerLane));
         let normal = [
           along[1] * across[2] - along[2] * across[1],
           along[2] * across[0] - along[0] * across[2],
@@ -246,11 +366,35 @@ namespace HoverEngine {
         ];
         const scale = (normal[1] < 0 ? -1 : 1) / (Math.hypot(...normal) || 1);
         normal = normal.map((v) => Math.round(v * scale * 4096));
-        const surface =
+        let surface =
           normal[1] === 0
             ? a[1]
             : a[1] -
               (normal[0] * (x - a[0]) + normal[2] * (z - a[2])) / normal[1];
+        if (p.source && q.source) {
+          // CAR_CTR.C car_gravide works in the part's local half-scale
+          // integer coordinates. Its plane uses the raw cross product, not
+          // the separately quantized normal used for bank forces.
+          const { origin, vertices } = p.source;
+          const d = vertices[row];
+          const av = q.source.vertices[row].map((v, k) => v - d[k]);
+          const bv = vertices[row + 1].map((v, k) => v - d[k]);
+          const cross = [
+            (Math.imul(av[1], bv[2]) - Math.imul(av[2], bv[1])) | 0,
+            (Math.imul(av[2], bv[0]) - Math.imul(av[0], bv[2])) | 0,
+            (Math.imul(av[0], bv[1]) - Math.imul(av[1], bv[0])) | 0,
+          ];
+          const localX = (Math.floor(x * 100 + 1e-8) - origin[0]) >> 1;
+          const localZ = (Math.floor(z * 100 + 1e-8) - origin[2]) >> 1;
+          const numerator =
+            (-Math.imul(cross[0], localX - d[0]) -
+              Math.imul(cross[2], localZ - d[2])) |
+            0;
+          const localY =
+            cross[1] === 0 ? 0 : (Math.trunc(numerator / cross[1]) + d[1]) << 1;
+          surface = -(localY + origin[1]) / 100;
+          normal = p.sourceNormals![row].map((v, k) => (k === 1 ? -v : v));
+        }
         best = {
           surface,
           normal,
@@ -487,10 +631,14 @@ namespace HoverEngine {
         const edge = node.l.map(
           (v, k) => mix(end.l[k], end.r[k], lane) - mix(v, node.r[k], lane),
         );
+        const impulse =
+          node.source && end.source
+            ? end.source.vertices[near.row].map(
+                (v, k) => (v - node.source!.vertices[near.row][k]) << 1,
+              )
+            : edge.map((v, k) => Math.trunc(v * (k === 1 ? -100 : 100)));
         for (const v of [f, b]) {
-          v[0] += Math.trunc(edge[0] * 100);
-          v[1] -= Math.trunc(edge[1] * 100);
-          v[2] += Math.trunc(edge[2] * 100);
+          for (let k = 0; k < 3; k++) v[k] += impulse[k];
         }
         car.events.push("boost");
       }
