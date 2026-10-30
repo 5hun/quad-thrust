@@ -544,6 +544,7 @@ function preparePostraceReplay() {
     postraceReplay ||
     !replayMemory.recent ||
     !postrace.phase ||
+    postrace.batch.length > 0 ||
     state !== "finished"
   )
     return;
@@ -1247,6 +1248,7 @@ function render() {
       ? ghostReplay?.car || null
       : null;
   view.nameEntry = postrace.entry;
+  view.gpRecords = !!postrace.phase && postrace.batch.length > 0;
   view.continuePrompt = document.getElementById("continue-panel")!.hidden
     ? null
     : { choice: continueChoice, rotation: (continueRotation * Math.PI) / 16 };
@@ -1617,7 +1619,10 @@ function frame(ts: number) {
   if (state !== "paused") worldTime += dt;
   if (postrace.phase && !postraceReplay && state !== "replay")
     replayClock += dt;
-  view.replayView = !!postrace.phase || state === "demo" || state === "replay";
+  view.replayView =
+    (!!postrace.phase && !postrace.batch.length) ||
+    state === "demo" ||
+    state === "replay";
   // GAME.C view_set(17): front chase except a winning GP; TRAINIG.C
   // uses it only for MISS. Keep the live camera through CONTINUE?.
   view.finishCamera =

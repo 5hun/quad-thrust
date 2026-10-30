@@ -26,6 +26,9 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       const font = {
         g: null,
         text() {},
+        time(t) {
+          return String(t);
+        },
         jp() {
           throw Error("Credits must not use wrapped text");
         },
@@ -91,6 +94,55 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       p.creditLine = 6;
       p.creditFrame = 24;
       p.draw();
+      // Drive the real postrace controller at exact source ticks.
+      const saves = [],
+        transitions = [],
+        recordSave = window.HoverRecords.save;
+      window.HoverRecords.save = (...args) => saves.push(args);
+      let ended = 0;
+      p.beginGP(
+        [0, 1, 2].map((course) => ({
+          course,
+          best: 10,
+          total: 33,
+          machine: 0,
+        })),
+        () => ended++,
+      );
+      for (let i = 0; i < 3; i++) p.key("Enter");
+      if (p.phase !== "gap" || saves.length)
+        throw Error("GP must delay record registration after name entry");
+      for (let i = 0; i < 58; i++) p.tick(false);
+      if (saves.length) throw Error("GP saved before tick 60");
+      p.tick(false);
+      if (p.phase !== "lap" || saves.length !== 6)
+        throw Error("GP must register every course at tick 60");
+      p.key("KeyP");
+      if (ended) throw Error("GP Start requires tick > 60");
+      for (let course = 0; course < 3; course++) {
+        transitions.push([p.course, p.phase]);
+        p.key(course === 0 ? "Escape" : "ShiftLeft");
+        if (p.phase !== "gap") throw Error("GP table skip omitted its gap");
+        for (let i = 0; i < 59; i++) p.tick(false);
+        if (p.phase !== "gap")
+          throw Error("GP transition shorter than 60 ticks");
+        p.tick(false);
+        transitions.push([p.course, p.phase]);
+        p.key("Enter");
+        if (course < 2) for (let i = 0; i < 60; i++) p.tick(false);
+      }
+      if (ended !== 1 || p.phase !== null)
+        throw Error("GP did not finish after all three TOTAL pages");
+      window.HoverRecords.save = recordSave;
+      p.credits(() => ended++);
+      p.key("KeyP");
+      if (ended !== 2)
+        throw Error("Gamepad/keyboard Start must still skip credits");
+      p.credits(() => {});
+      p.creditMode = 6;
+      p.creditLine = 6;
+      p.creditFrame = 24;
+      p.draw();
       const frames = Array.from({ length: 101 }, (_, i) => [
         i / 10,
         i,
@@ -113,6 +165,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         requestAnimationFrame(frame);
       });
       return {
+        transitions,
         draws,
         cachedLines: p.staffText.lines.size,
         uniquePoses: new Set(poses.map((x) => x.toFixed(5))).size,
@@ -120,6 +173,14 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         elapsed: times.at(-1) - times[0],
       };
     });
+    assert.deepEqual(result.transitions, [
+      [0, "lap"],
+      [0, "total"],
+      [1, "lap"],
+      [1, "total"],
+      [2, "lap"],
+      [2, "total"],
+    ]);
     assert.equal(result.cachedLines, 36);
     assert.equal(result.draws, 190);
     assert.equal(result.uniquePoses, result.rafFrames);

@@ -2,6 +2,7 @@
 import { OriginalMenu } from "./menu.js";
 import { STAFF } from "./staff.js";
 import { StaffText } from "./staff-text.js";
+import { GPRecordSequence } from "./gp-record-sequence.js";
 export interface GPRecord {
   course: number;
   best: number;
@@ -12,7 +13,7 @@ export const ENTRY_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ,.^_0123456789%*?&!";
 export class OriginalPostrace {
   panel = document.getElementById("postrace")!;
   canvas = document.getElementById("postrace-canvas") as HTMLCanvasElement;
-  phase: "name" | "laps" | "lap" | "total" | "credits" | null = null;
+  phase: "name" | "gap" | "laps" | "lap" | "total" | "credits" | null = null;
   name = [0, 0, 0];
   cursor = 0;
   rotation = 0;
@@ -20,6 +21,7 @@ export class OriginalPostrace {
   category = "time";
   batch: GPRecord[] = [];
   batchIndex = 0;
+  gpSequence: GPRecordSequence | null = null;
   creditMode = 0;
   creditFrame = 0;
   creditLine = 6;
@@ -44,7 +46,7 @@ export class OriginalPostrace {
     document.getElementById("postrace-confirm")!.onclick = () =>
       this.key("Enter");
     document.getElementById("postrace-exit")!.onclick = () =>
-      this.key("Escape");
+      this.key(this.gpSequence ? "KeyP" : "Escape");
     try {
       const saved = this.storage.getItem("hover-player-name");
       if (
@@ -63,6 +65,7 @@ export class OriginalPostrace {
   ) {
     Object.assign(this, {
       batch: [],
+      gpSequence: null,
       batchIndex: 0,
       category,
       course,
@@ -107,13 +110,14 @@ export class OriginalPostrace {
         );
       }),
     );
-    this.phase = qualifies ? "name" : "lap";
+    this.gpSequence = new GPRecordSequence(batch.length, qualifies);
+    this.phase = this.gpSequence.page;
     this.panel.hidden = false;
-    if (!qualifies) this.save();
   }
   credits(done: () => void) {
     Object.assign(this, {
       phase: "credits",
+      gpSequence: null,
       frame: 0,
       creditMode: 0,
       creditFrame: 0,
@@ -174,11 +178,12 @@ export class OriginalPostrace {
   close() {
     this.panel.hidden = true;
     this.phase = null;
+    this.gpSequence = null;
   }
   key(code: string) {
     if (!this.phase) return;
     if (this.phase === "credits") {
-      if (["Enter", "Escape", "KeyZ", "Space"].includes(code)) {
+      if (["Enter", "Escape", "KeyZ", "Space", "KeyP"].includes(code)) {
         this.close();
         this.afterCredits();
       }
@@ -195,12 +200,37 @@ export class OriginalPostrace {
       else if (["Enter", "KeyZ", "Space"].includes(code)) {
         this.font.hooks.sound("ok");
         if (++this.cursor === 3) {
-          this.save();
+          if (this.gpSequence) this.gpSequence.finishName();
+          else this.save();
           this.cursor = 0;
-          this.phase = this.batch.length ? "lap" : "laps";
+          this.phase = this.gpSequence ? "gap" : "laps";
           this.frame = 0;
         }
       }
+    } else if (this.gpSequence) {
+      if (code === "KeyP") this.gpSequence.start();
+      else if (
+        [
+          "ArrowUp",
+          "ArrowDown",
+          "ArrowLeft",
+          "ArrowRight",
+          "Enter",
+          "KeyZ",
+          "Space",
+          "Escape",
+          "KeyX",
+          "KeyQ",
+          "KeyE",
+          "KeyA",
+          "KeyD",
+          "KeyS",
+          "ShiftLeft",
+          "ShiftRight",
+        ].includes(code)
+      )
+        this.gpSequence.skipPage();
+      this.syncGP();
     } else if (["Escape", "KeyX"].includes(code)) {
       this.close();
       this.done();
@@ -208,20 +238,22 @@ export class OriginalPostrace {
       this.advance();
   }
   advance() {
-    if (this.batch.length && this.phase === "total") {
-      if (++this.batchIndex >= this.batch.length) {
-        this.close();
-        this.done();
-        return;
-      }
-      this.course = this.batch[this.batchIndex].course;
-      this.phase = "lap";
-      this.frame = 0;
-      return;
-    }
     this.phase =
       this.phase === "laps" ? "lap" : this.phase === "lap" ? "total" : "laps";
     this.frame = 0;
+  }
+  syncGP() {
+    const sequence = this.gpSequence;
+    if (!sequence) return;
+    if (sequence.frame >= 60 && !this.saved) this.save();
+    if (sequence.done) {
+      this.close();
+      this.done();
+      return;
+    }
+    this.batchIndex = sequence.course;
+    this.course = this.batch[sequence.course].course;
+    this.phase = sequence.page;
   }
   tick(gamepad = true) {
     if (!this.phase) return;
@@ -232,7 +264,10 @@ export class OriginalPostrace {
         this.name[this.cursor] =
           (this.name[this.cursor] + Math.sign(this.rotation) + 45) % 45;
     }
-    if (this.phase === "credits") {
+    if (this.gpSequence) {
+      this.gpSequence.tick();
+      this.syncGP();
+    } else if (this.phase === "credits") {
       this.creditFrame++;
       const mode = this.creditMode;
       const limit =
@@ -271,8 +306,14 @@ export class OriginalPostrace {
         [14, "ArrowLeft"],
         [15, "ArrowRight"],
         [0, "Enter"],
-        [9, "Enter"],
+        [9, "KeyP"],
         [1, "Escape"],
+        [2, "ShiftLeft"],
+        [3, "KeyZ"],
+        [4, "KeyQ"],
+        [5, "KeyE"],
+        [6, "KeyA"],
+        [7, "KeyD"],
       ].forEach(([i, code]) => {
         if (pad.buttons[+i]?.pressed) keys.add(String(code));
       });
@@ -290,7 +331,7 @@ export class OriginalPostrace {
     this.font.g = g;
     const text = (s: string, x: number, y: number, size = 8) =>
       this.font.text(s, x, y, size);
-    if (this.batch.length && ["lap", "total"].includes(this.phase)) {
+    if (this.batch.length && ["gap", "lap", "total"].includes(this.phase)) {
       // GAME.C make_back_tmd2: blue upper corners and red lower corners.
       const gradient = g.createLinearGradient(0, 0, 0, 240);
       gradient.addColorStop(0, "#00007f");
@@ -331,6 +372,8 @@ export class OriginalPostrace {
         jp(this.creditLine + 2, 32, 128);
       }
       this.panel.setAttribute("aria-label", "STAFF CREDITS");
+    } else if (this.phase === "gap") {
+      this.panel.setAttribute("aria-label", "GP RECORDS TRANSITION");
     } else if (this.phase === "name") {
       this.panel.setAttribute(
         "aria-label",

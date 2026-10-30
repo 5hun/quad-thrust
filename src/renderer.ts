@@ -127,6 +127,8 @@ export class HoverRenderer {
     text: "COMPLETE" | "MISS" | "FINISH" | "1ST" | "2ND" | "3RD" | "4TH";
     frame: number;
   } | null = null;
+  gpRecords = false;
+  gpRecordBackground: THREE.CanvasTexture;
   nameEntry: {
     indices: number[];
     selected: number;
@@ -175,6 +177,18 @@ export class HoverRenderer {
     this.loader.manager.onError = (u) => this.errors.push(u);
     this.canvas = canvas;
     this.countScene = new THREE.Scene();
+    // GAME.C make_back_tmd2: upper vertices blue 127, lower vertices red 127.
+    const recordCanvas = document.createElement("canvas");
+    recordCanvas.width = 320;
+    recordCanvas.height = 240;
+    const recordContext = recordCanvas.getContext("2d")!,
+      recordGradient = recordContext.createLinearGradient(0, 0, 0, 240);
+    recordGradient.addColorStop(0, "#00007f");
+    recordGradient.addColorStop(1, "#7f0000");
+    recordContext.fillStyle = recordGradient;
+    recordContext.fillRect(0, 0, 320, 240);
+    this.gpRecordBackground = new THREE.CanvasTexture(recordCanvas);
+    this.gpRecordBackground.colorSpace = THREE.SRGBColorSpace;
     this.countCamera = new THREE.PerspectiveCamera(42, 4 / 3, 0.15, 100);
     this.countDigits = [1, 2, 3].map((i) => {
       const m = this.modelObject("ALP_0_9", i);
@@ -836,6 +850,9 @@ export class HoverRenderer {
     this.renderer.clearDepth();
     this.renderer.render(this.scene, this.camera);
     this.renderer.autoClear = true;
+    this.countScene.background = this.gpRecords
+      ? this.gpRecordBackground
+      : null;
     this.nameLetters.visible = !!this.nameEntry;
     this.continueLetters.visible = !!this.continuePrompt;
     this.resultLetters.visible = !!this.result;

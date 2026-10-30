@@ -158,7 +158,11 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       () => window.hoverDiagnostics().postrace === "name",
     );
     for (let i = 0; i < 3; i++) await key("Enter");
-    await key("Escape");
+    await page.waitForFunction(
+      () => window.hoverDiagnostics().postrace === "lap",
+    );
+    await page.waitForTimeout(50);
+    await key("KeyP");
     await wait("menu");
     await saveBeforeReload();
     await page.reload();
@@ -264,6 +268,13 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       () => window.hoverDiagnostics().postrace === "name",
     );
     for (let i = 0; i < 3; i++) await key("Enter");
+    assert.equal(
+      (await page.evaluate(() => window.hoverDiagnostics())).postrace,
+      "gap",
+    );
+    await page.waitForFunction(
+      () => window.hoverDiagnostics().postrace === "lap",
+    );
     await page.screenshot({ path: "/tmp/hover-gp-records.png" });
     for (let course = 0; course < 3; course++) {
       const rows = await page.evaluate(
@@ -271,8 +282,19 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         course,
       );
       assert.ok(rows.some((r) => r.time === 10 && r.name === "BAA"));
+      await key("Escape");
+      assert.equal(
+        (await page.evaluate(() => window.hoverDiagnostics())).postrace,
+        "gap",
+      );
+      await page.waitForFunction(
+        () => window.hoverDiagnostics().postrace === "total",
+      );
       await key("Enter");
-      await key("Enter");
+      if (course < 2)
+        await page.waitForFunction(
+          () => window.hoverDiagnostics().postrace === "lap",
+        );
     }
     await wait("demo");
     await key("Enter");
