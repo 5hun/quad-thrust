@@ -587,9 +587,15 @@ export class OriginalMenu {
             HOVER_TRACKS.forEach((_, i) => {
                 const row = HoverRecords.read(this.recordClass, i, "lap")[0];
                 this.text(this.courseName(i), 16, 24 + i * 24, 8, i === this.selected ? "#00ff00" : "white");
-                this.text(this.time(row?.time), 192, 24 + i * 24, 8, i === this.selected ? "#00ff00" : "white");
-                this.text(this.time(HoverRecords.read(this.recordClass, i, "total")[0]
-                    ?.time), 192, 34 + i * 24);
+                const total = HoverRecords.read(this.recordClass, i, "total")[0];
+                // OTR_MODE.C view_records: draw_minicar(..., 2048) halves the
+                // 24x16 portrait beside each course's BEST LAP and TOTAL record.
+                [row, total].forEach((record, line) => {
+                    const y = 24 + i * 24 + line * 10;
+                    this.text(`${this.time(record?.time)} ${record?.name || "---"}`, 184, y, 8, i === this.selected ? "#00ff00" : "white");
+                    if (record && this.portraits.complete && this.portraits.naturalWidth)
+                        g.drawImage(this.portraits, 0, record.machine * 16, 24, 16, 160, y, 12, 8);
+                });
             });
         }
         else if (this.screen === "record-detail") {

@@ -213,6 +213,72 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await screen("record-detail");
     await press("Escape");
     await screen("records");
+    // The course overview has separate half-size portraits for the two
+    // winning machines; cover every course, machine and record category.
+    for (const [category, offset] of [
+      ["time", 0],
+      ["gp", 2],
+    ]) {
+      if (category === "gp") {
+        await press("Escape");
+        await click("GRANDPRIX'S");
+        await screen("records");
+      }
+      await page.evaluate(
+        ({ category, offset }) => {
+          for (let course = 0; course < 9; course++)
+            for (const [kind, line] of [
+              ["lap", 0],
+              ["total", 1],
+            ])
+              window.HoverRecords.save(
+                category,
+                course,
+                kind,
+                0.01,
+                (course + line + offset) % 6,
+                "WIN",
+              );
+          window.recordListPortraits = {};
+          window.recordListDrawImage =
+            window.CanvasRenderingContext2D.prototype.drawImage;
+          window.CanvasRenderingContext2D.prototype.drawImage = function (
+            ...args
+          ) {
+            if (
+              this.canvas.id === "original-menu" &&
+              args[0]?.src?.endsWith("/minicars.png")
+            )
+              window.recordListPortraits[args[6]] = args.slice(1);
+            return window.recordListDrawImage.apply(this, args);
+          };
+        },
+        { category, offset },
+      );
+      await page.waitForFunction(
+        () => Object.keys(window.recordListPortraits).length === 18,
+      );
+      const portraits = await page.evaluate(() => {
+        window.CanvasRenderingContext2D.prototype.drawImage =
+          window.recordListDrawImage;
+        return window.recordListPortraits;
+      });
+      for (let course = 0; course < 9; course++)
+        for (let line = 0; line < 2; line++) {
+          const y = 24 + course * 24 + line * 10;
+          assert.deepEqual(portraits[y], [
+            0,
+            ((course + line + offset) % 6) * 16,
+            24,
+            16,
+            160,
+            y,
+            12,
+            8,
+          ]);
+        }
+    }
+    await page.screenshot({ path: "/tmp/hover-record-list-fixed.png" });
     await title();
     await click("OPTION");
     await click("MUSIC MODE");
