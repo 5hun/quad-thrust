@@ -80,15 +80,13 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       const yellow = [r.availableCups(), r.machineCount()];
       r.completeCup(2);
       const red = [r.availableCups(), r.machineCount()];
-      localStorage.setItem(
-        "hover-training-marks",
-        JSON.stringify(Array(15).fill(15)),
-      );
+      for (let stage = 0; stage < 15; stage++)
+        for (let machine = 0; machine < 4; machine++)
+          window.HoverTraining.saveMark(stage, machine);
       const incomplete = r.machineCount();
-      localStorage.setItem(
-        "hover-training-marks",
-        JSON.stringify(Array(15).fill(31)),
-      );
+      for (let stage = 0; stage < 15; stage++)
+        window.HoverTraining.saveMark(stage, 4);
+      r.completeTraining();
       return { blue, yellow, red, incomplete, complete: r.machineCount() };
     });
     assert.deepEqual(progress, {
@@ -97,6 +95,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       red: [3, 5],
       incomplete: 5,
       complete: 6,
+    });
+    await click("OPTION");
+    await click("MEMORY CARD");
+    await click("SLOT 1");
+    await click("AUTO LOAD");
+    await click("SAVE SYSTEM DATA");
+    await page.waitForFunction(() => {
+      const c = window.hoverDiagnostics().card;
+      return c && !c.busy && !c.errorFrames;
     });
     await page.reload();
     await page.waitForFunction(

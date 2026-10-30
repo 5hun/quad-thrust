@@ -204,12 +204,12 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     );
     await back();
     await page.evaluate(() => window.HoverRules.completeCup(2));
-    await page.evaluate(() =>
-      window.localStorage.setItem(
-        "hover-training-marks",
-        JSON.stringify(Array(15).fill(31)),
-      ),
-    );
+    await page.evaluate(() => {
+      for (let stage = 0; stage < 15; stage++)
+        for (let machine = 0; machine < 5; machine++)
+          window.HoverTraining.saveMark(stage, machine);
+      window.HoverRules.completeTraining();
+    });
     await click("マシン紹介");
     const machines = [
       "ＬＵＳＴＥＲ",

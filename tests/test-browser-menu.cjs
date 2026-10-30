@@ -39,6 +39,19 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       );
       await page.keyboard.press("Enter");
       await page.keyboard.press("Enter");
+      // Legacy test progress is migrated to SLOT 1, then explicitly loaded.
+      await click("OPTION");
+      await click("MEMORY CARD");
+      await click("SLOT 1");
+      await click("LOAD SYSTEM DATA");
+      await page.waitForFunction(() => {
+        const c = window.hoverDiagnostics().card;
+        return c && !c.busy && !c.errorFrames;
+      });
+      await press("Escape");
+      await press("Escape");
+      await press("Escape");
+      await press("ArrowUp");
     };
     const title = async () => {
       await page.reload();

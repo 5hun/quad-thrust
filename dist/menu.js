@@ -26,6 +26,7 @@ export class OriginalMenu {
     hooks;
     screen = "title";
     selected = 0;
+    card = null;
     introFrames = 0;
     entered = performance.now();
     mode = "time";
@@ -93,6 +94,8 @@ export class OriginalMenu {
         document.getElementById("menu-controls").hidden = true;
     }
     tick(keys = {}) {
+        if (this.screen === "card")
+            this.card?.tick(keys, this.padHeld);
         if (this.screen === "help") {
             const held = (code) => !!keys[code] || this.padHeld.has(code);
             this.help.tick(+held("ArrowDown") - +held("ArrowUp"), held("KeyZ") || held("Space"));
@@ -117,7 +120,9 @@ export class OriginalMenu {
         this.entered = performance.now();
         this.panel.dataset.screen = screen;
         this.buttons.replaceChildren();
-        if (screen === "help") {
+        if (screen === "card")
+            this.card?.buttons();
+        else if (screen === "help") {
             if (this.help.page === "book") {
                 this.button("上へスクロール", 296, 0, 24, 100, () => this.help.move(-1));
                 this.button("下へスクロール", 296, 140, 24, 100, () => this.help.move(1));
@@ -165,6 +170,13 @@ export class OriginalMenu {
             .forEach((b) => b.setAttribute("aria-current", String(+b.dataset.index === this.selected)));
     }
     move(delta) {
+        if (this.screen === "card") {
+            if (this.card?.cursor !== null)
+                this.card?.horizontal(delta);
+            else
+                this.card?.move(delta);
+            return;
+        }
         if (this.introFrames)
             return;
         if (this.screen === "help") {
@@ -239,6 +251,10 @@ export class OriginalMenu {
         this.show("notice");
     }
     confirm() {
+        if (this.screen === "card") {
+            this.card?.confirm();
+            return;
+        }
         if (this.introFrames ||
             (this.screen === "help" && this.help.page === "book"))
             return;
@@ -288,7 +304,7 @@ export class OriginalMenu {
                     this.hooks.ending();
                     break;
                 }
-                this.message("MEMORY CARD\n記録・課題クリアは\nこのブラウザに自動保存します。\nリプレイはセッション中保持します。\nPS1のカード形式は未対応です。", "slots");
+                this.hooks.card(i);
                 break;
             case "record-kind":
                 this.recordClass = i === 0 ? "gp" : "time";
@@ -325,6 +341,10 @@ export class OriginalMenu {
         }
     }
     back() {
+        if (this.screen === "card") {
+            this.card?.back();
+            return;
+        }
         if (this.introFrames)
             return;
         this.hooks.sound("cancel");
@@ -338,6 +358,7 @@ export class OriginalMenu {
             if (this.mode.startsWith("train"))
                 this.show("training");
             else {
+                this.hooks.save?.();
                 this.hooks.music(null);
                 this.show(this.mode.startsWith("gp") || this.mode === "practice"
                     ? "gp"
@@ -357,6 +378,8 @@ export class OriginalMenu {
         else if (this.screen === "notice")
             this.show(this.noticeParent, this.noticeSelection);
         else if (parent[this.screen]) {
+            if (this.screen === "training")
+                this.hooks.trainingDone?.();
             if (this.screen === "training" || this.screen === "music")
                 this.hooks.music(null);
             const [screen, i] = parent[this.screen];
@@ -368,6 +391,10 @@ export class OriginalMenu {
         }
     }
     key(code) {
+        if (this.screen === "card") {
+            this.card?.key(code);
+            return;
+        }
         if (this.introFrames) {
             if (code === "Enter") {
                 this.introFrames = 1;
@@ -409,8 +436,10 @@ export class OriginalMenu {
                 active.add("ArrowLeft");
             if (p.buttons[15]?.pressed || p.axes[0] > 0.5)
                 active.add("ArrowRight");
-            if (p.buttons[0]?.pressed || p.buttons[9]?.pressed)
+            if (p.buttons[0]?.pressed)
                 active.add("Enter");
+            if (p.buttons[9]?.pressed)
+                active.add(this.screen === "card" ? "KeyP" : "Enter");
             if (p.buttons[1]?.pressed)
                 active.add("Escape");
             if (p.buttons[2]?.pressed &&
@@ -463,7 +492,9 @@ export class OriginalMenu {
         g.clearRect(0, 0, 320, 240);
         g.imageSmoothingEnabled = false;
         const list = lists[this.screen];
-        if (list) {
+        if (this.screen === "card")
+            this.card?.draw();
+        else if (list) {
             if (this.logo.complete && this.logo.naturalWidth) {
                 const offset = Math.max(0, this.introFrames - 60) * 8;
                 g.drawImage(this.logo, 0, 0, 256, 51, 40 - offset, 8 + (offset * 50) / 116, 256, 51);
@@ -587,7 +618,7 @@ export class OriginalMenu {
                 g.fill();
             }
         }
-        this.panel.setAttribute("aria-label", `${this.screen}: ${list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : this.screen === "training" ? HoverTraining.tasks[+field("course").value].description : this.screen === "notice" ? this.notice : this.screen === "help" ? (this.help.page === "book" ? `${this.help.book} ${this.help.scroll}/${this.help.maxScroll}\n${this.help.description}` : this.help.items[this.help.selected]) : "選択画面")}`);
+        this.panel.setAttribute("aria-label", `${this.screen}: ${this.screen === "card" ? this.card?.label : list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : this.screen === "training" ? HoverTraining.tasks[+field("course").value].description : this.screen === "notice" ? this.notice : this.screen === "help" ? (this.help.page === "book" ? `${this.help.book} ${this.help.scroll}/${this.help.maxScroll}\n${this.help.description}` : this.help.items[this.help.selected]) : "選択画面")}`);
     }
     jp(text, x, y, size = 12) {
         this.g.fillStyle = "white";

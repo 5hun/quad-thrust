@@ -21,6 +21,42 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         state,
       );
     const key = (code) => page.keyboard.press(code);
+    async function saveBeforeReload() {
+      while (
+        (await page.evaluate(() => window.hoverDiagnostics())).menuScreen !==
+        "title"
+      )
+        await key("Escape");
+      for (const name of [
+        "OPTION",
+        "MEMORY CARD",
+        "SLOT 1",
+        "SAVE SYSTEM DATA",
+      ])
+        await page.getByRole("button", { name, exact: true }).click();
+      await page.waitForFunction(() => {
+        const c = window.hoverDiagnostics().card;
+        return c && !c.busy && !c.errorFrames;
+      });
+    }
+    async function loadAfterReload() {
+      for (const name of [
+        "OPTION",
+        "MEMORY CARD",
+        "SLOT 1",
+        "LOAD SYSTEM DATA",
+      ])
+        await page.getByRole("button", { name, exact: true }).click();
+      await page.waitForFunction(() => {
+        const c = window.hoverDiagnostics().card;
+        return c && !c.busy && !c.errorFrames;
+      });
+      await key("Escape");
+      await key("Escape");
+      await key("Escape");
+      await key("ArrowUp");
+    }
+
     async function force(reason, winner = false) {
       await page.evaluate(
         ({ reason, winner }) => {
@@ -124,12 +160,14 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     for (let i = 0; i < 3; i++) await key("Enter");
     await key("Escape");
     await wait("menu");
+    await saveBeforeReload();
     await page.reload();
     await page.waitForFunction(
       () => window.hoverDiagnostics?.().state === "demo",
     );
     await page.keyboard.press("Enter");
     await page.keyboard.press("Enter");
+    await loadAfterReload();
     await wait("menu");
     for (const code of ["Enter", "ArrowDown", "Enter", "Enter", "Enter"])
       await key(code);
@@ -170,12 +208,14 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await wait("menu");
     await page.setViewportSize({ width: 1100, height: 900 });
     // Complete a full GP: automatic rounds, source credits, one name for all courses.
+    await saveBeforeReload();
     await page.reload();
     await page.waitForFunction(
       () => window.hoverDiagnostics?.().state === "demo",
     );
     await page.keyboard.press("Enter");
     await page.keyboard.press("Enter");
+    await loadAfterReload();
     await wait("menu");
     for (const code of ["Enter", "Enter", "Enter", "Enter"]) await key(code);
     for (let round = 0; round < 3; round++) {

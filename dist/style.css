@@ -855,6 +855,8 @@ footer[hidden],
 }
 main {
   max-width: 1040px;
+  /* Keep the entire original 4:3 screen and browser controls in short windows. */
+  max-width: min(1040px, calc((100svh - 96px) * 4 / 3 + 32px));
   padding: 0 16px 24px;
 }
 .game-wrap:not(.playing),

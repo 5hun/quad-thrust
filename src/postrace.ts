@@ -32,7 +32,10 @@ export class OriginalPostrace {
   held = new Set<string>();
   portraits = new Image();
   staffText = new StaffText();
-  constructor(public font: OriginalMenu) {
+  constructor(
+    public font: OriginalMenu,
+    public storage: Storage = localStorage,
+  ) {
     this.portraits.src = "assets/minicars.png";
     document.getElementById("postrace-prev")!.onclick = () =>
       this.key("ArrowLeft");
@@ -43,7 +46,7 @@ export class OriginalPostrace {
     document.getElementById("postrace-exit")!.onclick = () =>
       this.key("Escape");
     try {
-      const saved = localStorage.getItem("hover-player-name");
+      const saved = this.storage.getItem("hover-player-name");
       if (
         saved?.length === 3 &&
         [...saved].every((c) => ENTRY_CHARACTERS.includes(c))
@@ -133,7 +136,7 @@ export class OriginalPostrace {
     if (this.saved) return;
     const name = this.name.map((i) => ENTRY_CHARACTERS[i]).join("");
     try {
-      localStorage.setItem("hover-player-name", name);
+      this.storage.setItem("hover-player-name", name);
     } catch {}
     if (this.batch.length) {
       for (const row of this.batch) {

@@ -3,6 +3,7 @@ import { StaffText } from "./staff-text.js";
 export const ENTRY_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ,.^_0123456789%*?&!";
 export class OriginalPostrace {
     font;
+    storage;
     panel = document.getElementById("postrace");
     canvas = document.getElementById("postrace-canvas");
     phase = null;
@@ -25,15 +26,16 @@ export class OriginalPostrace {
     held = new Set();
     portraits = new Image();
     staffText = new StaffText();
-    constructor(font) {
+    constructor(font, storage = localStorage) {
         this.font = font;
+        this.storage = storage;
         this.portraits.src = "assets/minicars.png";
         document.getElementById("postrace-prev").onclick = () => this.key("ArrowLeft");
         document.getElementById("postrace-next").onclick = () => this.key("ArrowRight");
         document.getElementById("postrace-confirm").onclick = () => this.key("Enter");
         document.getElementById("postrace-exit").onclick = () => this.key("Escape");
         try {
-            const saved = localStorage.getItem("hover-player-name");
+            const saved = this.storage.getItem("hover-player-name");
             if (saved?.length === 3 &&
                 [...saved].every((c) => ENTRY_CHARACTERS.includes(c)))
                 this.name = [...saved].map((c) => ENTRY_CHARACTERS.indexOf(c));
@@ -114,7 +116,7 @@ export class OriginalPostrace {
             return;
         const name = this.name.map((i) => ENTRY_CHARACTERS[i]).join("");
         try {
-            localStorage.setItem("hover-player-name", name);
+            this.storage.setItem("hover-player-name", name);
         }
         catch { }
         if (this.batch.length) {
