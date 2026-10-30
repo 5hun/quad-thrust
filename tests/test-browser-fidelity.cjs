@@ -68,6 +68,75 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         errors: r.errors,
       };
     });
+    const storedMatrices = await page.evaluate(() => {
+      const { r, t, c } = window.fidelity;
+      const pose = {
+        ...c,
+        type: 0,
+        x: 10,
+        y: 2,
+        z: 20,
+        groundY: 0,
+        sourceMatrix: [4096, 0, 64, 0, 4096, 0, -64, 0, 4095],
+        sourceShadowMatrix: [4096, 0, 0, 0, 0, -4096, 0, 4096, 0],
+      };
+      r.draw(t, pose, [], "running", 0, {});
+      const ship = r.ships[0];
+      const body = ship.body.matrixWorld.toArray(),
+        shadow = ship.shadow.matrixWorld.toArray();
+      const flags = [ship.body.matrixAutoUpdate, ship.shadow.matrixAutoUpdate];
+      pose.x = 14;
+      r.draw(t, pose, [], "running", 0, {});
+      const shadowX = ship.shadow.matrixWorld.elements[12];
+      r.draw(
+        t,
+        { ...c, sourceMatrix: undefined, sourceShadowMatrix: undefined },
+        [],
+        "running",
+        0,
+        {},
+      );
+      const fallback = [
+        ship.body.matrixAutoUpdate,
+        ship.shadow.matrixAutoUpdate,
+      ];
+      r.draw(t, c, [], "destroyed", 0, {});
+      return { body, shadow, flags, shadowX, fallback };
+    });
+    assert.deepEqual(
+      storedMatrices.body,
+      [
+        1,
+        0,
+        64 / 4096,
+        0,
+        0,
+        1,
+        0,
+        0,
+        -64 / 4096,
+        0,
+        4095 / 4096,
+        0,
+        10,
+        2,
+        -20,
+        1,
+      ],
+      "render saved matrix without quaternion normalization",
+    );
+    assert.deepEqual(
+      storedMatrices.shadow,
+      [1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 10, 0.06, -20, 1],
+      "shadow follows its independent saved attitude",
+    );
+    assert.deepEqual(storedMatrices.flags, [false, false]);
+    assert.equal(
+      storedMatrices.shadowX,
+      14,
+      "manually managed shadow matrices keep moving",
+    );
+    assert.deepEqual(storedMatrices.fallback, [true, true]);
     assert.equal(result.debris, 64);
     assert.deepEqual(result.chipVertices, [0, -15, 0, -10, 10, 0, 10, 10, 0]);
     assert.ok(

@@ -459,3 +459,23 @@ assert.ok(
   sourcePlayer.front[0] || sourcePlayer.front[2],
   "source player receives the original bank force",
 );
+
+// CAR_CTR.C guards the input before adding 11; it can cross the integer
+// 227-unit boundary by one step instead of clamping to twenty degrees.
+for (const [pitch, input, expected] of [
+  [226, 1, 237],
+  [-226, -1, -237],
+  [227, 1, 227],
+  [-227, -1, -227],
+]) {
+  const car = E.placeOnGrid(E.create(bankTrack), bankTrack);
+  car.y = 100;
+  car.grip = false;
+  car.pitch = pitch * unit;
+  E.step(car, bankTrack, { pitch: input }, 1 / 60);
+  assert.equal(
+    Math.round(car.pitch / unit),
+    expected,
+    "original aerial pitch guard at " + pitch,
+  );
+}

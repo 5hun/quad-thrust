@@ -480,6 +480,10 @@ namespace HoverEngine {
       heading: 0,
       sourcePosition: undefined,
       sourceContact: undefined,
+      sourceMatrix: undefined,
+      sourceShadowMatrix: undefined,
+      sourceShadowAngles: undefined,
+      sourcePreviousAngles: undefined,
       index: p.index,
       lastDistance: p.distance,
       progress:
@@ -515,6 +519,10 @@ namespace HoverEngine {
       recovery: 1,
       sourcePosition: undefined,
       sourceContact: undefined,
+      sourceMatrix: undefined,
+      sourceShadowMatrix: undefined,
+      sourceShadowAngles: undefined,
+      sourcePreviousAngles: undefined,
       lastLine: p.index,
       previousTile:
         track.nodes[p.index].tiles[
@@ -553,6 +561,162 @@ namespace HoverEngine {
     if (value > 5) value -= 5;
     if (value < 5) value += 5;
     return -value * UNIT;
+  }
+  const matrixSine = Array.from({ length: 4096 }, (_, i) =>
+    Math.round(Math.sin(i * UNIT) * 4096),
+  );
+  // Net Yaroze RotMatrix(x,0,z), followed by RotMatrixY(y): Ry * Rx * Rz.
+  // The SDK's sine table/final matrix rounding still needs binary comparison;
+  // the controller below is independently compared using explicit matrices.
+  export function sourceMatrix(pitch: number, yaw: number, roll: number) {
+    const sin = (v: number) => matrixSine[v & 4095],
+      cos = (v: number) => sin(v + 1024);
+    const sx = sin(pitch),
+      cx = cos(pitch),
+      sy = sin(yaw),
+      cy = cos(yaw),
+      sz = sin(roll),
+      cz = cos(roll);
+    const base = [
+      cz,
+      -sz,
+      0,
+      Math.imul(cx, sz) >> 12,
+      Math.imul(cx, cz) >> 12,
+      -sx,
+      Math.imul(sx, sz) >> 12,
+      Math.imul(sx, cz) >> 12,
+      cx,
+    ];
+    const result = base.slice();
+    for (let column = 0; column < 3; column++) {
+      result[column] =
+        ((Math.imul(cy, base[column]) + Math.imul(sy, base[6 + column])) | 0) >>
+        12;
+      result[6 + column] =
+        ((-Math.imul(sy, base[column]) + Math.imul(cy, base[6 + column])) |
+          0) >>
+        12;
+    }
+    return result.map((v) => (v << 16) >> 16);
+  }
+  function sourceAngles(car: Car) {
+    return [
+      Math.round(car.pitch / UNIT),
+      Math.round(car.heading / UNIT),
+      Math.round(-car.roll / UNIT),
+    ].map((v) => (v << 16) >> 16);
+  }
+  function ensureSourceAttitude(car: Car) {
+    const angles = sourceAngles(car);
+    car.sourceShadowAngles ??= [0, 0, 0];
+    car.sourcePreviousAngles ??= angles.slice();
+    car.sourceMatrix ??= sourceMatrix(...(angles as [number, number, number]));
+    car.sourceShadowMatrix ??= sourceMatrix(
+      car.sourceShadowAngles[0],
+      angles[1],
+      car.sourceShadowAngles[2],
+    );
+  }
+  export function rebuildSourceMatrices(car: Car) {
+    const angles = sourceAngles(car),
+      shadow = car.sourceShadowAngles || [0, 0, 0];
+    car.sourceMatrix = sourceMatrix(...(angles as [number, number, number]));
+    car.sourceShadowMatrix = sourceMatrix(shadow[0], angles[1], shadow[2]);
+  }
+  // CAR_CTR2.C car_rotation: both dot products consume last frame's saved
+  // matrices. SVECTOR assignments wrap to signed 16 bits after each update.
+  export function sourceRotation(car: Car, normal: Vec3) {
+    ensureSourceAttitude(car);
+    const short = (v: number) => (v << 16) >> 16;
+    const angles = sourceAngles(car).map((v) => ((v + 4096) & 8191) - 4096);
+    const shadow = car.sourceShadowAngles!.map((v) => v & 4095);
+    if (car.sourceSpeed >= 5 && MACHINES[car.type].rudder)
+      angles[1] = short(
+        angles[1] - Math.trunc(car.rudderAngle / MACHINES[car.type].rudder),
+      );
+    const previous = car.sourcePreviousAngles!;
+    if (!car.cpuLevel && !car.grip) {
+      if (angles[2] > 5) angles[2] = short(angles[2] - 5);
+      if (angles[2] < 5) angles[2] = short(angles[2] + 5);
+    } else {
+      const error = (matrix: Vec3, column: number) =>
+        short(
+          (-normal.reduce(
+            (sum, v, k) => (sum + Math.imul(v, matrix[k * 3 + column])) | 0,
+            0,
+          ) |
+            0) >>
+            12,
+        );
+      const right = error(car.sourceMatrix!, 0),
+        forward = error(car.sourceMatrix!, 2);
+      if (Math.abs(right) < 600)
+        angles[2] = short(
+          angles[2] +
+            (Math.imul(
+              car.sourceSpeed,
+              ((previous[1] - angles[1] + 2048) & 4095) - 2048,
+            ) >>
+              8),
+        );
+      if (forward > 40) angles[0] = short(angles[0] + 11);
+      if (forward < -40) angles[0] = short(angles[0] - 11);
+      if (right < -40) angles[2] = short(angles[2] + 11);
+      if (right > 40) angles[2] = short(angles[2] - 11);
+      const shadowRight = error(car.sourceShadowMatrix!, 0),
+        shadowForward = error(car.sourceShadowMatrix!, 2);
+      if (shadowForward > 40) shadow[0] = short(shadow[0] + 22);
+      if (shadowForward < -40) shadow[0] = short(shadow[0] - 22);
+      if (shadowRight < -40) shadow[2] = short(shadow[2] + 22);
+      if (shadowRight > 40) shadow[2] = short(shadow[2] - 22);
+    }
+    car.pitch = angles[0] * UNIT;
+    car.heading = angles[1] * UNIT;
+    car.roll = -angles[2] * UNIT;
+    car.sourceShadowAngles = shadow;
+    car.sourcePreviousAngles = angles.slice();
+  }
+  // CAR_CTR.C car_acceralate applies thrust through the previously saved
+  // matrix, with arithmetic shifts (including negative lateral thrust).
+  export function sourceAcceleration(car: Car, mode: number) {
+    const speed = car.sourceSpeed,
+      m = MACHINES[car.type];
+    if (speed > 2000) return;
+    let thrust: number, column: number;
+    let targets: Vec3[];
+    if (mode === 0) {
+      thrust = (m.accel - (Math.imul(m.falloff, speed) >> 6)) >> 2;
+      if (car.turbo) {
+        car.damage = (car.damage + 48) | 0;
+        let turbo = (m.turbo - (Math.imul(m.turboFall, speed) >> 4)) >> 2;
+        if (Number(car.turbo) >= 2)
+          turbo = Math.imul(turbo, Number(car.turbo)) >> 8;
+        if (turbo > 0) thrust += turbo;
+      }
+      if ((car.cpuLevel || 0) >= 2) {
+        const extra = (m.turbo - (Math.imul(m.turboFall, speed) >> 4)) >> 4;
+        if (extra > 0) thrust += Math.imul(extra, car.catchUp ? 3 : 2) >> 1;
+      }
+      column = 2;
+      targets = [car.front, car.rear];
+    } else {
+      const positive = mode === 2 || mode === 4;
+      const yaw = mode === 1 || mode === 4 ? -m.rotation : m.rotation;
+      car.heading =
+        (((Math.round(car.heading / UNIT) + yaw) << 16) >> 16) * UNIT;
+      thrust = (positive ? m.side - (speed >> 4) : -m.side + (speed >> 4)) >> 2;
+      column = 0;
+      targets = [mode < 3 ? car.front : car.rear];
+    }
+    thrust = Math.trunc((thrust << 7) / m.weight);
+    for (const vector of targets)
+      for (let k = 0; k < 3; k++)
+        if (k !== 1 || car.grip)
+          vector[k] =
+            (vector[k] +
+              (Math.imul(car.sourceMatrix![k * 3 + column], thrust) >> 12)) |
+            0;
   }
   export function sourceContact(
     node: TrackNode,
@@ -826,8 +990,10 @@ namespace HoverEngine {
     stepDebris(car);
     const node = track.nodes[near.index];
     const source = !!(node.source && node.end?.source && node.sourceNormals);
-    if (source) car.sourceContact = sourceContact(node, near.row, inside);
-    else car.grip = inside && car.y <= target + 1.5 && car.y >= surface - 1;
+    if (source) {
+      car.sourceContact = sourceContact(node, near.row, inside);
+      ensureSourceAttitude(car);
+    } else car.grip = inside && car.y <= target + 1.5 && car.y >= surface - 1;
     const ch = inside ? near.tile : "outside";
     car.tile = ch;
     // Preserve the grip used by car_chipeffect for audio as well as drawing;
@@ -992,7 +1158,8 @@ namespace HoverEngine {
     const oldHeading = car.heading,
       sx = Math.sin(car.heading),
       sz = Math.cos(car.heading);
-    if (input.accel || car.turbo) {
+    if (source && (input.accel || car.turbo)) sourceAcceleration(car, 0);
+    else if (input.accel || car.turbo) {
       let thrust = (m.accel - ((m.falloff * speed) >> 6)) >> 2;
       if (car.turbo) {
         car.damage += 48;
@@ -1014,12 +1181,19 @@ namespace HoverEngine {
           if (car.grip) v[1] -= Math.round(Math.sin(car.pitch) * thrust);
         }
     }
-    if (!car.grip)
-      car.pitch = clamp(
-        car.pitch + (input.pitch || 0) * 11 * UNIT,
-        (-20 * Math.PI) / 180,
-        (20 * Math.PI) / 180,
-      );
+    if (source && !car.grip) {
+      let pitch = Math.round(car.pitch / UNIT);
+      if ((input.pitch || 0) < 0 && pitch > -227) pitch -= 11;
+      if ((input.pitch || 0) > 0 && pitch < 227) pitch += 11;
+      car.pitch = pitch * UNIT;
+    } else {
+      if (!car.grip)
+        car.pitch = clamp(
+          car.pitch + (input.pitch || 0) * 11 * UNIT,
+          (-20 * Math.PI) / 180,
+          (20 * Math.PI) / 180,
+        );
+    }
     car.active = { ...input, accel: !!(input.accel || car.turbo) };
     if (car.type !== 5)
       for (const [key, side, yaw, vector] of [
@@ -1030,37 +1204,49 @@ namespace HoverEngine {
       ] as ["l1" | "l2" | "r1" | "r2", number, number, Vec3][])
         if (input[key]) {
           car.active[key] = true;
-          car.heading += yaw * m.rotation * UNIT;
-          const thrust = Math.trunc(
-            (((side * (m.side - (speed >> 4))) >> 2) * 128) / m.weight,
-          );
-          vector[0] += Math.round(sz * thrust);
-          vector[2] -= Math.round(sx * thrust);
+          if (source) {
+            sourceAcceleration(
+              car,
+              key === "r1" ? 1 : key === "l1" ? 2 : key === "r2" ? 3 : 4,
+            );
+          } else {
+            car.heading += yaw * m.rotation * UNIT;
+            const thrust = Math.trunc(
+              (((side * (m.side - (speed >> 4))) >> 2) * 128) / m.weight,
+            );
+            vector[0] += Math.round(sz * thrust);
+            vector[2] -= Math.round(sx * thrust);
+          }
         }
-    if (m.rudder && speed >= 5)
-      car.heading -= Math.trunc(car.rudderAngle / m.rudder) * UNIT;
-    if (car.grip) {
-      const [nx, ny, nz] = near.normal;
-      const along = nx * Math.sin(car.heading) + nz * Math.cos(car.heading);
-      const across = nx * Math.cos(car.heading) - nz * Math.sin(car.heading);
-      const forwardError =
-        along * Math.cos(car.pitch) + ny * Math.sin(car.pitch);
-      const rightError =
-        across * Math.cos(car.roll) +
-        (ny * Math.cos(car.pitch) - along * Math.sin(car.pitch)) *
-          Math.sin(car.roll);
-      // CAR_CTR2.C car_rotation: normal in ship coordinates, 40-unit
-      // deadband, and integer one-degree steps. Corner bank is additive.
-      if (Math.abs(rightError) < 600)
-        car.roll +=
-          ((speed * Math.trunc(-angle(car.heading - oldHeading) / UNIT)) >> 8) *
-          UNIT;
-      if (forwardError > 40) car.pitch -= 11 * UNIT;
-      if (forwardError < -40) car.pitch += 11 * UNIT;
-      if (rightError > 40) car.roll -= 11 * UNIT;
-      if (rightError < -40) car.roll += 11 * UNIT;
-    } else if (source && !car.cpuLevel) car.roll = sourceAirRoll(car.roll);
-    else car.roll -= clamp(car.roll, -5 * UNIT, 5 * UNIT);
+    if (source) {
+      sourceRotation(car, car.sourceContact!.normal);
+      rebuildSourceMatrices(car);
+    } else {
+      if (m.rudder && speed >= 5)
+        car.heading -= Math.trunc(car.rudderAngle / m.rudder) * UNIT;
+      if (car.grip) {
+        const [nx, ny, nz] = near.normal;
+        const along = nx * Math.sin(car.heading) + nz * Math.cos(car.heading);
+        const across = nx * Math.cos(car.heading) - nz * Math.sin(car.heading);
+        const forwardError =
+          along * Math.cos(car.pitch) + ny * Math.sin(car.pitch);
+        const rightError =
+          across * Math.cos(car.roll) +
+          (ny * Math.cos(car.pitch) - along * Math.sin(car.pitch)) *
+            Math.sin(car.roll);
+        // CAR_CTR2.C car_rotation: normal in ship coordinates, 40-unit
+        // deadband, and integer one-degree steps. Corner bank is additive.
+        if (Math.abs(rightError) < 600)
+          car.roll +=
+            ((speed * Math.trunc(-angle(car.heading - oldHeading) / UNIT)) >>
+              8) *
+            UNIT;
+        if (forwardError > 40) car.pitch -= 11 * UNIT;
+        if (forwardError < -40) car.pitch += 11 * UNIT;
+        if (rightError > 40) car.roll -= 11 * UNIT;
+        if (rightError < -40) car.roll += 11 * UNIT;
+      } else car.roll -= clamp(car.roll, -5 * UNIT, 5 * UNIT);
+    }
     if (source) {
       // car_chipeffect sets goal_count during the finish tick, but the
       // current call remains car_action until the following frame.
@@ -1174,7 +1360,10 @@ namespace HoverEngine {
     );
     car.active = {};
     if (car.sourceContact) {
-      if (!car.grip && !car.cpuLevel) car.roll = sourceAirRoll(car.roll);
+      car.rudderAngle -=
+        Math.sign(car.rudderAngle) * Math.min(22, Math.abs(car.rudderAngle));
+      sourceRotation(car, car.sourceContact.normal);
+      rebuildSourceMatrices(car);
     } else car.roll -= clamp(car.roll, -5 * UNIT, 5 * UNIT);
     stepDebris(car);
     sync(car);

@@ -69,6 +69,9 @@ interface Input {
   r2?: boolean;
 }
 interface Pose {
+  // Row-major 4.12 matrices in original PS1 coordinates.
+  sourceMatrix?: Vec3;
+  sourceShadowMatrix?: Vec3;
   x: number;
   y: number;
   z: number;
@@ -84,7 +87,7 @@ interface Pose {
   damageSemi?: boolean;
   cpuSlot?: number;
   ghost?: boolean;
-  turbo?: boolean;
+  turbo?: boolean | number;
   rudderAngle?: number;
   explosionFrames?: number;
   repairFrames?: number;
@@ -106,6 +109,8 @@ interface Pose {
   active?: Input;
 }
 interface Car extends Pose {
+  sourceShadowAngles?: Vec3;
+  sourcePreviousAngles?: Vec3;
   sourceContact?: SourceContact;
   // CAR_CTR.C posr: quarter PS1 world units, Y down.
   sourcePosition?: Vec3;
@@ -140,7 +145,7 @@ interface Car extends Pose {
   reason: "finish" | "destroyed" | "course-out" | null;
   flash: number;
   recovery: number;
-  turbo: boolean;
+  turbo: boolean | number;
   rudderAngle: number;
   grip: boolean;
   previousTile: string;

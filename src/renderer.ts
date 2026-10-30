@@ -588,6 +588,23 @@ export class HoverRenderer {
       motionTick: -1,
     };
   }
+  sourceWorldMatrix(source: Vec3) {
+    // Original coordinates -> Three: (x,y,z) -> (x,-y,-z).
+    const s = [1, -1, -1],
+      matrix = new THREE.Matrix4();
+    matrix.set(
+      ...(Array.from({ length: 16 }, (_, i) => {
+        const row = Math.floor(i / 4),
+          column = i % 4;
+        return row < 3 && column < 3
+          ? (source[row * 3 + column] * s[row] * s[column]) / 4096
+          : i === 15
+            ? 1
+            : 0;
+      }) as Parameters<THREE.Matrix4["set"]>),
+    );
+    return matrix;
+  }
   updateShip(
     ship: ReturnType<HoverRenderer["makeShip"]>,
     p: Pose,
@@ -640,8 +657,18 @@ export class HoverRenderer {
       }
     });
     ship.root.position.set(p.x, p.y, -p.z);
-    ship.root.rotation.set(0, -p.heading, 0);
-    ship.body.rotation.set(p.pitch || 0, 0, p.roll || 0);
+    if (p.sourceMatrix) {
+      ship.root.rotation.set(0, 0, 0);
+      ship.body.matrixAutoUpdate = false;
+      ship.body.matrix
+        .copy(this.sourceWorldMatrix(p.sourceMatrix))
+        .setPosition(ship.body.position);
+      ship.body.matrixWorldNeedsUpdate = true;
+    } else {
+      ship.root.rotation.set(0, -p.heading, 0);
+      ship.body.matrixAutoUpdate = true;
+      ship.body.rotation.set(p.pitch || 0, 0, p.roll || 0);
+    }
     for (const g of ship.rudders)
       g.rotation.y = (-(p.rudderAngle || 0) * Math.PI * 2) / 4096;
     const size =
@@ -708,10 +735,22 @@ export class HoverRenderer {
       ship.shadow.visible =
         p.onRoad !== false && (explosion === undefined || explosion <= 180);
       ship.shadow.position.set(p.x, (p.groundY ?? p.y - 2) + 0.06, -p.z);
-      const n = p.groundNormal || [0, 4096, 0];
-      const up = new THREE.Vector3(n[0], n[1], -n[2]).normalize();
-      ship.shadow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
-      ship.shadow.rotateY(-p.heading);
+      if (p.sourceShadowMatrix) {
+        ship.shadow.matrixAutoUpdate = false;
+        ship.shadow.matrix
+          .copy(this.sourceWorldMatrix(p.sourceShadowMatrix))
+          .setPosition(ship.shadow.position);
+        ship.shadow.matrixWorldNeedsUpdate = true;
+      } else {
+        ship.shadow.matrixAutoUpdate = true;
+        const n = p.groundNormal || [0, 4096, 0];
+        const up = new THREE.Vector3(n[0], n[1], -n[2]).normalize();
+        ship.shadow.quaternion.setFromUnitVectors(
+          new THREE.Vector3(0, 1, 0),
+          up,
+        );
+        ship.shadow.rotateY(-p.heading);
+      }
     }
     const inverse = new THREE.Matrix4();
     ship.root.updateMatrixWorld(true);
