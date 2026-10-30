@@ -23,6 +23,7 @@ declare global {
   const HOVER_MODELS: Window["HOVER_MODELS"];
   const HOVER_BACKGROUNDS: Window["HOVER_BACKGROUNDS"];
   interface Window {
+    demoAudioAnalyser: AnalyserNode;
     HOVER_TRACKS: RawTrack[];
     HOVER_TRAINING_TRACKS: RawTrack[];
     fidelity: {

@@ -661,6 +661,8 @@ function beginDemo() {
         "SAMPLE21",
     ];
     originalSound.playCourse(music[Math.floor(Math.random() * music.length)]);
+    if (sound)
+        initAudio();
     view.yaw = null;
     view.countdown = null;
     view.result = null;
@@ -1112,6 +1114,19 @@ function initAudio() {
         console.error(error);
     });
 }
+// Try autoplay at startup; browsers that require user activation can leave
+// resume() pending. Retry within a trusted gesture without changing mute state.
+function unlockAudio(e) {
+    if (!sound ||
+        state === "paused" ||
+        state === "exited" ||
+        e.target === $("sound") ||
+        originalSound.context?.state === "running")
+        return;
+    initAudio();
+}
+document.addEventListener("pointerup", unlockAudio, true);
+document.addEventListener("keydown", unlockAudio, true);
 $("sound").onclick = () => {
     sound = !sound;
     initAudio();

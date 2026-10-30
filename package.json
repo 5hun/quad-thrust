@@ -19,6 +19,7 @@
     "test:credits": "node tests/test-browser-credits.ts",
     "test:phases": "node tests/test-browser-race-phases.ts",
     "test:attract": "node tests/test-browser-attract.ts",
+    "test:demo-audio": "node tests/test-browser-demo-audio.ts",
     "test:help": "node tests/test-browser-help.ts",
     "test:replay": "node tests/test-browser-replay.ts",
     "test:ghost": "node tests/test-browser-ghost.ts",
