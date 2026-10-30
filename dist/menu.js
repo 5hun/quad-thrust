@@ -32,6 +32,7 @@ export class OriginalMenu {
     mode = "time";
     recordClass = "gp";
     recordCourse = 0;
+    recordFrames = 0;
     notice = "";
     noticeParent = "title";
     noticeSelection = 0;
@@ -41,6 +42,7 @@ export class OriginalMenu {
     buttons;
     font = new Image();
     logo = new Image();
+    portraits = new Image();
     palettes = new Map();
     curves = [];
     padHeld = new Set();
@@ -63,6 +65,7 @@ export class OriginalMenu {
         this.panel.append(this.canvas, this.buttons);
         this.font.src = "assets/font.png";
         this.logo.src = "assets/title.png";
+        this.portraits.src = "assets/minicars.png";
         // car_select_init: 136 samples, three simulation ticks per graph pixel.
         this.curves = HoverEngine.MACHINES.map((m) => [false, true].map((turbo) => {
             let inertia = 0, speed = 0;
@@ -94,6 +97,8 @@ export class OriginalMenu {
         document.getElementById("menu-controls").hidden = true;
     }
     tick(keys = {}) {
+        if (this.screen === "record-detail")
+            this.recordFrames = (this.recordFrames + 1) % 1320;
         if (this.screen === "card")
             this.card?.tick(keys, this.padHeld);
         if (this.screen === "help") {
@@ -106,6 +111,7 @@ export class OriginalMenu {
         }
     }
     show(screen, selected = 0) {
+        this.recordFrames = 0;
         this.introFrames = 0;
         this.buttons.inert = false;
         lists.slots =
@@ -336,7 +342,7 @@ export class OriginalMenu {
                 this.show("record-detail");
                 break;
             case "record-detail":
-                this.show("records", this.recordCourse);
+                this.recordFrames = this.recordFrames < 660 ? 690 : 0;
                 break;
         }
     }
@@ -587,17 +593,19 @@ export class OriginalMenu {
             });
         }
         else if (this.screen === "record-detail") {
-            this.text(this.courseName(this.recordCourse), 16, 16, 16);
-            ["lap", "total"].forEach((kind, col) => {
-                const x = 16 + col * 160;
-                this.text(col ? "TOTAL RECORDS" : "BESTLAP RECORDS", x, 48);
+            // OTR_MODE.C view_records2: alternate BESTLAP and TOTAL over a live
+            // four-car course view, including DRAW_SP.C's original 24x16 portraits.
+            const frame = this.recordFrames;
+            const kind = frame < 660 ? "lap" : "total";
+            if ((frame >= 60 && frame < 660) || frame >= 720) {
+                this.text(kind === "lap" ? "BESTLAP RECORDS" : "TOTAL RECORDS", 8, 16, 16);
                 const rows = HoverRecords.read(this.recordClass, this.recordCourse, kind);
                 for (let i = 0; i < 6; i++) {
-                    this.text(`${i + 1} ${this.time(rows[i]?.time)} ${rows[i]?.name || "---"}`, x, 72 + i * 24);
-                    if (rows[i])
-                        this.text(HoverEngine.MACHINES[rows[i].machine].name, x + 16, 82 + i * 24);
+                    this.text(`${this.time(rows[i]?.time)} ${rows[i]?.name || "---"}`, 80, 48 + i * 32, 16);
+                    if (rows[i] && this.portraits.complete && this.portraits.naturalWidth)
+                        g.drawImage(this.portraits, 0, rows[i].machine * 16, 24, 16, 40, 48 + i * 32, 24, 16);
                 }
-            });
+            }
         }
         else if (this.screen === "music") {
             this.text("MUSIC MODE", 8, 8, 16, "blue");

@@ -358,16 +358,17 @@ export class OriginalSound {
       }
     }
   }
-  update(car: Car, input: Input, running: boolean) {
+  update(car: Car, input: Input, running: boolean, falling = false) {
     if (!this.context) return;
     this.continuous(70, 40, 80, running && car.energy < 12.5);
     this.continuous(71, 90, 64, running && car.grip && car.tile === "d");
     for (const { name, source, gain, pan } of this.loops) {
       const note = name === "wind" ? 8 : name === "rear" && car.turbo ? 32 : 20;
       let volume = 0;
-      if (running) {
+      if (running || falling) {
         if (name === "wind")
           volume = Math.min(127, (car.sourceSpeed || 0) >> 5) / 127;
+        else if (falling) volume = 0;
         else if (name === "rear")
           volume = input.accel || car.turbo ? 40 / 127 : 0;
         else

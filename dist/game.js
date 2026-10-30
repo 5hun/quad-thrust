@@ -64,6 +64,44 @@ catch (error) {
 }
 let track = tracks[0], car = E.create(track), mode = "time", state = "menu", countdown = 5, last = 0, accumulator = 0, worldTime = 0, keys = {}, bots = [], sound = true, padPause = false, toastTimer = 0;
 let finishRank = 1;
+let recordPreview = null;
+function updateRecordPreview(dt) {
+    if (originalMenu.screen !== "record-detail") {
+        recordPreview = null;
+        return;
+    }
+    if (!recordPreview ||
+        recordPreview.course !== originalMenu.recordCourse ||
+        recordPreview.entered !== originalMenu.entered) {
+        const track = tracks[originalMenu.recordCourse];
+        recordPreview = {
+            course: originalMenu.recordCourse,
+            entered: originalMenu.entered,
+            track,
+            cars: Array.from({ length: 4 }, (_, slot) => {
+                const racer = E.placeOnGrid(E.create(track, slot), track, slot);
+                racer.cpuLevel = 8;
+                racer.cpuSlot = slot;
+                return racer;
+            }),
+        };
+        view.yaw = null;
+        view.replayDirector.reset();
+    }
+    const { track, cars } = recordPreview;
+    for (const racer of cars) {
+        if (racer.finished)
+            E.recover(racer, track);
+        E.step(racer, track, E.driveCPU(racer, track, cars[0]), dt, true, false);
+        racer.damage = 0;
+        racer.events.length = 0;
+    }
+    E.collideAll(cars);
+    view.replayView = true;
+    view.holdCamera = view.finishCamera = false;
+    view.countdown = null;
+    view.updateCamera(cars[0]);
+}
 let demoFrames = 0, menuIdleFrames = 0;
 const format = (t) => {
     if (!Number.isFinite(t))
@@ -1066,6 +1104,10 @@ function beep() {
 }
 let currentInput = {};
 function render() {
+    if (state === "exited") {
+        view.drawBlank();
+        return;
+    }
     if (autoSaveFrames > 0) {
         view.drawBlank();
         originalMenu.g.clearRect(0, 0, 320, 240);
@@ -1097,7 +1139,12 @@ function render() {
         return;
     }
     if (state === "menu") {
-        if (originalMenu.screen === "help")
+        if (originalMenu.screen === "record-detail" && recordPreview) {
+            view.result = view.continuePrompt = view.nameEntry = null;
+            view.gpRecords = false;
+            view.draw(recordPreview.track, recordPreview.cars[0], recordPreview.cars.slice(1), "records", worldTime, {});
+        }
+        else if (originalMenu.screen === "help")
             view.drawHelp(originalMenu.help);
         else
             view.drawMenu(originalMenu.screen, track, car.type, worldTime, (performance.now() - originalMenu.entered) / 1000);
@@ -1324,6 +1371,7 @@ function update(dt) {
     }
     if (state === "menu") {
         originalMenu.tick(keys);
+        updateRecordPreview(dt);
         if ([
             "title",
             "modes",
@@ -1374,14 +1422,7 @@ function update(dt) {
     if (state === "falling") {
         ghostReplay?.step();
         updateBots(dt);
-        const m = E.MACHINES[car.type];
-        const gravity = (m.weight * 3) >> 4;
-        for (const vector of [car.front, car.rear])
-            vector[1] += gravity;
-        E.sync(car);
-        car.x += car.vx * dt;
-        car.y += car.vy * dt;
-        car.z += car.vz * dt;
+        E.stepFalling(car);
         if (++fallFrames >= 256)
             finish();
         return;
@@ -1490,6 +1531,8 @@ function frame(ts) {
     accumulator += dt;
     while (accumulator >= 1 / 60) {
         update(1 / 60);
+        if (state === "exited")
+            return;
         if (state !== "paused" && state !== "menu" && state !== "falling")
             view.updateCamera(postraceReplay?.car || car, state === "countdown" ? Math.round(countdown * 60) : 0);
         accumulator -= 1 / 60;
@@ -1498,7 +1541,7 @@ function frame(ts) {
     if (!$("hud").hidden && state !== "paused")
         hud();
     originalSound.update(car, currentInput, state === "running" ||
-        (state === "countdown" && !!trainingSession?.task.rolling));
+        (state === "countdown" && !!trainingSession?.task.rolling), state === "falling");
     requestAnimationFrame(frame);
 }
 // Pointer interactions count as activity in title submenus too.

@@ -172,6 +172,45 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await press("ArrowDown");
     await press("Enter");
     await screen("record-detail");
+    await page.evaluate(() => {
+      for (let machine = 0; machine < 6; machine++) {
+        window.HoverRecords.save(
+          "time",
+          1,
+          "lap",
+          10 + machine,
+          machine,
+          "ABC",
+        );
+        window.HoverRecords.save(
+          "time",
+          1,
+          "total",
+          30 + machine,
+          machine,
+          "DEF",
+        );
+      }
+      window.recordPortraitRows = [];
+      const drawImage = window.CanvasRenderingContext2D.prototype.drawImage;
+      window.CanvasRenderingContext2D.prototype.drawImage = function (...args) {
+        if (args[0]?.src?.endsWith("/minicars.png"))
+          window.recordPortraitRows.push(args[2]);
+        return drawImage.apply(this, args);
+      };
+    });
+    await page.waitForFunction(
+      () => new Set(window.recordPortraitRows).size === 6,
+    );
+    assert.deepEqual(
+      await page.evaluate(() =>
+        [...new Set(window.recordPortraitRows)].sort((a, b) => a - b),
+      ),
+      [0, 16, 32, 48, 64, 80],
+    );
+    await page.screenshot({ path: "/tmp/hover-view-records-fixed.png" });
+    await press("Enter");
+    await screen("record-detail");
     await press("Escape");
     await screen("records");
     await title();
@@ -270,6 +309,52 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       "exited",
     );
     await page.screenshot({ path: "/tmp/hover-exited.png" });
+    // Keyboard confirmation occurs inside update(); it must not redraw the
+    // title later in that same animation frame after clearing the display.
+    await title();
+    await press("ArrowDown");
+    await press("ArrowDown");
+    await press("ArrowDown");
+    await press("Enter");
+    await page.waitForFunction(
+      () => window.hoverDiagnostics().state === "exited",
+    );
+    assert.equal(
+      await page.evaluate(() => {
+        const data = document
+          .getElementById("original-menu")
+          .getContext("2d")
+          .getImageData(0, 0, 320, 240).data;
+        return data.every((value, i) => i % 4 !== 3 || value === 0);
+      }),
+      true,
+      "keyboard EXIT keeps the final frame blank",
+    );
+    const exitPixels = await page.locator("#game").screenshot();
+    assert.equal(
+      await page.evaluate(
+        async (bytes) => {
+          const bitmap = await window.createImageBitmap(
+            new window.Blob([new Uint8Array(bytes)], { type: "image/png" }),
+          );
+          const canvas = document.createElement("canvas");
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          const context = canvas.getContext("2d");
+          context.drawImage(bitmap, 0, 0);
+          const data = context.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height,
+          ).data;
+          return data.every((value, i) => i % 4 === 3 || value === 0);
+        },
+        [...exitPixels],
+      ),
+      true,
+      "keyboard EXIT presents an entirely black WebGL frame",
+    );
     await title();
     assert.deepEqual(errors, []);
     console.log(

@@ -337,19 +337,101 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       r.yaw = 0;
       r.countdown = 300;
       r.draw(t, c, [], "countdown", 0, {});
-      const startZ = r.camera.position.z;
+      const start = r.camera.position.clone();
       r.countdown = null;
       r.draw(t, c, [], "running", 0, {});
-      const raceZ = r.camera.position.z;
+      const distance = start.distanceTo(r.camera.position);
       r.updateCamera(c, 300);
       const startYaw = r.follow.yaw;
       r.follow.yaw = 0;
       r.updateCamera(c, 120);
-      return { distance: startZ - raceZ, startYaw, raceYaw: r.follow.yaw };
+      return { distance, startYaw, raceYaw: r.follow.yaw };
     });
-    assert.equal(startView.distance, 300, "start_count*100 in PS1 world units");
+    assert.ok(
+      Math.abs(startView.distance - 300) < 1e-9,
+      "start_count*100 along rotated camera axis",
+    );
     assert.ok(Math.abs(startView.startYaw - (90 * Math.PI * 2) / 4096) < 1e-10);
     assert.equal(startView.raceYaw, 0);
+    const redOcclusions = await page.evaluate(async () => {
+      const THREE = await import("./vendor/three.module.js");
+      const { r, t } = window.fidelity,
+        E = window.HoverEngine;
+      const red = E.prepare(window.HOVER_TRACKS[6]);
+      const car = E.placeOnGrid(E.create(red), red);
+      r.setTrack(red);
+      r.replayView = r.finishCamera = r.holdCamera = false;
+      r.countdown = null;
+      let samples = 0,
+        occlusions = 0;
+      for (let frame = 0; frame < 3600; frame++) {
+        E.step(car, red, E.drive(car, red), 1 / 60, true);
+        if (car.finished) throw Error("RED GP camera fixture fell off");
+        r.updateCamera(car);
+        if (frame % 30) continue;
+        r.draw(red, car, [], "running", frame / 60, {});
+        const target = new THREE.Vector3(car.x, car.y, -car.z);
+        const direction = target.sub(r.camera.position);
+        const length = direction.length();
+        const ray = new THREE.Raycaster(
+          r.camera.position,
+          direction.normalize(),
+          0.15,
+          length - 2,
+        );
+        occlusions += +(ray.intersectObject(r.trackGroup, true).length > 0);
+        samples++;
+      }
+      r.setTrack(t);
+      r.yaw = 0;
+      return { samples, occlusions };
+    });
+    assert.deepEqual(
+      redOcclusions,
+      { samples: 120, occlusions: 0 },
+      "RED GP opening: no course face between camera and ship",
+    );
+    const matrixView = await page.evaluate(() => {
+      const { r, t, c } = window.fidelity;
+      r.countdown = null;
+      r.replayView = r.finishCamera = r.holdCamera = false;
+      r.follow = { yaw: 0, pitch: 0, roll: 0, distance: 0 };
+      r.draw(t, c, [], "running", 0, {});
+      const neutral = [
+        r.camera.position.x - c.x,
+        r.camera.position.y - c.y,
+        r.camera.position.z + c.z,
+      ];
+      r.follow = {
+        yaw: 0,
+        pitch: (Math.trunc((4096 * 7) / 360) * Math.PI * 2) / 4096,
+        roll: Math.PI / 2,
+        distance: 0,
+      };
+      r.draw(t, c, [], "running", 0, {});
+      const bank = [
+        r.camera.position.x - c.x,
+        r.camera.position.y - c.y,
+        r.camera.position.z + c.z,
+      ];
+      r.follow = { yaw: 0, pitch: 0, roll: 0, distance: 0 };
+      return { neutral, bank };
+    });
+    const depression = (Math.trunc((4096 * 7) / 360) * Math.PI * 2) / 4096;
+    const expected = [
+      0,
+      8.5 * Math.cos(depression) + 35 * Math.sin(depression),
+      35 * Math.cos(depression) - 8.5 * Math.sin(depression),
+    ];
+    expected.forEach((v, i) =>
+      assert.ok(Math.abs(matrixView.neutral[i] - v) < 1e-9),
+    );
+    [-8.5, 0, 35].forEach((v, i) =>
+      assert.ok(
+        Math.abs(matrixView.bank[i] - v) < 1e-9,
+        "camera translation rotates with bank",
+      ),
+    );
     await page.screenshot({ path: "/tmp/hover-source-retro.png" });
     await page.evaluate(() => {
       const { r, t, c } = window.fidelity;
@@ -450,6 +532,28 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         JSON.stringify(loop),
       );
     }
+    await page.evaluate(() => {
+      const f = window.fidelity;
+      f.sound.update(
+        { ...f.c, energy: 100, sourceSpeed: 640 },
+        { accel: true, l1: true },
+        false,
+        true,
+      );
+    });
+    await page.waitForTimeout(300);
+    const fallingLevels = await page.evaluate(() =>
+      window.fidelity.sound.loops.map(({ name, gain }) => [
+        name,
+        gain.gain.value,
+      ]),
+    );
+    for (const [name, volume] of fallingLevels)
+      assert.ok(
+        Math.abs(volume - (name === "wind" ? (Math.SQRT2 * 20) / 127 : 0)) <
+          0.0001,
+        "falling keeps wind, releases boosters: " + name,
+      );
     await page.waitForTimeout(1000);
     result = await page.evaluate(() => {
       const f = window.fidelity,
