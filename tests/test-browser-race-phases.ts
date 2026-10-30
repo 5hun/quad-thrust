@@ -1,6 +1,11 @@
+import type {} from "./types";
 /* global window */
-const assert = require("node:assert/strict");
-module.exports = async function verify({ chromium, executablePath, baseURL }) {
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+module.exports = async function verify({
+  chromium,
+  executablePath,
+  baseURL,
+}: import("./types").BrowserOptions) {
   const browser = await chromium.launch({
     headless: true,
     executablePath,
@@ -13,16 +18,16 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   });
   try {
     const page = await browser.newPage();
-    const errors = [];
+    const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     const snapshot = () => page.evaluate(() => window.hoverDiagnostics());
-    const wait = (state) =>
+    const wait = (state: string) =>
       page.waitForFunction(
-        (state) => window.hoverDiagnostics?.().state === state,
+        (state: string) => window.hoverDiagnostics?.().state === state,
         state,
       );
     await page.addInitScript(() => localStorage.setItem("hover-unlocks", "15"));
-    async function start(mode) {
+    async function start(mode: string) {
       await page.goto(baseURL);
       await page.waitForFunction(
         () => window.hoverDiagnostics?.().state === "demo",
@@ -31,7 +36,9 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       await page.keyboard.press("Enter");
       await wait("menu");
       await page.evaluate(async () => {
-        const { HoverRenderer } = await import("./renderer.js");
+        const { HoverRenderer } = (await import(
+          "./renderer.js" as string
+        )) as typeof import("../src/renderer");
         const draw = HoverRenderer.prototype.draw;
         HoverRenderer.prototype.draw = function (...args) {
           draw.apply(this, args);
@@ -42,7 +49,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
           };
         };
       });
-      const click = (name) =>
+      const click = (name: string) =>
         page.getByRole("button", { name, exact: true }).click();
       await click("START");
       if (mode === "time") await click("TIME ATTACK");
@@ -59,7 +66,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         await page.keyboard.press("Enter");
       await wait("countdown");
     }
-    async function forceFinish(winner) {
+    async function forceFinish(winner: boolean) {
       await page.evaluate((winner) => {
         const step = window.HoverEngine.step;
         let first = true;
@@ -173,7 +180,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     }
     // Rolling training retains its source autopilot before the start, and
     // continues animating under the COMPLETE/MISS text with a frozen timer.
-    for (const status of ["complete", "miss"]) {
+    for (const status of ["complete", "miss"] as const) {
       await start("train1");
       const rolling = await snapshot();
       await page.waitForTimeout(200);
@@ -184,6 +191,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         window.HoverTraining.step = (session) => {
           session.status = status;
           session.reason = "test";
+          return session.status;
         };
       }, status);
       await wait("finished");
@@ -192,11 +200,11 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       const b = await snapshot();
       assert.ok(b.ticks > a.ticks, "training result keeps simulation alive");
       assert.equal(b.time, a.time);
-      assert.equal(b.training.remaining, a.training.remaining);
+      assert.equal(b.training!.remaining, a.training!.remaining);
       assert.equal(b.finishCamera, status === "miss");
     }
     // Other racers keep moving during the player's destruction/fall wait.
-    for (const reason of ["destroyed", "course-out"]) {
+    for (const reason of ["destroyed", "course-out"] as const) {
       await start("practice");
       await wait("running");
       await page.evaluate((reason) => {
@@ -218,6 +226,8 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       assert.ok(
         b.opponents.every((car, i) => car.ticks > a.opponents[i].ticks),
       );
+      // A failed practice returns directly to machine selection.
+      await wait("menu");
     }
     assert.deepEqual(errors, []);
     console.log(
@@ -228,15 +238,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   }
 };
 if (require.main === module) {
-  const { chromium } = require(process.argv[2] || "playwright");
-  module
-    .exports({
-      chromium,
-      executablePath: process.argv[3],
-      baseURL: process.argv[4] || "http://127.0.0.1:8765",
-    })
-    .catch((e) => {
-      console.error(e);
-      process.exitCode = 1;
-    });
+  const { chromium } = require(
+    process.argv[2] || "playwright",
+  ) as typeof import("playwright");
+  (module.exports as import("./types").BrowserTest)({
+    chromium,
+    executablePath: process.argv[3],
+    baseURL: process.argv[4] || "http://127.0.0.1:8765",
+  }).catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
 }

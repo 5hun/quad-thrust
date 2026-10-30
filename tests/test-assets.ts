@@ -1,7 +1,8 @@
-const assert = require("node:assert/strict"),
-  fs = require("node:fs"),
-  path = require("node:path");
-global.window = global;
+import type {} from "./types";
+const assert: typeof import("node:assert/strict") = require("node:assert/strict"),
+  fs = require("node:fs") as typeof import("node:fs"),
+  path = require("node:path") as typeof import("node:path");
+Object.assign(globalThis, { window: globalThis });
 require("../dist/music.js");
 require("../dist/models.js");
 for (const [name, song] of Object.entries(HOVER_MUSIC.songs)) {
@@ -53,7 +54,7 @@ for (const bank of HOVER_BACKGROUNDS) {
   for (const [names, width, height] of [
     [bank.sky, 640, 120],
     [bank.ground, 128, 128],
-  ]) {
+  ] as const) {
     assert.equal(names.length, 3);
     for (const name of names) {
       const b = fs.readFileSync(

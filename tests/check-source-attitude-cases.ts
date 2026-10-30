@@ -1,16 +1,19 @@
+import type {} from "./types";
 // Original C oracle supplies explicit matrices, independently of SDK construction.
-const assert = require("node:assert/strict"),
-  fs = require("node:fs"),
-  vm = require("node:vm");
-const E = require("../dist/engine.js"),
-  box = { window: {} };
+const assert: typeof import("node:assert/strict") = require("node:assert/strict"),
+  fs = require("node:fs") as typeof import("node:fs"),
+  vm = require("node:vm") as typeof import("node:vm");
+const E = require("../dist/engine.js") as typeof HoverEngine,
+  box = { window: {} as Window };
 vm.runInNewContext(
   fs.readFileSync(`${__dirname}/../dist/tracks.js`, "utf8"),
   box,
 );
 const track = E.prepare(box.window.HOVER_TRACKS[0]),
   unit = (Math.PI * 2) / 4096;
-const { rotations, accelerations } = JSON.parse(fs.readFileSync(0, "utf8"));
+const { rotations, accelerations } = JSON.parse(
+  fs.readFileSync(0, "utf8"),
+) as Record<"rotations" | "accelerations", [number[], number[]][]>;
 let count = 0;
 for (const [v, expected] of rotations) {
   const car = E.create(track, v[13]);
@@ -32,8 +35,8 @@ for (const [v, expected] of rotations) {
     Math.round(car.pitch / unit),
     Math.round(car.heading / unit),
     Math.round(-car.roll / unit),
-    ...car.sourceShadowAngles,
-    ...car.sourcePreviousAngles,
+    ...car.sourceShadowAngles!,
+    ...car.sourcePreviousAngles!,
   ];
   assert.deepEqual(
     actual,

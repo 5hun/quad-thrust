@@ -1,7 +1,8 @@
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const vm = require("node:vm");
-const E = require("../dist/engine.js");
+import type {} from "./types";
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+const fs = require("node:fs") as typeof import("node:fs");
+const vm = require("node:vm") as typeof import("node:vm");
+const E = require("../dist/engine.js") as typeof HoverEngine;
 (async () => {
   const source = fs.readFileSync(
     __dirname + "/../dist/input-replay.js",
@@ -16,14 +17,14 @@ const E = require("../dist/engine.js");
     padInput,
     encodeOriginalReplay,
     decodeOriginalReplay,
-  } = await import(
+  } = (await import(
     "data:text/javascript;base64," + Buffer.from(source).toString("base64")
-  );
+  )) as typeof import("../src/input-replay");
   const meta = {
     machine: 3,
     course: 0,
     level: 1,
-    gameMode: 1,
+    gameMode: 1 as const,
     totalTicks: 3456,
     name: "A RUN",
     playerName: "SAT",
@@ -55,9 +56,9 @@ const E = require("../dist/engine.js");
   assert.deepEqual(decoded.words, tape.words);
   assert.equal(decoded.frames, 35);
   const read = new ReplayReader(decoded);
-  for (let i = 0; i < 33; i++) assert.equal(read.next().accel, true);
-  assert.equal(read.next().turbo, true);
-  assert.equal(read.next().brake, true);
+  for (let i = 0; i < 33; i++) assert.equal(read.next()!.accel, true);
+  assert.equal(read.next()!.turbo, true);
+  assert.equal(read.next()!.brake, true);
   assert.equal(read.next(), null);
   assert.deepEqual(
     decoded.words,
@@ -94,7 +95,7 @@ const E = require("../dist/engine.js");
     assert.throws(() => decodeOriginalReplay(invalid), /replay/i);
   }
   assert.throws(() => decodeOriginalReplay(bytes.slice(0, 130)), /extent/i);
-  const box = { window: {} };
+  const box = { window: {} as Window };
   vm.runInNewContext(
     fs.readFileSync(__dirname + "/../dist/tracks.js", "utf8"),
     box,
@@ -102,7 +103,7 @@ const E = require("../dist/engine.js");
   const track = E.prepare(box.window.HOVER_TRACKS[0]);
   // Independently drive the actual engine, including all CPU slots/collisions,
   // then replay its input tape. Compare every frame, including fractional axes.
-  for (const gameMode of [1, 4]) {
+  for (const gameMode of [1, 4] as const) {
     const recorder = new ReplayRecorder(),
       saved = [];
     const car = E.placeOnGrid(E.create(track, 3), track);
@@ -179,7 +180,7 @@ const E = require("../dist/engine.js");
   const memory = new ReplayMemory();
   const firstTape = {
     ...tape,
-    gameMode: 4,
+    gameMode: 4 as const,
     course: 0,
     machine: 0,
     totalTicks: 1000,
@@ -255,7 +256,7 @@ const E = require("../dist/engine.js");
   );
   // A source posr fraction must survive movement, and replay/ghost falling
   // must use the same drag, gravity, attitude and integer movement as live play.
-  const fallingTape = { ...firstTape, machine: 0, gameMode: 4 };
+  const fallingTape = { ...firstTape, machine: 0, gameMode: 4 as const };
   const fallingRun = new InputReplay(fallingTape, track);
   const fallingGhost = new GhostReplay(fallingTape, track);
   const fallingCar = E.placeOnGrid(E.create(track, 0), track);
@@ -267,7 +268,7 @@ const E = require("../dist/engine.js");
   fallingCar.roll = 0.1;
   fallingRun.car = structuredClone(fallingCar);
   fallingGhost.car = structuredClone(fallingCar);
-  const fallSnapshot = (car) => [
+  const fallSnapshot = (car: Car) => [
     car.x,
     car.y,
     car.z,
@@ -277,7 +278,7 @@ const E = require("../dist/engine.js");
     car.roll,
     ...car.front,
     ...car.rear,
-    ...car.sourcePosition,
+    ...car.sourcePosition!,
   ];
   for (let frame = 0; frame < 16; frame++) {
     E.stepFalling(fallingCar);
@@ -330,7 +331,7 @@ const E = require("../dist/engine.js");
   }
   ghost.step();
   assert.equal(
-    ghost.car.active.accel,
+    ghost.car.active!.accel,
     false,
     "the source clears the final tick's ghost input",
   );
@@ -356,7 +357,7 @@ const E = require("../dist/engine.js");
     JSON.stringify([ghost.car.front, ghost.car.rear, ghost.car.damage]),
     beforeCollision,
   );
-  const flatTile = (tile) =>
+  const flatTile = (tile: string) =>
     E.prepare({
       name: "ghost floor",
       theme: 0,
@@ -424,7 +425,7 @@ const E = require("../dist/engine.js");
   console.log(
     "PASS: original hR/128-byte header, 8KB RLE input, all pad combinations, 32-tick runs, immutable playback, malformed extents, deterministic 60Hz physics/CPU replay, TA buffer policy, ghost floors/collisions/end coasting and analog sidecar",
   );
-})().catch((e) => {
+})().catch((e: unknown) => {
   console.error(e);
   process.exitCode = 1;
 });

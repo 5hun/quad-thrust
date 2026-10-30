@@ -1,9 +1,10 @@
+import type {} from "./types";
 // Invoked by tools/verify_wall_physics.py with original-C car_wallcheck results.
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const vm = require("node:vm");
-const E = require("../dist/engine.js");
-const context = { window: {} };
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+const fs = require("node:fs") as typeof import("node:fs");
+const vm = require("node:vm") as typeof import("node:vm");
+const E = require("../dist/engine.js") as typeof HoverEngine;
+const context = { window: {} as Window };
 for (const name of ["tracks", "training-tracks"])
   vm.runInNewContext(
     fs.readFileSync(`${__dirname}/../dist/${name}.js`, "utf8"),
@@ -12,7 +13,11 @@ for (const name of ["tracks", "training-tracks"])
 let contacts = 0;
 for (const { training, course, cases } of JSON.parse(
   fs.readFileSync(0, "utf8"),
-)) {
+) as {
+  training: boolean;
+  course: number;
+  cases: [number, number[], number[], number[]][];
+}[]) {
   const track = E.prepare(
     context.window[training ? "HOVER_TRAINING_TRACKS" : "HOVER_TRACKS"][course],
   );
@@ -76,7 +81,7 @@ for (const { training, course, cases } of JSON.parse(
     E.sourceMove(moving, track.nodes[index], input[16] === 0, !!input[22]);
     const moved = [
       0,
-      ...moving.sourcePosition,
+      ...moving.sourcePosition!,
       ...moving.front,
       ...moving.rear,
       moving.damage,

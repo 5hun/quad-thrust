@@ -247,7 +247,7 @@ interface Window {
   };
   HOVER_BACKGROUNDS: BackgroundBank[];
   webkitAudioContext?: typeof AudioContext;
-  hoverDiagnostics: () => object;
+  hoverDiagnostics: typeof import("./game.js").getHoverDiagnostics;
 }
 declare module "*vendor/three.module.js" {
   export * from "three";

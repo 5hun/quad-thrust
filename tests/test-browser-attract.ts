@@ -1,6 +1,11 @@
+import type {} from "./types";
 /* global window */
-const assert = require("node:assert/strict");
-module.exports = async function verify({ chromium, executablePath, baseURL }) {
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+module.exports = async function verify({
+  chromium,
+  executablePath,
+  baseURL,
+}: import("./types").BrowserOptions) {
   const browser = await chromium.launch({
     headless: true,
     executablePath,
@@ -13,7 +18,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   });
   try {
     const page = await browser.newPage();
-    const errors = [];
+    const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(baseURL);
     await page.waitForFunction(
@@ -25,7 +30,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     assert.equal(first.state, "demo");
     assert.deepEqual(first.opponentTypes, [0, 1, 2]);
     assert.deepEqual(first.cpuLevels, [8, 8, 8]);
-    assert.ok([1, 17, 33].includes(first.replayCameraMode));
+    assert.ok([1, 17, 33].includes(first.replayCameraMode!));
     assert.equal(await page.locator("#hud").isVisible(), false);
     assert.equal(await page.locator("#menu-controls").isVisible(), false);
     await page.waitForTimeout(500);
@@ -39,7 +44,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await page.keyboard.press("Enter");
     assert.equal((await snapshot()).menuScreen, "title");
     assert.equal((await snapshot()).titleIntroFrames, 0);
-    const click = (name) =>
+    const click = (name: string) =>
       page.getByRole("button", { name, exact: true }).click();
     await click("START");
     await click("GRANDPRIX");
@@ -53,8 +58,12 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     assert.equal((await snapshot()).menuSelection, 1);
     // Exercise the real fixed-step loop quickly, without drawing 1800 frames.
     await page.evaluate(async () => {
-      const { HoverRenderer } = await import("./renderer.js");
-      const { OriginalMenu } = await import("./menu.js");
+      const { HoverRenderer } = (await import(
+        "./renderer.js" as string
+      )) as typeof import("../src/renderer");
+      const { OriginalMenu } = (await import(
+        "./menu.js" as string
+      )) as typeof import("../src/menu");
       HoverRenderer.prototype.drawMenu = () => {};
       OriginalMenu.prototype.draw = () => {};
       const raf = window.requestAnimationFrame;
@@ -157,15 +166,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   }
 };
 if (require.main === module) {
-  const { chromium } = require(process.argv[2] || "playwright");
-  module
-    .exports({
-      chromium,
-      executablePath: process.argv[3],
-      baseURL: process.argv[4] || "http://127.0.0.1:8765",
-    })
-    .catch((e) => {
-      console.error(e);
-      process.exitCode = 1;
-    });
+  const { chromium } = require(
+    process.argv[2] || "playwright",
+  ) as typeof import("playwright");
+  (module.exports as import("./types").BrowserTest)({
+    chromium,
+    executablePath: process.argv[3],
+    baseURL: process.argv[4] || "http://127.0.0.1:8765",
+  }).catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
 }

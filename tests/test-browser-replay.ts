@@ -1,6 +1,11 @@
+import type {} from "./types";
 /* global window */
-const assert = require("node:assert/strict");
-module.exports = async function verify({ chromium, executablePath, baseURL }) {
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+module.exports = async function verify({
+  chromium,
+  executablePath,
+  baseURL,
+}: import("./types").BrowserOptions) {
   const browser = await chromium.launch({
     headless: true,
     executablePath,
@@ -13,25 +18,25 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   });
   try {
     const page = await browser.newPage();
-    const errors = [];
+    const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(baseURL);
-    const wait = (state) =>
+    const wait = (state: string) =>
       page.waitForFunction(
-        (state) => window.hoverDiagnostics?.().state === state,
+        (state: string) => window.hoverDiagnostics?.().state === state,
         state,
       );
     const snap = () => page.evaluate(() => window.hoverDiagnostics());
-    const click = (name) =>
+    const click = (name: string) =>
       page.getByRole("button", { name, exact: true }).click();
-    const press = (key) => page.keyboard.press(key);
+    const press = (key: string) => page.keyboard.press(key);
     await wait("demo");
     await press("Enter");
     await press("Enter");
     await click("OPTION");
     await click("VIEW REPLAY");
     assert.match(
-      await page.locator("#menu").getAttribute("aria-label"),
+      (await page.locator("#menu").getAttribute("aria-label"))!,
       /リプレイデータがありません/,
     );
     await press("Escape");
@@ -82,8 +87,8 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await press("Enter");
     await press("Escape");
     await wait("menu");
-    assert.ok((await snap()).lastReplay.bytes > 0);
-    assert.ok((await snap()).lastReplay.frames >= 270);
+    assert.ok((await snap()).lastReplay!.bytes > 0);
+    assert.ok((await snap()).lastReplay!.frames >= 270);
     // Return from machine selection, preserving the recording independently
     // of the currently selected preview car/track.
     await press("Escape");
@@ -122,7 +127,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     // A few live ticks can precede installing the observer. Align at the
     // first common unchanged stationary frame, then compare moving inertia.
     const offset =
-      (await snap()).lastReplay.frames - 180 - traces.live.length - 1;
+      (await snap()).lastReplay!.frames - 180 - traces.live.length - 1;
     assert.ok(offset >= 0 && offset < 20, `observer offset ${offset}`);
     assert.deepEqual(
       traces.replay.slice(offset, offset + 35),
@@ -133,10 +138,10 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       stored,
       "replay must not save records or progression",
     );
-    assert.ok([1, 17, 33].includes((await snap()).replayCameraMode));
+    assert.ok([1, 17, 33].includes((await snap()).replayCameraMode!));
     await page.screenshot({ path: "/tmp/hover-view-replay.png" });
     await page.waitForFunction(
-      () => window.hoverDiagnostics().replay.frame < 10,
+      () => window.hoverDiagnostics().replay!.frame < 10,
     );
     assert.equal(
       (await snap()).state,
@@ -156,7 +161,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     ]);
     await click("ENDING");
     await wait("replay");
-    assert.equal((await snap()).replay.kind, "ending");
+    assert.equal((await snap()).replay!.kind, "ending");
     assert.equal((await snap()).postrace, "credits");
     assert.equal((await snap()).musicLoop, false, "ENDING SEQ plays once");
     await press("Escape");
@@ -203,15 +208,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   }
 };
 if (require.main === module) {
-  const { chromium } = require(process.argv[2] || "playwright");
-  module
-    .exports({
-      chromium,
-      executablePath: process.argv[3],
-      baseURL: process.argv[4] || "http://127.0.0.1:8765",
-    })
-    .catch((e) => {
-      console.error(e);
-      process.exitCode = 1;
-    });
+  const { chromium } = require(
+    process.argv[2] || "playwright",
+  ) as typeof import("playwright");
+  (module.exports as import("./types").BrowserTest)({
+    chromium,
+    executablePath: process.argv[3],
+    baseURL: process.argv[4] || "http://127.0.0.1:8765",
+  }).catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
 }

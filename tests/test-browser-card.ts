@@ -1,7 +1,12 @@
+import type {} from "./types";
 /* global window */
-const assert = require("node:assert/strict"),
-  fs = require("node:fs");
-module.exports = async function verify({ chromium, executablePath, baseURL }) {
+const assert: typeof import("node:assert/strict") = require("node:assert/strict"),
+  fs = require("node:fs") as typeof import("node:fs");
+module.exports = async function verify({
+  chromium,
+  executablePath,
+  baseURL,
+}: import("./types").BrowserOptions) {
   const browser = await chromium.launch({
     headless: true,
     executablePath,
@@ -14,11 +19,11 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   });
   try {
     const page = await browser.newPage(),
-      errors = [];
+      errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    const click = (name) =>
+    const click = (name: string) =>
         page.getByRole("button", { name, exact: true }).click(),
-      press = (key) => page.keyboard.press(key);
+      press = (key: string) => page.keyboard.press(key);
     const snap = () => page.evaluate(() => window.hoverDiagnostics());
     const idle = () =>
       page.waitForFunction(() => {
@@ -32,15 +37,17 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       await press("Enter");
       await press("Enter");
     };
-    const open = async (slot) => {
+    const open = async (slot: number) => {
       await click("OPTION");
       await click("MEMORY CARD");
       await click("SLOT " + slot);
       await idle();
     };
-    const read = (slot) =>
-      page.evaluate(async (slot) => {
-        const { MemoryCards } = await import("./card-data.js");
+    const read = (slot: number) =>
+      page.evaluate(async (slot: number) => {
+        const { MemoryCards } = (await import(
+          "./card-data.js" as string
+        )) as typeof import("../src/card-data");
         return new MemoryCards(window.localStorage).read(slot);
       }, slot);
     await page.goto(baseURL);
@@ -60,7 +67,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       ],
     );
     await click("LOAD SYSTEM DATA");
-    assert.equal((await snap()).card.error, "データがありません");
+    assert.equal((await snap()).card!.error, "データがありません");
     await idle();
     await page.evaluate(() =>
       window.HoverRecords.save("time", 8, "lap", 1, 0, "TMP"),
@@ -110,18 +117,18 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     );
     const bounds = await page.locator(".game-wrap").boundingBox();
     assert.ok(
-      bounds.y + bounds.height <= 720 - 64,
+      bounds!.y + bounds!.height <= 720 - 64,
       "the last source card row stays inside a short viewport",
     );
     await page.screenshot({ path: "/tmp/hover-card-system.png" });
     await click("SAVE SYSTEM DATA");
     await idle();
     const first = await read(0);
-    assert.equal(first.system.level, 2);
-    assert.equal(first.system.auto, 3);
-    assert.equal(first.system.unlocks, 3);
-    assert.equal(first.system.training[2], 2);
-    assert.equal(first.system.records["time:0:lap"][0].time, 33);
+    assert.equal(first!.system.level, 2);
+    assert.equal(first!.system.auto, 3);
+    assert.equal(first!.system.unlocks, 3);
+    assert.equal(first!.system.training[2], 2);
+    assert.equal(first!.system.records["time:0:lap"][0].time, 33);
     await page.evaluate(() => {
       window.HoverRules.completeCup(2);
       window.HoverTraining.saveMark(4, 3);
@@ -152,8 +159,8 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await press("ArrowLeft");
     await click("SAVE SYSTEM DATA");
     await idle();
-    assert.equal((await read(1)).system.level, -1);
-    assert.equal((await read(0)).system.level, 2);
+    assert.equal((await read(1))!.system.level, -1);
+    assert.equal((await read(0))!.system.level, 2);
     await page.reload();
     await title();
     assert.equal(
@@ -164,36 +171,36 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     assert.equal((await snap()).autoSaveSlot, 0);
     await open(1);
     await click("LOAD SPECIAL REPLAY");
-    assert.equal((await snap()).card.page, "replays");
-    assert.equal((await snap()).card.action, 8);
+    assert.equal((await snap()).card!.page, "replays");
+    assert.equal((await snap()).card!.action, 8);
     await page.screenshot({ path: "/tmp/hover-card-special.png" });
     await click("REPLAY 1");
     await idle();
-    assert.equal((await snap()).lastReplay.machine, 3);
-    assert.equal((await snap()).lastReplay.course, 2);
+    assert.equal((await snap()).lastReplay!.machine, 3);
+    assert.equal((await snap()).lastReplay!.course, 2);
     await click("SAVE REPLAY DATA");
-    assert.equal((await snap()).card.cursor, 0);
+    assert.equal((await snap()).card!.cursor, 0);
     await press("ArrowUp");
     await press("p");
-    assert.equal((await snap()).card.cursor, null);
+    assert.equal((await snap()).card!.cursor, null);
     await page.screenshot({ path: "/tmp/hover-card-replay.png" });
     await click("REPLAY 2");
     await idle();
     const saved = await read(0);
-    assert.equal(saved.replays[1].name.trim(), "HHOST 01");
-    assert.equal(saved.replays[1].machine, 3);
+    assert.equal(saved!.replays[1]!.name!.trim(), "HHOST 01");
+    assert.equal(saved!.replays[1]!.machine, 3);
     await click("DELETE REPLAY DATA");
     await click("REPLAY 1");
     assert.equal(
-      (await snap()).card.page,
+      (await snap()).card!.page,
       "replays",
       "selecting an empty file stays in source list",
     );
     await click("REPLAY 2");
     await idle();
-    assert.equal((await read(0)).replays[1], null);
+    assert.equal((await read(0))!.replays[1], null);
     assert.equal(
-      (await snap()).lastReplay.machine,
+      (await snap()).lastReplay!.machine,
       3,
       "delete does not erase RAM replay",
     );
@@ -205,7 +212,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await click("REPLAY 1");
     await idle();
     assert.equal(
-      (await read(0)).replays[0].name.trim(),
+      (await read(0))!.replays[0]!.name!.trim(),
       "GHOST 01",
       "editing a loaded replay does not modify the embedded pack",
     );
@@ -224,7 +231,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await page.waitForFunction(
       () => window.hoverDiagnostics().state === "countdown",
     );
-    assert.equal((await snap()).ghost.machine, 3);
+    assert.equal((await snap()).ghost!.machine, 3);
     assert.equal(
       (await snap()).sourceMode,
       5,
@@ -236,7 +243,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       () => window.hoverDiagnostics().state === "menu",
     );
     assert.equal(
-      (await read(0)).replays[0].name.trim(),
+      (await read(0))!.replays[0]!.name!.trim(),
       "GHOST 01",
       "AUTO SAVE preserves replay slots",
     );
@@ -276,12 +283,12 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       10,
     );
     assert.equal(
-      (await read(0)).system.records["time:0:lap"][0].time,
+      (await read(0))!.system.records["time:0:lap"][0].time,
       33,
       "AUTO SAVE waits until leaving selection for the title tree",
     );
     await press("Escape");
-    assert.equal((await read(0)).system.records["time:0:lap"][0].time, 10);
+    assert.equal((await read(0))!.system.records["time:0:lap"][0].time, 10);
     await page.waitForTimeout(100);
     await press("Escape");
     await page.locator(".browser-options summary").click();
@@ -300,7 +307,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       .getByRole("status")
       .filter({ hasText: "取り込みました" })
       .waitFor();
-    assert.equal((await read(1)).replays[0].machine, 3);
+    assert.equal((await read(1))!.replays[0]!.machine, 3);
     const old = await page.evaluate(() =>
       window.localStorage.getItem("hover-card-v1-1"),
     );
@@ -329,15 +336,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   }
 };
 if (require.main === module) {
-  const { chromium } = require(process.argv[2] || "playwright");
-  module
-    .exports({
-      chromium,
-      executablePath: process.argv[3],
-      baseURL: process.argv[4] || "http://127.0.0.1:8765",
-    })
-    .catch((e) => {
-      console.error(e);
-      process.exitCode = 1;
-    });
+  const { chromium } = require(
+    process.argv[2] || "playwright",
+  ) as typeof import("playwright");
+  (module.exports as import("./types").BrowserTest)({
+    chromium,
+    executablePath: process.argv[3],
+    baseURL: process.argv[4] || "http://127.0.0.1:8765",
+  }).catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
 }

@@ -65,7 +65,7 @@ def main():
                                 cases.append([index,routed,list(result),list(movement)])
                                 count += 1
                 jobs.append({'training':training,'course':course,'cases':cases})
-    subprocess.run(['node',str(ROOT/'tests/check-source-wall-cases.cjs')], input=json.dumps(jobs),text=True,check=True,cwd=ROOT)
+    subprocess.run(['node',str(ROOT/'tests/check-source-wall-cases.ts')], input=json.dumps(jobs),text=True,check=True,cwd=ROOT)
     print(f'PASS: original car_wallcheck matches {count} wall probes and {count} movement/correction cases on all 24 courses')
 
 

@@ -370,7 +370,7 @@ def main():
                         cases.append([index,px/100,pz/100,*list(result)])
                         contacts += 1
             jobs.append({'training':training,'course':course,'cases':cases})
-    subprocess.run(['node',str(ROOT/'tests/check-source-track-cases.cjs')], input=json.dumps(jobs), text=True, check=True, cwd=ROOT)
+    subprocess.run(['node',str(ROOT/'tests/check-source-track-cases.ts')], input=json.dumps(jobs), text=True, check=True, cwd=ROOT)
     print(f'PASS: original C matches every vertex ({vertices}) and normal ({normals}) in {parts} parts / 24 courses, including {contacts} contact probes')
 
 

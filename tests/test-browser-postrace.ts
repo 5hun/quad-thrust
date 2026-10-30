@@ -1,6 +1,11 @@
+import type {} from "./types";
 /* global window, requestAnimationFrame */
-const assert = require("node:assert/strict");
-module.exports = async function verify({ chromium, executablePath, baseURL }) {
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+module.exports = async function verify({
+  chromium,
+  executablePath,
+  baseURL,
+}: import("./types").BrowserOptions) {
   const browser = await chromium.launch({
     headless: true,
     executablePath,
@@ -13,14 +18,14 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   });
   try {
     const page = await browser.newPage();
-    const errors = [];
+    const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    const wait = (state) =>
+    const wait = (state: string) =>
       page.waitForFunction(
-        (state) => window.hoverDiagnostics?.().state === state,
+        (state: string) => window.hoverDiagnostics?.().state === state,
         state,
       );
-    const key = (code) => page.keyboard.press(code);
+    const key = (code: string) => page.keyboard.press(code);
     async function saveBeforeReload() {
       while (
         (await page.evaluate(() => window.hoverDiagnostics())).menuScreen !==
@@ -57,7 +62,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       await key("ArrowUp");
     }
 
-    async function force(reason, winner = false) {
+    async function force(reason: Car["reason"], winner = false) {
       await page.evaluate(
         ({ reason, winner }) => {
           const step = window.HoverEngine.step;
@@ -113,7 +118,9 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await wait("countdown");
     await wait("running");
     await page.evaluate(async () => {
-      const { OriginalSound } = await import("./sound.js");
+      const { OriginalSound } = (await import(
+        "./sound.js" as string
+      )) as typeof import("../src/sound");
       const effect = OriginalSound.prototype.effect;
       window.bombEvents = [];
       OriginalSound.prototype.effect = function (id, note, volume, sustained) {
@@ -183,7 +190,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     );
     await page.setViewportSize({ width: 375, height: 780 });
     const mobile = await page.locator(".game-wrap").boundingBox();
-    assert.ok(Math.abs(mobile.width / mobile.height - 4 / 3) < 0.01);
+    assert.ok(Math.abs(mobile!.width / mobile!.height - 4 / 3) < 0.01);
     await key("ArrowRight");
     await page.waitForTimeout(320);
     await page.screenshot({ path: "/tmp/hover-name-entry.png" });
@@ -243,15 +250,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       () => window.hoverDiagnostics().postrace === "credits",
     );
     await page.waitForFunction(() =>
-      [1, 17, 33].includes(window.hoverDiagnostics().replayCameraMode),
+      [1, 17, 33].includes(window.hoverDiagnostics().replayCameraMode!),
     );
     const motion = await page.evaluate(async () => {
-      const poses = [];
-      await new Promise((resolve) => {
+      const poses: string[] = [];
+      await new Promise<void>((resolve) => {
         function sample() {
           const pose = window.hoverDiagnostics().replayPose;
           poses.push(
-            [pose.x, pose.y, pose.z].map((n) => n.toFixed(6)).join(","),
+            [pose!.x, pose!.y, pose!.z].map((n) => n.toFixed(6)).join(","),
           );
           if (poses.length >= 40) resolve();
           else requestAnimationFrame(sample);
@@ -311,6 +318,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       window.HoverTraining.step = (session) => {
         session.status = "miss";
         session.reason = "test";
+        return session.status;
       };
     });
     await wait("finished");
@@ -319,6 +327,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       window.HoverTraining.step = (session) => {
         session.status = "complete";
         session.reason = "test";
+        return session.status;
       };
     });
     await wait("finished");
@@ -340,15 +349,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   }
 };
 if (require.main === module) {
-  const { chromium } = require(process.argv[2] || "playwright");
-  module
-    .exports({
-      chromium,
-      executablePath: process.argv[3],
-      baseURL: process.argv[4] || "http://127.0.0.1:8765",
-    })
-    .catch((e) => {
-      console.error(e);
-      process.exitCode = 1;
-    });
+  const { chromium } = require(
+    process.argv[2] || "playwright",
+  ) as typeof import("playwright");
+  (module.exports as import("./types").BrowserTest)({
+    chromium,
+    executablePath: process.argv[3],
+    baseURL: process.argv[4] || "http://127.0.0.1:8765",
+  }).catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
 }

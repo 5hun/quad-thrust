@@ -32,11 +32,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ["tests/**/*.cjs"],
+    files: ["tests/**/*.ts"],
     languageOptions: {
-      sourceType: "commonjs",
+      sourceType: "module",
       globals: {
         ...globals.node,
+        ...globals.browser,
         HOVER_MUSIC: "readonly",
         HOVER_MODELS: "readonly",
         HOVER_BACKGROUNDS: "readonly",

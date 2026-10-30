@@ -1,8 +1,9 @@
-const E = require("../dist/engine.js"),
-  vm = require("node:vm"),
-  fs = require("node:fs"),
-  assert = require("node:assert/strict");
-const b = { window: {} };
+import type {} from "./types";
+const E = require("../dist/engine.js") as typeof HoverEngine,
+  vm = require("node:vm") as typeof import("node:vm"),
+  fs = require("node:fs") as typeof import("node:fs"),
+  assert: typeof import("node:assert/strict") = require("node:assert/strict");
+const b = { window: {} as Window };
 vm.runInNewContext(
   fs.readFileSync(__dirname + "/../dist/tracks.js", "utf8"),
   b,

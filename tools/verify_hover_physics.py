@@ -74,7 +74,7 @@ def main():
                                 cases.append([index,values,list(result)])
                                 count+=1
                 jobs.append({'training':training,'course':course,'cases':cases})
-    subprocess.run(['node',str(ROOT/'tests/check-source-hover-cases.cjs')],input=json.dumps({"jobs":jobs,"speeds":speeds,"rolls":rolls}),text=True,check=True,cwd=ROOT)
+    subprocess.run(['node',str(ROOT/'tests/check-source-hover-cases.ts')],input=json.dumps({"jobs":jobs,"speeds":speeds,"rolls":rolls}),text=True,check=True,cwd=ROOT)
     print(f'PASS: original car_gravide / car_bank match {count} cases on all 24 courses; car_preope matches {len(speeds)} speed cases and {len(rolls)} airborne roll cases')
 
 

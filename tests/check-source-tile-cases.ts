@@ -1,9 +1,24 @@
-const assert = require("node:assert/strict"),
-  fs = require("node:fs"),
-  E = require("../dist/engine.js");
-const cases = JSON.parse(fs.readFileSync(0, "utf8"));
+import type {} from "./types";
+const assert: typeof import("node:assert/strict") = require("node:assert/strict"),
+  fs = require("node:fs") as typeof import("node:fs"),
+  E = require("../dist/engine.js") as typeof HoverEngine;
+const fixture = E.prepare({
+  name: "oracle",
+  theme: 0,
+  samples: [
+    {
+      l: [0, 0, 0],
+      r: [20, 0, 0],
+      tiles: "....",
+      allTiles: "........",
+      end: { l: [0, 0, 100], r: [20, 0, 100] },
+    },
+  ],
+});
+const cases = JSON.parse(fs.readFileSync(0, "utf8")) as [number[], number[]][];
 for (const [v, expected] of cases) {
-  const car = {
+  const car: Car = {
+    ...E.create(fixture),
     cpuSlot: v[1],
     grip: !!v[2],
     cpuLevel: v[3],
@@ -12,7 +27,7 @@ for (const [v, expected] of cases) {
   };
   const floorBrake = E.sourceContinuousTile(car, String.fromCharCode(v[0]));
   assert.deepEqual(
-    [car.damage, +car.damageLight, +car.damageSemi, +floorBrake],
+    [car.damage, +car.damageLight!, +car.damageSemi!, +floorBrake],
     expected.slice(0, 4),
     `original tile ${v}`,
   );

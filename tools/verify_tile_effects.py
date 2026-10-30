@@ -26,7 +26,7 @@ def main():
                                     result = (ctypes.c_int * 7)()
                                     oracle.continuous_tile_probe((ctypes.c_int * 9)(*values), result)
                                     cases.append([values, list(result)])
-    subprocess.run(['node', str(ROOT/'tests/check-source-tile-cases.cjs')],
+    subprocess.run(['node', str(ROOT/'tests/check-source-tile-cases.ts')],
                    input=json.dumps(cases), text=True, check=True, cwd=ROOT)
     print(f'PASS: original car_chipeffect continuous branch matches {len(cases)} cases')
 

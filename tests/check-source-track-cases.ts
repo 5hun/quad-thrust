@@ -1,9 +1,10 @@
+import type {} from "./types";
 // Invoked by tools/verify_track_geometry.py with original-C oracle results.
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const vm = require("node:vm");
-const E = require("../dist/engine.js");
-const context = { window: {} };
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+const fs = require("node:fs") as typeof import("node:fs");
+const vm = require("node:vm") as typeof import("node:vm");
+const E = require("../dist/engine.js") as typeof HoverEngine;
+const context = { window: {} as Window };
 for (const name of ["tracks", "training-tracks"])
   vm.runInNewContext(
     fs.readFileSync(`${__dirname}/../dist/${name}.js`, "utf8"),
@@ -12,7 +13,11 @@ for (const name of ["tracks", "training-tracks"])
 let count = 0;
 for (const { training, course, cases } of JSON.parse(
   fs.readFileSync(0, "utf8"),
-)) {
+) as {
+  training: boolean;
+  course: number;
+  cases: [number, number, number, number, number, number, number, number][];
+}[]) {
   const track = E.prepare(
     context.window[training ? "HOVER_TRAINING_TRACKS" : "HOVER_TRACKS"][course],
   );
@@ -22,14 +27,14 @@ for (const { training, course, cases } of JSON.parse(
       end = node.end;
     const row = node.tiles.indexOf(">") + 2;
     const corners = [
-      node.source.vertices[row],
-      node.source.vertices[row + 1],
-      end.source.vertices[row],
-      end.source.vertices[row + 1],
+      node.source!.vertices[row],
+      node.source!.vertices[row + 1],
+      end!.source!.vertices[row],
+      end!.source!.vertices[row + 1],
     ];
     const [x, z] = [0, 2].map(
       (k) =>
-        (node.source.origin[k] +
+        (node.source!.origin[k] +
           corners.reduce((sum, v) => sum + v[k], 0) / 2) /
         100,
     );
@@ -56,7 +61,7 @@ for (const { training, course, cases } of JSON.parse(
     for (let k = 0; k < 3; k++)
       assert.equal(
         car.front[k] - control.front[k],
-        (end.source.vertices[row][k] - node.source.vertices[row][k]) * 2,
+        (end!.source!.vertices[row][k] - node.source!.vertices[row][k]) * 2,
         track.name + " original integer boost edge " + k,
       );
   }

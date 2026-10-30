@@ -1,6 +1,11 @@
+import type {} from "./types";
 /* global window, document */
-const assert = require("node:assert/strict");
-module.exports = async function verify({ chromium, executablePath, baseURL }) {
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+module.exports = async function verify({
+  chromium,
+  executablePath,
+  baseURL,
+}: import("./types").BrowserOptions) {
   const browser = await chromium.launch({
     headless: true,
     executablePath,
@@ -15,11 +20,11 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     const page = await browser.newPage({
       viewport: { width: 1100, height: 900 },
     });
-    const errors = [];
+    const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    const screen = async (name) => {
+    const screen = async (name: string) => {
       await page.waitForFunction(
-        (name) =>
+        (name: string) =>
           window.hoverDiagnostics?.().menuScreen === name &&
           window.hoverDiagnostics().state === "menu",
         name,
@@ -30,8 +35,8 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         name + " controls visible",
       );
     };
-    const press = (key) => page.keyboard.press(key);
-    const click = (name) =>
+    const press = (key: string) => page.keyboard.press(key);
+    const click = (name: string) =>
       page.getByRole("button", { name, exact: true }).click();
     const enterTitle = async () => {
       await page.waitForFunction(
@@ -58,7 +63,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       await enterTitle();
       await screen("title");
     };
-    const choose = async (mode) => {
+    const choose = async (mode: string) => {
       await click("START");
       await click(mode);
     };
@@ -147,7 +152,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         () => window.hoverDiagnostics().state === "countdown",
       );
       assert.equal(
-        (await page.evaluate(() => window.hoverDiagnostics())).training.stage,
+        (await page.evaluate(() => window.hoverDiagnostics())).training!.stage,
         (level - 1) * 5 + 1,
       );
       await press("Escape");
@@ -193,8 +198,14 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       }
       window.recordPortraitRows = [];
       const drawImage = window.CanvasRenderingContext2D.prototype.drawImage;
-      window.CanvasRenderingContext2D.prototype.drawImage = function (...args) {
-        if (args[0]?.src?.endsWith("/minicars.png"))
+      window.CanvasRenderingContext2D.prototype.drawImage = function (
+        image: CanvasImageSource,
+        ...coords: number[]
+      ) {
+        const args = [image, ...coords] as Parameters<
+          CanvasRenderingContext2D["drawImage"]
+        >;
+        if ((args[0] as HTMLImageElement)?.src?.endsWith("/minicars.png"))
           window.recordPortraitRows.push(args[2]);
         return drawImage.apply(this, args);
       };
@@ -218,7 +229,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     for (const [category, offset] of [
       ["time", 0],
       ["gp", 2],
-    ]) {
+    ] as const) {
       if (category === "gp") {
         await press("Escape");
         await click("GRANDPRIX'S");
@@ -230,7 +241,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
             for (const [kind, line] of [
               ["lap", 0],
               ["total", 1],
-            ])
+            ] as const)
               window.HoverRecords.save(
                 category,
                 course,
@@ -243,13 +254,17 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
           window.recordListDrawImage =
             window.CanvasRenderingContext2D.prototype.drawImage;
           window.CanvasRenderingContext2D.prototype.drawImage = function (
-            ...args
+            image: CanvasImageSource,
+            ...coords: number[]
           ) {
+            const args = [image, ...coords] as Parameters<
+              CanvasRenderingContext2D["drawImage"]
+            >;
             if (
               this.canvas.id === "original-menu" &&
-              args[0]?.src?.endsWith("/minicars.png")
+              (args[0] as HTMLImageElement)?.src?.endsWith("/minicars.png")
             )
-              window.recordListPortraits[args[6]] = args.slice(1);
+              window.recordListPortraits[args[6]] = coords;
             return window.recordListDrawImage.apply(this, args);
           };
         },
@@ -293,7 +308,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await choose("2P BATTLE");
     await screen("notice");
     assert.match(
-      await page.locator("#menu").getAttribute("aria-label"),
+      (await page.locator("#menu").getAttribute("aria-label"))!,
       /未対応/,
     );
     await title();
@@ -309,7 +324,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         buttons: Array.from({ length: 16 }, () => ({ pressed: false })),
         axes: [0, 0],
       };
-      navigator.getGamepads = () => [window.menuTestPad];
+      navigator.getGamepads = () => [window.menuTestPad as unknown as Gamepad];
       window.menuTestPad.buttons[0].pressed = true;
     });
     await screen("modes");
@@ -326,7 +341,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await page.locator("#menu-confirm").click();
     await screen("course");
     const size = await page.locator(".game-wrap").boundingBox();
-    assert.ok(Math.abs(size.width / size.height - 4 / 3) < 0.01);
+    assert.ok(Math.abs(size!.width / size!.height - 4 / 3) < 0.01);
     assert.equal(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -359,9 +374,10 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     );
     assert.equal(
       await page.evaluate(() => {
-        const data = document
-          .getElementById("original-menu")
-          .getContext("2d")
+        const data = (
+          document.getElementById("original-menu") as HTMLCanvasElement
+        )
+          .getContext("2d")!
           .getImageData(0, 0, 320, 240).data;
         return data.every((value, i) => i % 4 !== 3 || value === 0);
       }),
@@ -387,9 +403,10 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     );
     assert.equal(
       await page.evaluate(() => {
-        const data = document
-          .getElementById("original-menu")
-          .getContext("2d")
+        const data = (
+          document.getElementById("original-menu") as HTMLCanvasElement
+        )
+          .getContext("2d")!
           .getImageData(0, 0, 320, 240).data;
         return data.every((value, i) => i % 4 !== 3 || value === 0);
       }),
@@ -407,8 +424,8 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
           canvas.width = bitmap.width;
           canvas.height = bitmap.height;
           const context = canvas.getContext("2d");
-          context.drawImage(bitmap, 0, 0);
-          const data = context.getImageData(
+          context!.drawImage(bitmap, 0, 0);
+          const data = context!.getImageData(
             0,
             0,
             canvas.width,
@@ -431,15 +448,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   }
 };
 if (require.main === module) {
-  const { chromium } = require(process.argv[2] || "playwright");
-  module
-    .exports({
-      chromium,
-      executablePath: process.argv[3],
-      baseURL: process.argv[4] || "http://127.0.0.1:8765",
-    })
-    .catch((e) => {
-      console.error(e);
-      process.exitCode = 1;
-    });
+  const { chromium } = require(
+    process.argv[2] || "playwright",
+  ) as typeof import("playwright");
+  (module.exports as import("./types").BrowserTest)({
+    chromium,
+    executablePath: process.argv[3],
+    baseURL: process.argv[4] || "http://127.0.0.1:8765",
+  }).catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
 }

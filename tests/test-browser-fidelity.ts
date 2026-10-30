@@ -1,7 +1,12 @@
+import type {} from "./types";
 /* global window, document */
-const assert = require("node:assert/strict");
-// Caller supplies its installed Playwright and browser; no runtime dependency.
-module.exports = async function verify({ chromium, executablePath, baseURL }) {
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+// The caller may override the development Playwright and Chromium paths.
+module.exports = async function verify({
+  chromium,
+  executablePath,
+  baseURL,
+}: import("./types").BrowserOptions) {
   const browser = await chromium.launch({
     headless: true,
     executablePath,
@@ -16,7 +21,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     const page = await browser.newPage({
       viewport: { width: 1100, height: 900 },
     });
-    const errors = [];
+    const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("console", (m) => {
       if (m.type() === "error") errors.push(m.text());
@@ -32,8 +37,12 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       () => window.hoverDiagnostics?.().menuScreen === "title",
     );
     await page.evaluate(async () => {
-      const { HoverRenderer } = await import("./renderer.js");
-      const { OriginalSound } = await import("./sound.js");
+      const { HoverRenderer } = (await import(
+        "./renderer.js" as string
+      )) as typeof import("../src/renderer");
+      const { OriginalSound } = (await import(
+        "./sound.js" as string
+      )) as typeof import("../src/sound");
       const canvas = document.createElement("canvas");
       canvas.style.cssText =
         "width:640px;height:480px;position:fixed;top:0;left:0;z-index:9999";
@@ -54,7 +63,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       const { r, t, c } = window.fidelity;
       r.draw(t, c, [], "destroyed", 0, {});
     });
-    let result = await page.evaluate(() => {
+    const result = await page.evaluate(() => {
       const { r } = window.fidelity;
       return {
         debris: r.ships[0].debris.count,
@@ -83,11 +92,11 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       r.draw(t, pose, [], "running", 0, {});
       const ship = r.ships[0];
       const body = ship.body.matrixWorld.toArray(),
-        shadow = ship.shadow.matrixWorld.toArray();
-      const flags = [ship.body.matrixAutoUpdate, ship.shadow.matrixAutoUpdate];
+        shadow = ship.shadow!.matrixWorld.toArray();
+      const flags = [ship.body.matrixAutoUpdate, ship.shadow!.matrixAutoUpdate];
       pose.x = 14;
       r.draw(t, pose, [], "running", 0, {});
-      const shadowX = ship.shadow.matrixWorld.elements[12];
+      const shadowX = ship.shadow!.matrixWorld.elements[12];
       r.draw(
         t,
         { ...c, sourceMatrix: undefined, sourceShadowMatrix: undefined },
@@ -98,7 +107,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       );
       const fallback = [
         ship.body.matrixAutoUpdate,
-        ship.shadow.matrixAutoUpdate,
+        ship.shadow!.matrixAutoUpdate,
       ];
       r.draw(t, c, [], "destroyed", 0, {});
       return { body, shadow, flags, shadowX, fallback };
@@ -242,7 +251,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       return values;
     });
     assert.equal(
-      depthPixels.at(-1).white,
+      depthPixels.at(-1)!.white,
       255,
       "unlit damage attribute bypasses depth cueing",
     );
@@ -284,16 +293,26 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       const { r, c } = window.fidelity;
       const ghost = r.makeShip(0, true);
       r.updateShip(ghost, { ...c, explosionFrames: undefined }, {}, 0);
-      const hull = ghost.hull.children[0].material;
-      const rudder = ghost.rudders[0].children[0].material;
+      const hull = (
+        ghost.hull!.children[0] as import("three").Mesh<
+          import("three").BufferGeometry,
+          import("three").MeshBasicMaterial
+        >
+      ).material;
+      const rudder = (
+        ghost.rudders[0].children[0] as import("three").Mesh<
+          import("three").BufferGeometry,
+          import("three").MeshBasicMaterial
+        >
+      ).material;
       const result = {
         color: hull.color.getHex(),
         opacity: hull.opacity,
         rudder: rudder.opacity,
       };
-      r.scene.remove(ghost.root, ghost.shadow);
+      r.scene.remove(ghost.root, ghost.shadow!);
       r.clear(ghost.root);
-      r.clear(ghost.shadow);
+      r.clear(ghost.shadow!);
       return result;
     });
     assert.deepEqual(
@@ -317,7 +336,12 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       const { r, c } = window.fidelity;
       const ship = r.ships[0];
       delete c.explosionFrames;
-      const material = ship.hull.children[0].material;
+      const material = (
+        ship.hull!.children[0] as import("three").Mesh<
+          import("three").BufferGeometry,
+          import("three").MeshBasicMaterial
+        >
+      ).material;
       const result = [];
       for (const p of [
         { ticks: 2, damageLight: true, damageSemi: true, energy: 100 },
@@ -370,7 +394,12 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         ship = r.ships[0];
       return [false, true, false].map((turbo) => {
         r.updateShip(ship, { ...c, turbo, ticks: 2 }, { accel: true }, 0);
-        const mat = ship.flames[0].children[0].material;
+        const mat = (
+          ship.flames[0].children[0] as import("three").Mesh<
+            import("three").BufferGeometry,
+            import("three").MeshBasicMaterial
+          >
+        ).material;
         return [
           mat.opacity,
           mat.transparent,
@@ -389,7 +418,9 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       "turbo disables flame lighting without changing blend mode",
     );
     const replayView = await page.evaluate(async () => {
-      const { ReplayDirector } = await import("./replay.js");
+      const { ReplayDirector } = (await import(
+        "./replay.js" as string
+      )) as typeof import("../src/replay");
       const { r, t, c } = window.fidelity;
       r.replayView = true;
       r.replayDirector = new ReplayDirector(() => 0);
@@ -558,7 +589,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       0,
     );
     await page.screenshot({ path: "/tmp/hover-source-suzuki.png" });
-    for (const text of ["COMPLETE", "MISS"]) {
+    for (const text of ["COMPLETE", "MISS"] as const) {
       await page.evaluate((text) => {
         const { r, t, c } = window.fidelity;
         r.result = { text, frame: 80 };
@@ -581,7 +612,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await page.evaluate(async () => {
       const f = window.fidelity;
       await f.sound.enable(true);
-      f.analyser = f.sound.context.createAnalyser();
+      f.analyser = f.sound.context!.createAnalyser();
       f.sound.master.connect(f.analyser);
       f.sound.playCourse(0);
     });
@@ -609,11 +640,11 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       ["left", 40, 10],
       ["right", 0, 0],
       ["rear", 0, 0],
-    ]) {
+    ] as const) {
       const loop = stereo.find((x) => x.name === name);
       assert.ok(
-        Math.abs(loop.left - left) < 0.01 &&
-          Math.abs(loop.right - right) < 0.01,
+        Math.abs(loop!.left - left) < 0.01 &&
+          Math.abs(loop!.right - right) < 0.01,
         JSON.stringify(loop),
       );
     }
@@ -628,10 +659,9 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     });
     await page.waitForTimeout(300);
     const fallingLevels = await page.evaluate(() =>
-      window.fidelity.sound.loops.map(({ name, gain }) => [
-        name,
-        gain.gain.value,
-      ]),
+      window.fidelity.sound.loops.map(
+        ({ name, gain }) => [name, gain.gain.value] as const,
+      ),
     );
     for (const [name, volume] of fallingLevels)
       assert.ok(
@@ -640,18 +670,18 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         "falling keeps wind, releases boosters: " + name,
       );
     await page.waitForTimeout(1000);
-    result = await page.evaluate(() => {
+    const audioResult = await page.evaluate(() => {
       const f = window.fidelity,
         samples = new Float32Array(2048);
-      f.analyser.getFloatTimeDomainData(samples);
+      f.analyser!.getFloatTimeDomainData(samples);
       return {
         peak: Math.max(...samples.map(Math.abs)),
         notes: f.sound.notesPlayed,
         voices: f.sound.voices.size,
       };
     });
-    assert.ok(result.peak > 0.00001, JSON.stringify(result));
-    assert.ok(result.notes > 0);
+    assert.ok(audioResult.peak > 0.00001, JSON.stringify(result));
+    assert.ok(audioResult.notes > 0);
     await page.evaluate(() => {
       const f = window.fidelity;
       f.sound.update(
@@ -712,7 +742,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     // processors that survive source.onended and accumulate audio-thread work.
     await page.evaluate(() => {
       const f = window.fidelity;
-      f.effectStress = setInterval(() => {
+      f.effectStress = window.setInterval(() => {
         for (let i = 0; i < 8; i++) f.sound.effect(67, 80);
       }, 100);
     });
@@ -722,7 +752,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       const snapshot = await page.evaluate(() => {
         const f = window.fidelity,
           samples = new Float32Array(2048);
-        f.analyser.getFloatTimeDomainData(samples);
+        f.analyser!.getFloatTimeDomainData(samples);
         return {
           peak: Math.max(...samples.map(Math.abs)),
           voices: f.sound.voices.size,
@@ -739,21 +769,21 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       JSON.stringify(peaks),
     );
     await page.evaluate(async () => {
-      await window.fidelity.sound.context.suspend();
+      await window.fidelity.sound.context!.suspend();
     });
     const time = await page.evaluate(
-      () => window.fidelity.sound.context.currentTime,
+      () => window.fidelity.sound.context!.currentTime,
     );
     await page.waitForTimeout(150);
     assert.equal(
-      await page.evaluate(() => window.fidelity.sound.context.currentTime),
+      await page.evaluate(() => window.fidelity.sound.context!.currentTime),
       time,
     );
     await page.evaluate(async () => {
       const f = window.fidelity;
       f.sound.cancel();
       clearInterval(f.sound.timer);
-      await f.sound.context.close();
+      await f.sound.context!.close();
     });
     await page.evaluate(() => window.fidelity.canvas.remove());
     // The audio stress runs longer than the original 30-second title timeout.
@@ -771,6 +801,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       window.HoverTraining.step = (session) => {
         session.status = "complete";
         session.reason = "test";
+        return session.status;
       };
     });
     await page.locator("#menu-confirm").click();
@@ -794,15 +825,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
 };
 
 if (require.main === module) {
-  const { chromium } = require(process.argv[2] || "playwright");
-  module
-    .exports({
-      chromium,
-      executablePath: process.argv[3],
-      baseURL: process.argv[4] || "http://127.0.0.1:8765",
-    })
-    .catch((e) => {
-      console.error(e);
-      process.exitCode = 1;
-    });
+  const { chromium } = require(
+    process.argv[2] || "playwright",
+  ) as typeof import("playwright");
+  (module.exports as import("./types").BrowserTest)({
+    chromium,
+    executablePath: process.argv[3],
+    baseURL: process.argv[4] || "http://127.0.0.1:8765",
+  }).catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
 }

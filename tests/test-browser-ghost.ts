@@ -1,6 +1,11 @@
+import type {} from "./types";
 /* global window */
-const assert = require("node:assert/strict");
-module.exports = async function verify({ chromium, executablePath, baseURL }) {
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+module.exports = async function verify({
+  chromium,
+  executablePath,
+  baseURL,
+}: import("./types").BrowserOptions) {
   const browser = await chromium.launch({
     headless: true,
     executablePath,
@@ -13,16 +18,16 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   });
   try {
     const page = await browser.newPage(),
-      errors = [];
+      errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    const wait = (state) =>
+    const wait = (state: string) =>
       page.waitForFunction(
-        (state) => window.hoverDiagnostics?.().state === state,
+        (state: string) => window.hoverDiagnostics?.().state === state,
         state,
       );
     const snap = () => page.evaluate(() => window.hoverDiagnostics());
-    const press = (key) => page.keyboard.press(key);
-    const click = (name) =>
+    const press = (key: string) => page.keyboard.press(key);
+    const click = (name: string) =>
       page.getByRole("button", { name, exact: true }).click();
     await page.goto(baseURL);
     await wait("demo");
@@ -76,7 +81,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await page.evaluate(
       () => (window.HoverEngine.step = window.originalGhostStep),
     );
-    async function finish(total) {
+    async function finish(total: number) {
       await page.evaluate((total) => {
         const step = window.HoverEngine.step;
         window.HoverEngine.step = (car, ...args) => {
@@ -105,25 +110,29 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     }
     await finish(30);
     await selection();
-    assert.equal((await snap()).lastReplay.machine, 0);
+    assert.equal((await snap()).lastReplay!.machine, 0);
     await press("ArrowRight");
     await press("Enter");
     await press("Enter");
     await wait("countdown");
     const start = await snap();
     assert.equal(start.sourceMode, 5);
-    assert.equal(start.ghost.machine, 0);
-    assert.equal(start.ghost.ticks, 0);
+    assert.equal(start.ghost!.machine, 0);
+    assert.equal(start.ghost!.ticks, 0);
     await page.waitForTimeout(150);
     assert.equal(
-      (await snap()).ghost.ticks,
+      (await snap()).ghost!.ticks,
       0,
       "ghost stays on the grid during countdown",
     );
     await page.evaluate(async () => {
-      const { HoverRenderer } = await import("./renderer.js"),
+      const { HoverRenderer } = (await import(
+          "./renderer.js" as string
+        )) as typeof import("../src/renderer"),
         update = HoverRenderer.prototype.updateShip;
-      const { OriginalHUD } = await import("./hud.js");
+      const { OriginalHUD } = (await import(
+        "./hud.js" as string
+      )) as typeof import("../src/hud");
       const drawHUD = OriginalHUD.prototype.draw;
       window.ghostMapMachines = [];
       OriginalHUD.prototype.draw = function (...args) {
@@ -135,20 +144,27 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       HoverRenderer.prototype.updateShip = function (ship, pose, input, time) {
         update.call(this, ship, pose, input, time);
         if (!ship.ghost) return;
-        const expected = window.firstRunTrace[pose.ticks - 1];
+        const expected = window.firstRunTrace[pose.ticks! - 1];
         const actual = {
           x: pose.x,
           y: pose.y,
           z: pose.z,
           heading: pose.heading,
-          front: pose.front?.slice(),
-          rear: pose.rear?.slice(),
+          front: (pose as Car).front?.slice(),
+          rear: (pose as Car).rear?.slice(),
         };
         if (expected && JSON.stringify(expected) !== JSON.stringify(actual))
           window.ghostMismatches.push({ expected, actual });
-        const hull = ship.hull?.children[0]?.material;
+        const hull = (
+          ship.hull?.children[0] as
+            | import("three").Mesh<
+                import("three").BufferGeometry,
+                import("three").MeshBasicMaterial
+              >
+            | undefined
+        )?.material;
         window.ghostVisuals.push({
-          ticks: pose.ticks,
+          ticks: pose.ticks!,
           l1: !!input.l1,
           accel: !!input.accel,
           sides: ship.sides.map((s) => s.visible),
@@ -160,13 +176,13 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     });
     await wait("running");
     await page.waitForFunction(
-      () => window.hoverDiagnostics().ghost.ticks >= 55,
+      () => window.hoverDiagnostics().ghost!.ticks >= 55,
     );
     await press("Escape");
     await wait("paused");
-    const paused = (await snap()).ghost.ticks;
+    const paused = (await snap()).ghost!.ticks;
     await page.waitForTimeout(180);
-    assert.equal((await snap()).ghost.ticks, paused);
+    assert.equal((await snap()).ghost!.ticks, paused);
     await press("Escape");
     await wait("running");
     const observations = await page.evaluate(() => ({
@@ -196,21 +212,21 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await page.screenshot({ path: "/tmp/hover-input-ghost.png" });
     await page.waitForFunction(() => {
       const d = window.hoverDiagnostics();
-      return d.ghost.ticks > d.lastReplay.frames + 8;
+      return d.ghost!.ticks > d.lastReplay!.frames + 8;
     });
     const ended = await snap();
-    assert.equal(ended.ghost.frame, ended.lastReplay.frames);
-    assert.equal(ended.ghost.finished, false);
-    assert.equal(ended.ghost.laps, 0);
-    assert.equal(!!ended.ghost.active.accel, false);
+    assert.equal(ended.ghost!.frame, ended.lastReplay!.frames);
+    assert.equal(ended.ghost!.finished, false);
+    assert.equal(ended.ghost!.laps, 0);
+    assert.equal(!!ended.ghost!.active.accel, false);
     await finish(35);
     assert.equal(
-      (await snap()).lastReplay.machine,
+      (await snap()).lastReplay!.machine,
       0,
       "slower current attempt does not replace source ghost",
     );
     assert.equal(
-      (await snap()).replayPose.type,
+      (await snap()).replayPose!.type,
       1,
       "postrace background uses the current attempt, not the older ghost",
     );
@@ -219,12 +235,12 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await press("Enter");
     await press("Enter");
     await wait("countdown");
-    assert.equal((await snap()).ghost.machine, 0);
+    assert.equal((await snap()).ghost!.machine, 0);
     await wait("running");
     await finish(29);
     await selection();
     assert.equal(
-      (await snap()).lastReplay.machine,
+      (await snap()).lastReplay!.machine,
       2,
       "a faster run with another machine becomes the source ghost",
     );
@@ -252,15 +268,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   }
 };
 if (require.main === module) {
-  const { chromium } = require(process.argv[2] || "playwright");
-  module
-    .exports({
-      chromium,
-      executablePath: process.argv[3],
-      baseURL: process.argv[4] || "http://127.0.0.1:8765",
-    })
-    .catch((e) => {
-      console.error(e);
-      process.exitCode = 1;
-    });
+  const { chromium } = require(
+    process.argv[2] || "playwright",
+  ) as typeof import("playwright");
+  (module.exports as import("./types").BrowserTest)({
+    chromium,
+    executablePath: process.argv[3],
+    baseURL: process.argv[4] || "http://127.0.0.1:8765",
+  }).catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
 }

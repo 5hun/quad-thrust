@@ -1556,7 +1556,7 @@ document
 beginDemo();
 requestAnimationFrame(frame);
 // Read-only snapshots for diagnostics; no controls or simulation bypasses exposed.
-window.hoverDiagnostics = () => ({
+export const getHoverDiagnostics = () => ({
     state,
     demoFrames,
     menuIdleFrames,
@@ -1675,3 +1675,4 @@ window.hoverDiagnostics = () => ({
     rear: car.rear.slice(),
     tiles: car.tile,
 });
+window.hoverDiagnostics = getHoverDiagnostics;

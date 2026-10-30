@@ -1,15 +1,24 @@
+import type {} from "./types";
 // Invoked by tools/verify_hover_physics.py with original-C oracle results.
-const assert = require("node:assert/strict"),
-  fs = require("node:fs"),
-  vm = require("node:vm");
-const E = require("../dist/engine.js"),
-  context = { window: {} };
+const assert: typeof import("node:assert/strict") = require("node:assert/strict"),
+  fs = require("node:fs") as typeof import("node:fs"),
+  vm = require("node:vm") as typeof import("node:vm");
+const E = require("../dist/engine.js") as typeof HoverEngine,
+  context = { window: {} as Window };
 for (const name of ["tracks", "training-tracks"])
   vm.runInNewContext(
     fs.readFileSync(`${__dirname}/../dist/${name}.js`, "utf8"),
     context,
   );
-const { jobs, speeds, rolls } = JSON.parse(fs.readFileSync(0, "utf8"));
+const { jobs, speeds, rolls } = JSON.parse(fs.readFileSync(0, "utf8")) as {
+  jobs: {
+    training: boolean;
+    course: number;
+    cases: [number, number[], number[]][];
+  }[];
+  speeds: [number[], number][];
+  rolls: [number, number][];
+};
 for (const [values, expected] of speeds)
   assert.equal(
     E.sourceSpeed(values.slice(0, 3), values.slice(3)),
@@ -50,13 +59,13 @@ for (const { training, course, cases } of jobs) {
     const actual = [
       over,
       Math.round(-car.y * 100),
-      car.sourcePosition[1],
+      car.sourcePosition![1],
       car.front[1],
       car.rear[1],
       car.tei,
       car.damage,
       +car.grip,
-      Math.round(-car.groundY * 100),
+      Math.round(-car.groundY! * 100),
       +!car.onRoad,
       +!!car.damageLight,
       +car.events.includes("land"),

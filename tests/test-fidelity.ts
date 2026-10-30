@@ -1,6 +1,7 @@
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const E = require("../dist/engine.js");
+import type {} from "./types";
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+const fs = require("node:fs") as typeof import("node:fs");
+const E = require("../dist/engine.js") as typeof HoverEngine;
 const flat = (width = 20, rise = 0, bank = 0) =>
   E.prepare({
     name: "fixture",
@@ -17,7 +18,7 @@ const flat = (width = 20, rise = 0, bank = 0) =>
     ],
   });
 const t = flat();
-const tileTrack = (symbol) => {
+const tileTrack = (symbol: string) => {
   const track = flat();
   track.nodes[0].tiles = symbol.repeat(4);
   return track;
@@ -61,8 +62,8 @@ for (const symbol of ["d", "*", "B"]) {
 // Widening, banking boost tile: current left cell edge is (0,20,100),
 // not the centreline's (10,30,100). VP stores half-scale PS1 vertices.
 const boostTrack = tileTrack(">");
-boostTrack.nodes[0].end.r = [30, 40, 100];
-boostTrack.nodes[0].end.l = [-10, 20, 100];
+boostTrack.nodes[0].end!.r = [30, 40, 100];
+boostTrack.nodes[0].end!.l = [-10, 20, 100];
 const boost = E.create(boostTrack);
 boost.x = -6;
 boost.y = E.nearest(boostTrack, boost.x, boost.z).surface + 2;
@@ -168,23 +169,30 @@ for (const width of [20, 100]) {
 }
 a = E.create(t);
 E.emitDebris(a, 80, 2, [0, 1, 0]);
-assert.equal(a.debris.length, 64);
-const first = { ...a.debris[0] };
+assert.equal(a.debris!.length, 64);
+const first = { ...a.debris![0] };
 E.stepDebris(a);
-assert.equal(a.debris[0].vy, first.vy - 16);
-assert.equal(a.debris[0].life, 47);
+assert.equal(a.debris![0].vy, first.vy - 16);
+assert.equal(a.debris![0].life, 47);
 for (let i = 0; i < 47; i++) E.stepDebris(a);
-assert.equal(a.debris.length, 0);
+assert.equal(a.debris!.length, 0);
 (async () => {
-  const { SpuEnvelope } = await import(
+  const { SpuEnvelope } = (await import(
     "data:text/javascript;base64," +
       Buffer.from(fs.readFileSync("dist/spu-envelope.js", "utf8")).toString(
         "base64",
       )
-  );
+  )) as typeof import("../src/spu-envelope");
   // Exercise the actual worklet lifecycle, including naturally ended samples.
-  let Processor;
-  const vm = require("node:vm");
+  type Worklet = {
+    process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean;
+    port: { onmessage(event: { data: { dispose: boolean } }): void };
+  };
+  type WorkletConstructor = new (options: {
+    processorOptions: { adsr1: number; adsr2: number; when: number };
+  }) => Worklet;
+  let Processor: WorkletConstructor | undefined;
+  const vm = require("node:vm") as typeof import("node:vm");
   vm.runInNewContext(
     fs
       .readFileSync("dist/spu-envelope.js", "utf8")
@@ -193,7 +201,7 @@ assert.equal(a.debris.length, 0);
       AudioWorkletProcessor: class {
         port = { postMessage() {} };
       },
-      registerProcessor(_name, type) {
+      registerProcessor(_name: string, type: WorkletConstructor) {
         Processor = type;
       },
       sampleRate: 48000,
@@ -201,7 +209,8 @@ assert.equal(a.debris.length, 0);
     },
   );
   for (let i = 0; i < 2000; i++) {
-    const processor = new Processor({
+    assert.ok(Processor);
+    const processor: Worklet = new Processor({
       processorOptions: { adsr1: 15, adsr2: 0x1fc0, when: 0 },
     });
     const output = [[new Float32Array(128)]];
@@ -249,7 +258,7 @@ assert.equal(a.debris.length, 0);
   console.log(
     "PASS: source 3D collision/weight/CPU exemptions, plane contact, slope Y force and attitude, landing/falling, width-independent walls, debris lifetime, SPU ADSR register cases",
   );
-})().catch((e) => {
+})().catch((e: unknown) => {
   console.error(e);
   process.exitCode = 1;
 });
@@ -284,8 +293,8 @@ for (let size = 64; size >= 0; size--) {
   E.step(tail, t, {}, 1 / 60);
   assert.equal(tail.fireTail, size);
 }
-const vm = require("node:vm"),
-  gridData = { window: {} };
+const vm = require("node:vm") as typeof import("node:vm"),
+  gridData = { window: {} as Window };
 vm.runInNewContext(
   fs.readFileSync(__dirname + "/../dist/tracks.js", "utf8"),
   gridData,
@@ -333,7 +342,7 @@ console.log(
   assert.equal(car.time, time, "presentation ticks do not change total time");
   assert.deepEqual(car.laps, [10, 11, 12]);
   assert.equal(car.reason, "finish");
-  for (const reason of ["destroyed", "course-out"]) {
+  for (const reason of ["destroyed", "course-out"] as const) {
     car.reason = reason;
     E.step(car, t, { accel: true }, 1 / 60, false, false);
     assert.equal(car.ticks, ticks + 30, "failures cannot enter goal driving");
@@ -428,8 +437,8 @@ assert.ok(beyondApron.sourceSpeed > 0, "falling speed drives the wind sound");
 assert.equal(beyondApron.time, frozenTime);
 assert.equal(beyondApron.fireTail, 0);
 assert.equal(beyondApron.onRoad, false);
-const mapContext = { window: {} };
-require("node:vm").runInNewContext(
+const mapContext = { window: {} as Window };
+(require("node:vm") as typeof import("node:vm")).runInNewContext(
   fs.readFileSync("dist/tracks.js", "utf8"),
   mapContext,
 );
@@ -516,9 +525,9 @@ for (let index = 0; index < bankTrack.nodes.length; index++) {
   const node = bankTrack.nodes[index],
     end = node.end;
   const x =
-    Math.floor((node.l[0] + node.r[0] + end.l[0] + end.r[0]) * 25) / 100;
+    Math.floor((node.l[0] + node.r[0] + end!.l[0] + end!.r[0]) * 25) / 100;
   const z =
-    Math.floor((node.l[2] + node.r[2] + end.l[2] + end.r[2]) * 25) / 100;
+    Math.floor((node.l[2] + node.r[2] + end!.l[2] + end!.r[2]) * 25) / 100;
   const contact = E.nearest(bankTrack, x, z, index);
   if (!contact.supported || !(contact.normal[0] || contact.normal[2])) continue;
   bankTrack.nodes[contact.index].tiles = ".".repeat(

@@ -29,7 +29,7 @@ def main():
             result = (ctypes.c_int * 6)()
             oracle.resistance_probe((ctypes.c_int * 10)(*values), result)
             cases.append([values, list(result)])
-    subprocess.run(['node', str(ROOT/'tests/check-source-resistance-cases.cjs')],
+    subprocess.run(['node', str(ROOT/'tests/check-source-resistance-cases.ts')],
                    input=json.dumps(cases), text=True, check=True, cwd=ROOT)
     print(f'PASS: original car_resistance matches {len(cases)} cases')
 

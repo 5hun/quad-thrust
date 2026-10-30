@@ -1,8 +1,13 @@
+import type {} from "./types";
 /* global window */
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-module.exports = async function verify({ chromium, executablePath, baseURL }) {
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+const fs = require("node:fs") as typeof import("node:fs");
+const path = require("node:path") as typeof import("node:path");
+module.exports = async function verify({
+  chromium,
+  executablePath,
+  baseURL,
+}: import("./types").BrowserOptions) {
   const browser = await chromium.launch({
     headless: true,
     executablePath,
@@ -17,7 +22,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     const page = await browser.newPage({
       viewport: { width: 1100, height: 900 },
     });
-    const errors = [];
+    const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(baseURL);
     await page.waitForFunction(
@@ -25,7 +30,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     );
     await page.keyboard.press("Enter");
     await page.keyboard.press("Enter");
-    const click = (name) =>
+    const click = (name: string) =>
       page.getByRole("button", { name, exact: true }).click();
     const snap = () => page.evaluate(() => window.hoverDiagnostics());
     const back = () => page.keyboard.press("Escape");
@@ -50,12 +55,17 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await page.screenshot({ path: "/tmp/hover-help-index.png" });
     await page.keyboard.press("ArrowRight");
     assert.equal(
-      (await snap()).help.selection,
+      (await snap()).help!.selection,
       0,
       "only up/down navigate the source HELP lists",
     );
     const data = await page.evaluate(
-      async () => (await import("./help-data.js")).HELP_BOOKS,
+      async () =>
+        (
+          (await import(
+            "./help-data.js" as string
+          )) as typeof import("../src/help-data")
+        ).HELP_BOOKS,
     );
     assert.equal(Object.keys(data).length, 18);
     for (const [book, lines] of Object.entries(data)) {
@@ -67,18 +77,18 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       if (book === "about") expected[30] = "　　　Ｖｅｒ　１．２００";
       assert.deepEqual(lines, expected, book + " original book, line-for-line");
     }
-    async function book(name, expected) {
+    async function book(name: string, expected: string) {
       await click(name);
       await page.waitForFunction(
         (book) => window.hoverDiagnostics().help?.book === book,
         expected,
       );
       assert.equal(
-        (await snap()).help.maxScroll,
+        (await snap()).help!.maxScroll,
         Math.max(0, data[expected].length * 28 - 228),
       );
       assert.ok(
-        (await page.locator("#menu").getAttribute("aria-label")).includes(
+        (await page.locator("#menu").getAttribute("aria-label"))!.includes(
           data[expected][0],
         ),
       );
@@ -86,12 +96,14 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await book("はじめに", "intro");
     await page.keyboard.press("Enter");
     assert.equal(
-      (await snap()).help.book,
+      (await snap()).help!.book,
       "intro",
       "confirm does not leave a book",
     );
     await page.evaluate(async () => {
-      const { OriginalHelp } = await import("./help.js");
+      const { OriginalHelp } = (await import(
+        "./help.js" as string
+      )) as typeof import("../src/help");
       const tick = OriginalHelp.prototype.tick;
       window.helpScrollSteps = [];
       OriginalHelp.prototype.tick = function (direction, fast) {
@@ -138,11 +150,11 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     );
     await page.screenshot({ path: "/tmp/hover-help-book.png" });
     for (let i = 0; i < 40; i++) await click("下へスクロール");
-    assert.equal((await snap()).help.scroll, (await snap()).help.maxScroll);
+    assert.equal((await snap()).help!.scroll, (await snap()).help!.maxScroll);
     for (let i = 0; i < 40; i++) await click("上へスクロール");
-    assert.equal((await snap()).help.scroll, 0);
+    assert.equal((await snap()).help!.scroll, 0);
     await back();
-    assert.equal((await snap()).help.selection, 0);
+    assert.equal((await snap()).help!.selection, 0);
     for (const [name, id] of [
       ["ゲームモード紹介", "modes"],
       ["路面の記号について", "sign"],
@@ -156,7 +168,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       if (id === "staff")
         await page.screenshot({ path: "/tmp/hover-help-staff.png" });
       await back();
-      assert.equal((await snap()).help.selection, rootItems.indexOf(name));
+      assert.equal((await snap()).help!.selection, rootItems.indexOf(name));
     }
     await click("操作について");
     const controls = [
@@ -182,7 +194,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       await book(controls[i], id);
       if (["radder", "booster", "slaster"].includes(id)) {
         await page.waitForTimeout(120);
-        const annotations = (await snap()).help.annotations;
+        const annotations = (await snap()).help!.annotations;
         assert.equal(annotations.length, id === "slaster" ? 4 : 1);
         assert.ok(
           annotations.every(
@@ -192,10 +204,10 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         await page.screenshot({ path: `/tmp/hover-help-${id}.png` });
       }
       await back();
-      assert.equal((await snap()).help.selection, i);
+      assert.equal((await snap()).help!.selection, i);
     }
     await back();
-    assert.equal((await snap()).help.selection, 1);
+    assert.equal((await snap()).help!.selection, 1);
     await click("マシン紹介");
     assert.equal(
       await page.locator("#menu nav button").count(),
@@ -233,13 +245,13 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     ].entries()) {
       await book(machines[i], id);
       await page.waitForTimeout(60);
-      assert.ok((await snap()).help.frame > 0);
+      assert.ok((await snap()).help!.frame > 0);
       if (id === "suzuki")
         await page.screenshot({ path: "/tmp/hover-help-suzuki.png" });
       await back();
     }
     await back();
-    assert.equal((await snap()).help.selection, 2);
+    assert.equal((await snap()).help!.selection, 2);
     await back();
     assert.equal((await snap()).menuScreen, "title");
     assert.equal((await snap()).menuSelection, 2);
@@ -253,15 +265,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   }
 };
 if (require.main === module) {
-  const { chromium } = require(process.argv[2] || "playwright");
-  module
-    .exports({
-      chromium,
-      executablePath: process.argv[3],
-      baseURL: process.argv[4] || "http://127.0.0.1:8765",
-    })
-    .catch((e) => {
-      console.error(e);
-      process.exitCode = 1;
-    });
+  const { chromium } = require(
+    process.argv[2] || "playwright",
+  ) as typeof import("playwright");
+  (module.exports as import("./types").BrowserTest)({
+    chromium,
+    executablePath: process.argv[3],
+    baseURL: process.argv[4] || "http://127.0.0.1:8765",
+  }).catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
 }

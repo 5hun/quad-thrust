@@ -67,7 +67,7 @@ def main():
             result=(ctypes.c_int*8)()
             oracle.acceleration_probe((ctypes.c_int*24)(*v),result)
             accelerations.append([v,list(result)])
-    subprocess.run(['node',str(ROOT/'tests/check-source-attitude-cases.cjs')],input=json.dumps({'rotations':cases,'accelerations':accelerations}),text=True,check=True,cwd=ROOT)
+    subprocess.run(['node',str(ROOT/'tests/check-source-attitude-cases.ts')],input=json.dumps({'rotations':cases,'accelerations':accelerations}),text=True,check=True,cwd=ROOT)
     print(f'PASS: original car_rotation matches {len(cases)} cases and car_acceralate matches {len(accelerations)} cases with explicit matrices')
 
 

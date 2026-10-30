@@ -1,6 +1,11 @@
+import type {} from "./types";
 /* global window, requestAnimationFrame */
-const assert = require("node:assert/strict");
-module.exports = async function verify({ chromium, executablePath, baseURL }) {
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+module.exports = async function verify({
+  chromium,
+  executablePath,
+  baseURL,
+}: import("./types").BrowserOptions) {
   const browser = await chromium.launch({
     headless: true,
     executablePath,
@@ -15,18 +20,24 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     const page = await browser.newPage({
       viewport: { width: 1100, height: 900 },
     });
-    const errors = [];
+    const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(baseURL);
     await page.waitForFunction(() => window.hoverDiagnostics);
     const result = await page.evaluate(async () => {
-      const { OriginalPostrace } = await import("./postrace.js");
-      const { STAFF } = await import("./staff.js");
-      const { sampleReplay } = await import("./replay.js");
+      const { OriginalPostrace } = (await import(
+        "./postrace.js" as string
+      )) as typeof import("../src/postrace");
+      const { STAFF } = (await import(
+        "./staff.js" as string
+      )) as typeof import("../src/staff");
+      const { sampleReplay } = (await import(
+        "./replay.js" as string
+      )) as typeof import("../src/replay");
       const font = {
         g: null,
         text() {},
-        time(t) {
+        time(t: number) {
           return String(t);
         },
         jp() {
@@ -34,16 +45,18 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         },
         hooks: { sound() {} },
       };
-      const p = new OriginalPostrace(font);
+      const p = new OriginalPostrace(
+        font as unknown as import("../src/menu").OriginalMenu,
+      );
       p.credits(() => {});
       const g = p.canvas.getContext("2d");
       let draws = 0;
       // Off-screen entry and exit must clip a single line, not flow into other rows.
       for (let line = 0; line < STAFF.length; line++)
         for (const x of [-400, -160, 32, 240, 400]) {
-          g.clearRect(0, 0, 320, 240);
-          p.staffText.draw(g, STAFF[line], x, 64);
-          const data = g.getImageData(0, 0, 320, 240).data;
+          g!.clearRect(0, 0, 320, 240);
+          p.staffText.draw(g!, STAFF[line], x, 64);
+          const data = g!.getImageData(0, 0, 320, 240).data;
           for (let y = 0; y < 240; y++)
             if (y < 64 || y >= 80)
               for (let xx = 0; xx < 320; xx++)
@@ -53,16 +66,16 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         }
       // A line's clipped pixels must remain identical as it crosses either edge.
       for (let line = 0; line < STAFF.length; line++) {
-        g.clearRect(0, 0, 320, 240);
-        p.staffText.draw(g, STAFF[line], 32, 64);
-        const ref = g.getImageData(0, 64, 320, 16).data;
+        g!.clearRect(0, 0, 320, 240);
+        p.staffText.draw(g!, STAFF[line], 32, 64);
+        const ref = g!.getImageData(0, 64, 320, 16).data;
         for (const [x, delta] of [
           [-128, -160],
           [240, 208],
         ]) {
-          g.clearRect(0, 0, 320, 240);
-          p.staffText.draw(g, STAFF[line], x, 64);
-          const data = g.getImageData(0, 64, 320, 16).data;
+          g!.clearRect(0, 0, 320, 240);
+          p.staffText.draw(g!, STAFF[line], x, 64);
+          const data = g!.getImageData(0, 64, 320, 16).data;
           for (let y = 0; y < 16; y++)
             for (let xx = 0; xx < 320; xx++) {
               const src = xx - delta;
@@ -115,7 +128,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       for (let i = 0; i < 58; i++) p.tick(false);
       if (saves.length) throw Error("GP saved before tick 60");
       p.tick(false);
-      if (p.phase !== "lap" || saves.length !== 6)
+      if (String(p.phase) !== "lap" || saves.length !== 6)
         throw Error("GP must register every course at tick 60");
       p.key("KeyP");
       if (ended) throw Error("GP Start requires tick > 60");
@@ -136,7 +149,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       window.HoverRecords.save = recordSave;
       p.credits(() => ended++);
       p.key("KeyP");
-      if (ended !== 2)
+      if (Number(ended) !== 2)
         throw Error("Gamepad/keyboard Start must still skip credits");
       p.credits(() => {});
       p.creditMode = 6;
@@ -152,13 +165,13 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         0,
         0,
       ]);
-      const poses = [],
-        times = [];
+      const poses: number[] = [],
+        times: number[] = [];
       const start = performance.now();
-      await new Promise((resolve) => {
-        function frame(ts) {
+      await new Promise<void>((resolve) => {
+        function frame(ts: number) {
           times.push(ts);
-          poses.push(sampleReplay(frames, (ts - start) / 1000, 0).x);
+          poses.push(sampleReplay(frames, (ts - start) / 1000, 0)!.x);
           if (times.length >= 60) resolve();
           else requestAnimationFrame(frame);
         }
@@ -170,7 +183,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         cachedLines: p.staffText.lines.size,
         uniquePoses: new Set(poses.map((x) => x.toFixed(5))).size,
         rafFrames: times.length,
-        elapsed: times.at(-1) - times[0],
+        elapsed: times.at(-1)! - times[0],
       };
     });
     assert.deepEqual(result.transitions, [
@@ -195,15 +208,15 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
   }
 };
 if (require.main === module) {
-  const { chromium } = require(process.argv[2] || "playwright");
-  module
-    .exports({
-      chromium,
-      executablePath: process.argv[3],
-      baseURL: process.argv[4] || "http://127.0.0.1:8765",
-    })
-    .catch((e) => {
-      console.error(e);
-      process.exitCode = 1;
-    });
+  const { chromium } = require(
+    process.argv[2] || "playwright",
+  ) as typeof import("playwright");
+  (module.exports as import("./types").BrowserTest)({
+    chromium,
+    executablePath: process.argv[3],
+    baseURL: process.argv[4] || "http://127.0.0.1:8765",
+  }).catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
 }

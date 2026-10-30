@@ -1,5 +1,6 @@
-const assert = require("node:assert/strict"),
-  fs = require("node:fs");
+import type {} from "./types";
+const assert: typeof import("node:assert/strict") = require("node:assert/strict"),
+  fs = require("node:fs") as typeof import("node:fs");
 (async () => {
   const inputURL =
     "data:text/javascript;base64," +
@@ -15,9 +16,9 @@ const assert = require("node:assert/strict"),
     recordChecksum,
     MemoryCards,
     SessionStore,
-  } = await import(
+  } = (await import(
     "data:text/javascript;base64," + Buffer.from(source).toString("base64")
-  );
+  )) as typeof import("../src/card-data");
   const template = Array.from(
     fs.readFileSync(__dirname + "/../dist/assets/card-template.bin"),
   );
@@ -28,7 +29,7 @@ const assert = require("node:assert/strict"),
   );
   const special = decodeReplayPack(pack);
   assert.deepEqual(
-    special.map((t) => [t.machine, t.course, t.frames, t.totalTicks]),
+    special.map((t) => [t!.machine, t!.course, t!.frames, t!.totalTicks]),
     [
       [3, 2, 4665, 4489],
       [0, 3, 3239, 3063],
@@ -37,7 +38,7 @@ const assert = require("node:assert/strict"),
     "original REPLAY.DAT golden headers",
   );
   assert.deepEqual(
-    special.map((t) => t.name.trim()),
+    special.map((t) => t!.name!.trim()),
     ["GHOST 01", "GHOST 02", "GHOST 03"],
   );
   const system = defaultSystem();
@@ -69,11 +70,11 @@ const assert = require("node:assert/strict"),
   );
   assert.equal(view.getUint16(1664, true), 0x5268);
   assert.equal(view.getUint16(1792, true), 0x5268);
-  assert.equal(view.getUint16(2048, true), special[0].words[0]);
+  assert.equal(view.getUint16(2048, true), special[0]!.words[0]);
   assert.deepEqual(decodeCard(bytes).system, system);
   assert.deepEqual(
-    decodeCard(bytes).replays.map((t) => t.words),
-    special.map((t) => t.words),
+    decodeCard(bytes).replays.map((t) => t!.words),
+    special.map((t) => t!.words),
   );
   // The MIPS binary uses signed lb at 0x800af8b8/0x800af8bc in sam_set.
   // Exercise high bytes independently of the encoder's record construction.
@@ -105,20 +106,20 @@ const assert = require("node:assert/strict"),
     cards = new MemoryCards(storage, template);
   assert.equal(cards.read(0), null);
   cards.saveSystem(0, system);
-  cards.saveReplay(0, 1, { ...special[0], axes: { 0: [0.3, 0.5] } }, system);
+  cards.saveReplay(0, 1, { ...special[0]!, axes: { 0: [0.3, 0.5] } }, system);
   cards.saveSystem(0, { ...system, level: 2 });
-  assert.equal(cards.read(0).system.level, 2);
-  assert.equal(cards.read(0).replays[1].name.trim(), "GHOST 01");
-  assert.deepEqual(cards.read(0).replays[1].axes, { 0: [0.3, 0.5] });
+  assert.equal(cards.read(0)!.system.level, 2);
+  assert.equal(cards.read(0)!.replays[1]!.name!.trim(), "GHOST 01");
+  assert.deepEqual(cards.read(0)!.replays[1]!.axes, { 0: [0.3, 0.5] });
   cards.saveSystem(1, defaultSystem());
-  assert.equal(cards.read(1).system.unlocks, 0);
-  const large = { ...special[0], frames: 3000, words: Array(3000).fill(0) };
+  assert.equal(cards.read(1)!.system.unlocks, 0);
+  const large = { ...special[0]!, frames: 3000, words: Array(3000).fill(0) };
   cards.saveReplay(1, 0, large, system);
-  cards.saveReplay(1, 1, { ...special[0], frames: 1, words: [0] }, system);
+  cards.saveReplay(1, 1, { ...special[0]!, frames: 1, words: [0] }, system);
   const before = storage.getItem("hover-card-v1-1");
   assert.throws(
     () =>
-      cards.saveReplay(1, 2, { ...special[0], frames: 1, words: [0] }, system),
+      cards.saveReplay(1, 2, { ...special[0]!, frames: 1, words: [0] }, system),
     /空き/,
   );
   assert.equal(
@@ -127,27 +128,27 @@ const assert = require("node:assert/strict"),
     "failed capacity check is atomic",
   );
   cards.deleteReplay(1, 0);
-  assert.equal(cards.read(1).replays[0], null);
-  assert.equal(cards.read(1).replays[1].words.length, 1);
-  cards.saveReplay(1, 2, special[2], system);
-  assert.equal(cards.read(1).replays[2].machine, 2);
+  assert.equal(cards.read(1)!.replays[0], null);
+  assert.equal(cards.read(1)!.replays[1]!.words.length, 1);
+  cards.saveReplay(1, 2, special[2]!, system);
+  assert.equal(cards.read(1)!.replays[2]!.machine, 2);
   const old = new SessionStore();
   old.setItem("hover-unlocks", "7");
   old.setItem("hover-training-marks", JSON.stringify(Array(15).fill(31)));
   old.setItem("hover-player-name", "SAT");
   const migrate = new MemoryCards(old, template);
   migrate.migrateLegacy();
-  assert.equal(migrate.read(0).system.unlocks, 15);
+  assert.equal(migrate.read(0)!.system.unlocks, 15);
   assert.equal(old.getItem("hover-unlocks"), "7");
   migrate.saveSystem(0, defaultSystem());
   migrate.migrateLegacy();
   assert.equal(
-    migrate.read(0).system.unlocks,
+    migrate.read(0)!.system.unlocks,
     0,
     "legacy migration does not overwrite a card on later boots",
   );
-  const R = require("../dist/rules.js"),
-    T = require("../dist/training.js");
+  const R = require("../dist/rules.js") as typeof HoverRules,
+    T = require("../dist/training.js") as typeof HoverTraining;
   const trainingState = new SessionStore();
   trainingState.apply({
     ...defaultSystem(),
@@ -179,7 +180,7 @@ const assert = require("node:assert/strict"),
   console.log(
     "PASS: original SC/icon, 384/1280/3x128-byte layout, signed checksum, native special replays, record nibbles/names, 8KB/6144-byte capacity, independent slots, transactional save/delete, analog sidecar and nondestructive legacy migration",
   );
-})().catch((e) => {
+})().catch((e: unknown) => {
   console.error(e);
   process.exitCode = 1;
 });

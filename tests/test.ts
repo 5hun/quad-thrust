@@ -1,8 +1,9 @@
-const assert = require("node:assert/strict"),
-  fs = require("node:fs"),
-  vm = require("node:vm"),
-  E = require("../dist/engine.js");
-const box = { window: {} };
+import type {} from "./types";
+const assert: typeof import("node:assert/strict") = require("node:assert/strict"),
+  fs = require("node:fs") as typeof import("node:fs"),
+  vm = require("node:vm") as typeof import("node:vm"),
+  E = require("../dist/engine.js") as typeof HoverEngine;
+const box = { window: {} as Window };
 vm.runInNewContext(
   fs.readFileSync(__dirname + "/../dist/tracks.js", "utf8"),
   box,
@@ -10,7 +11,7 @@ vm.runInNewContext(
 const tracks = box.window.HOVER_TRACKS.map(E.prepare);
 assert.equal(tracks.length, 9);
 const t = tracks[0];
-const near = (a, b, e = 0.000001) =>
+const near = (a: number, b: number, e = 0.000001) =>
   assert.ok(Math.abs(a - b) < e, `${a} != ${b}`);
 for (const tr of tracks) {
   assert.ok(tr.length > 1000);
@@ -29,8 +30,8 @@ near(c.vz, 4.5);
 // (60+60)>>2 adds 30 quarter-units to posr; the displayed position
 // uses posr>>2, so seven PS1 units are visible and half a unit is retained.
 near(c.z - E.create(t).z, 0.07);
-assert.equal(c.sourcePosition[2] - Math.round(E.create(t).z * 400), 30);
-assert.equal(c.sourcePosition[2] & 3, 2);
+assert.equal(c.sourcePosition![2] - Math.round(E.create(t).z * 400), 30);
+assert.equal(c.sourcePosition![2] & 3, 2);
 c = E.create(t);
 E.step(c, t, { l1: true, l2: true }, 1 / 60);
 near(c.heading, 0);
@@ -65,8 +66,8 @@ const sp = 283,
   drag = Math.trunc((sp * 18000) / (128 * (sp + 1)));
 assert.equal(c.front[2], 1600 - ((1600 * (drag + 240)) >> 13));
 // Clone stage: place effect underneath stationary ship; repeated P doesn't re-fire.
-function floor(symbol) {
-  const raw = JSON.parse(JSON.stringify(box.window.HOVER_TRACKS[0]));
+function floor(symbol: string) {
+  const raw: RawTrack = JSON.parse(JSON.stringify(box.window.HOVER_TRACKS[0]));
   raw.samples.forEach((p) => (p.tiles = symbol.repeat(p.tiles.length)));
   return E.prepare(raw);
 }
@@ -114,7 +115,7 @@ E.step(edgeCar, damageTrack, {}, 1 / 60);
 assert.equal(edgeCar.grip, true);
 assert.equal(edgeCar.damageFloorActive, false);
 // Wall crossing vs overflying above the curb.
-function hit(height) {
+function hit(height: number) {
   const c = E.create(t);
   c.x = t.nodes[0].r[0] - 2;
   c.y = height;
@@ -168,7 +169,7 @@ finishNode.tiles = "g".repeat(finishNode.tiles.length);
 const finishCar = E.create(finishTrack);
 Object.assign(finishCar, {
   x: 3,
-  z: (finishNode.z + finishNode.end.z) / 2,
+  z: (finishNode.z + finishNode.end!.z) / 2,
   y: 2,
   index: 0,
   lastLine: 0,

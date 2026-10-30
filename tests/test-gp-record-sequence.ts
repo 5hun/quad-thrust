@@ -1,12 +1,13 @@
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
+import type {} from "./types";
+const assert: typeof import("node:assert/strict") = require("node:assert/strict");
+const fs = require("node:fs") as typeof import("node:fs");
 (async () => {
-  const { GPRecordSequence } = await import(
+  const { GPRecordSequence } = (await import(
     "data:text/javascript;base64," +
       fs
         .readFileSync(__dirname + "/../dist/gp-record-sequence.js")
         .toString("base64")
-  );
+  )) as typeof import("../src/gp-record-sequence");
   // Independent checkpoints from GAME.C grandprix_entry_mode's timm ranges.
   const pages = new GPRecordSequence(3, true);
   for (let i = 0; i < 200; i++) pages.tick();
