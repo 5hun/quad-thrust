@@ -27,6 +27,7 @@ def compile_oracle(directory):
     original = (ROOT/'HOVER_SOURCE/MAKEMAP.C').read_text('cp932')
     library = (ROOT/'HOVER_SOURCE/LIB.C').read_text('cp932')
     controller = (ROOT/'HOVER_SOURCE/CAR_CTR.C').read_text('cp932')
+    controller2 = (ROOT/'HOVER_SOURCE/CAR_CTR2.C').read_text('cp932')
     header = r'''
 #include <stdint.h>
 #include <stdio.h>
@@ -41,14 +42,17 @@ typedef uintptr_t u_long;
 #define _subVECTOR(R,A,B) ((R)->vx=A.vx-B.vx,(R)->vy=A.vy-B.vy,(R)->vz=A.vz-B.vz)
 #define _addVECTOR2(R,A) ((R)->vx+=A.vx,(R)->vy+=A.vy,(R)->vz+=A.vz)
 #define _abs(v) abs(v)
+#define _addVECTOR(R,A,B) ((R)->vx=A.vx+B.vx,(R)->vy=A.vy+B.vy,(R)->vz=A.vz+B.vz)
+#define INERTIA_KETA2 2
 struct s_MAP_DATA { VECTOR center; int xdiv,ydiv,next,before,tmd_num; } map_storage[202], *map_data=map_storage+1;
-struct car { VECTOR pos,posr,npos,nposr,inertia_forward,inertia_back; SVECTOR status;
+struct car { VECTOR pos,posr,npos,nposr,inertia_forward,inertia_back; SVECTOR status,statusk,statusb;
+ int per_rot,radder_rot,boost_wr,turbo,breaking,breaking2,boost_timming2,draw;
  int weight,now_on,now_chip_x,now_chip_y,now_chip,rank,line_position,before_line_position;
  int cource_out,over,lev,tei,damage,grip,car_type,speed,lhit,rhit,l_distans,r_distans; SVECTOR *VP,*VP2,*VN;
 } cars[4],*cars_scra[4]={&cars[0],&cars[1],&cars[2],&cars[3]},*car_data;
 struct { int hight; } CARS_PROPATIE[6]={{200},{200},{200},{200},{200},{200}};
 struct { uint32_t attribute; } DOBJ_KAGE[4],DOBJ_C[4];
-struct { struct { int t[3]; } coord; } CRD_KAGE[4];
+struct { struct { int16_t m[3][3]; int t[3]; } coord; } CRD_KAGE[4],CRD_C[4];
 int sound_count,last_tone,last_volume,debris_count,debris_calls;
 struct { int wall_ch; } Trn;
 void car_hitsound(int tone,int volume,int n) { sound_count++;last_tone=tone;last_volume=volume; }
@@ -66,7 +70,8 @@ void add_tmd(int n,int pat,unsigned char *v,int vc,unsigned char *norm,int nc,in
     body = '\n'.join([function(library, 'sqr_i'), function(original, 'normal_set'),
                       function(original, 'make_tmd_line'), function(original, 'make_tmd_circle'),
                       function(controller, 'car_getplate'), function(controller, 'car_gravide'),
-                      function(controller, 'car_wallcheck')])
+                      function(controller, 'car_wallcheck'), function(controller2, 'car_bank'),
+                      function(controller, 'car_preope'), function(controller2, 'car_rotation')])
     wrapper = r'''
 int generate(int circle,int xs,int ys,int *left,int *right,int *cosine,int16_t *out) {
     memset(buffer,0,sizeof(buffer)); memset(cource_buff,0,sizeof(cource_buff)); cp=buffer;
@@ -154,6 +159,46 @@ void wall_move_probe(int *input,int *result) {
 }
 
 '''
+    wrapper += r'''
+void gravity_probe(int *input,int *result) {
+  static int weight[6]={128,120,100,140,95,120};
+  memset(cars,0,sizeof(cars));
+  sound_count=last_tone=last_volume=0;
+  DOBJ_KAGE[0].attribute=0x80000000;DOBJ_C[0].attribute=0;
+  int part=input[0],xs=map_data[part].xdiv,ys=map_data[part].ydiv;
+  cars[0].now_on=part;cars[0].now_chip_x=input[1];cars[0].now_chip_y=input[2];
+  cars[0].now_chip=input[1]+input[2]*(xs+1);cars[0].cource_out=input[3];
+  cars[0].VP=(SVECTOR*)meshes[part];cars[0].VN=(SVECTOR*)(meshes[part]+(xs+1)*(ys+2)*8);
+  cars[0].pos=(VECTOR){input[4],input[5],input[6],0};
+  cars[0].posr=(VECTOR){input[4]<<2,input[7],input[6]<<2,0};
+  cars[0].status.vx=input[8];cars[0].car_type=input[9];cars[0].weight=weight[input[9]];
+  cars[0].lev=input[10];cars[0].over=input[11];cars[0].tei=input[12];cars[0].damage=input[13];
+  cars[0].inertia_forward=(VECTOR){input[16],input[14],input[17],0};
+  cars[0].inertia_back=(VECTOR){input[18],input[15],input[19],0};cars[0].grip=input[20];
+  car_gravide(0);
+  if(input[21]) car_bank(0);
+  result[0]=cars[0].over;result[1]=cars[0].pos.vy;result[2]=cars[0].posr.vy;
+  result[3]=cars[0].inertia_forward.vy;result[4]=cars[0].inertia_back.vy;
+  result[5]=cars[0].tei;result[6]=cars[0].damage;result[7]=cars[0].grip;
+  result[8]=CRD_KAGE[0].coord.t[1];result[9]=(DOBJ_KAGE[0].attribute>>31)&1;result[10]=(DOBJ_C[0].attribute>>6)&1;
+  result[11]=sound_count;result[12]=last_tone;result[13]=last_volume;
+  result[14]=cars[0].inertia_forward.vx;result[15]=cars[0].inertia_forward.vz;
+  result[16]=cars[0].inertia_back.vx;result[17]=cars[0].inertia_back.vz;
+}
+'''
+    wrapper += r'''
+int speed_probe(int *v) {
+  cars[0].inertia_forward=(VECTOR){v[0],v[1],v[2],0};
+  cars[0].inertia_back=(VECTOR){v[3],v[4],v[5],0};
+  car_preope(1);return cars[0].speed;
+}
+'''
+    wrapper += r'''
+int air_roll_probe(int roll) {
+  memset(cars,0,sizeof(cars));cars[0].status.vz=roll;cars[0].VN=(SVECTOR*)buffer;
+  car_rotation(0);return cars[0].status.vz;
+}
+'''
     source = Path(directory)/'original-geometry.c'
     source.write_text(header+body+wrapper)
     target = Path(directory)/'original-geometry.so'
@@ -164,6 +209,9 @@ void wall_move_probe(int *input,int *result) {
     lib.probe.argtypes = [ctypes.c_int]*4 + [ctypes.POINTER(ctypes.c_int)]
     lib.wall_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
     lib.wall_move_probe.argtypes = lib.wall_probe.argtypes
+    lib.gravity_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
+    lib.speed_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]
+    lib.air_roll_probe.argtypes = [ctypes.c_int]
     return lib
 
 
