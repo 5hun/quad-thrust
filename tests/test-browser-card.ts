@@ -96,12 +96,12 @@ module.exports = async function verify({
     await click("GAME LEVEL");
     await press("ArrowLeft");
     await press("ArrowLeft");
-    assert.equal(await page.locator("#difficulty").inputValue(), "0");
+    assert.equal((await snap()).cpuDifficulty, -1);
     await press("ArrowRight");
     await press("ArrowRight");
     await press("ArrowRight");
     await press("ArrowRight");
-    assert.equal(await page.locator("#difficulty").inputValue(), "3");
+    assert.equal((await snap()).cpuDifficulty, 2);
     await page.evaluate(() => {
       window.HoverRules.completeCup(0);
       window.HoverRules.completeCup(1);
@@ -164,8 +164,8 @@ module.exports = async function verify({
     await page.reload();
     await title();
     assert.equal(
-      await page.locator("#difficulty").inputValue(),
-      "3",
+      (await snap()).cpuDifficulty,
+      2,
       "AUTO LOAD scans slot 1 before slot 2",
     );
     assert.equal((await snap()).autoSaveSlot, 0);
@@ -291,7 +291,6 @@ module.exports = async function verify({
     assert.equal((await read(0))!.system.records["time:0:lap"][0].time, 10);
     await page.waitForTimeout(100);
     await press("Escape");
-    await page.locator(".browser-options summary").click();
     const downloaded = page.waitForEvent("download");
     await click("SLOT 1 ゲームデータを書き出す");
     const download = await downloaded,

@@ -85,16 +85,11 @@ export class OriginalMenu {
             values[159] = Math.floor(speed / 2);
             return values;
         }));
-        document.getElementById("menu-prev").onclick = () => this.move(-1);
-        document.getElementById("menu-next").onclick = () => this.move(1);
-        document.getElementById("menu-confirm").onclick = () => this.confirm();
-        document.getElementById("menu-back").onclick = () => this.back();
         this.show("title");
     }
     beginIntro() {
         this.introFrames = 120;
         this.buttons.inert = true;
-        document.getElementById("menu-controls").hidden = true;
     }
     tick(keys = {}) {
         if (this.screen === "record-detail")
@@ -107,7 +102,6 @@ export class OriginalMenu {
         }
         if (this.introFrames > 0 && --this.introFrames === 0) {
             this.buttons.inert = false;
-            document.getElementById("menu-controls").hidden = false;
         }
     }
     show(screen, selected = 0) {
@@ -152,11 +146,6 @@ export class OriginalMenu {
                     this.confirm();
                 }, i);
             });
-        else if (["car", "course", "training", "music", "records"].includes(screen)) {
-            this.button("前へ", 0, 94, 24, 48, () => this.move(-1));
-            this.button("次へ", 296, 94, 24, 48, () => this.move(1));
-        }
-        document.getElementById("menu-controls").hidden = false;
         this.syncSelection();
         this.draw();
     }
@@ -622,16 +611,6 @@ export class OriginalMenu {
         }
         else if (this.screen === "notice")
             this.jp(this.notice, 16, 32);
-        if (["car", "course", "training", "music"].includes(this.screen)) {
-            g.fillStyle = "#00ffff";
-            for (const side of [0, 1]) {
-                g.beginPath();
-                g.moveTo(side ? 318 : 2, 120);
-                g.lineTo(side ? 308 : 12, 112);
-                g.lineTo(side ? 308 : 12, 128);
-                g.fill();
-            }
-        }
         this.panel.setAttribute("aria-label", `${this.screen}: ${this.screen === "card" ? this.card?.label : list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : this.screen === "training" ? HoverTraining.tasks[+field("course").value].description : this.screen === "notice" ? this.notice : this.screen === "help" ? (this.help.page === "book" ? `${this.help.book} ${this.help.scroll}/${this.help.maxScroll}\n${this.help.description}` : this.help.items[this.help.selected]) : "選択画面")}`);
     }
     jp(text, x, y, size = 12) {

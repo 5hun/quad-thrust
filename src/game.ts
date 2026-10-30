@@ -16,12 +16,10 @@ interface Elements {
   thrusters: HTMLElement;
   speed: HTMLElement;
   position: HTMLElement;
-  pause: HTMLButtonElement;
   minimap: HTMLCanvasElement;
   message: HTMLElement;
   menu: HTMLElement;
   mode: HTMLSelectElement;
-  difficulty: HTMLSelectElement;
   "mode-description": HTMLElement;
   "training-status": HTMLElement;
   "course-caption": HTMLElement;
@@ -34,7 +32,6 @@ interface Elements {
   "machine-description": HTMLElement;
   stats: HTMLElement;
   quality: HTMLSelectElement;
-  "ghost-enabled": HTMLInputElement;
   start: HTMLButtonElement;
   "pause-panel": HTMLElement;
   resume: HTMLButtonElement;
@@ -323,8 +320,6 @@ function select() {
     formatRows("total") +
     "</p>";
   $("course").disabled = rules.cup !== null;
-  $("ghost-enabled").disabled = rules.recordClass !== "time";
-  $("difficulty").disabled = !rules.opponents;
   if (rules.cup !== null && state === "menu")
     $("course").value = String(rules.cup * 3);
   track = selectedTrack();
@@ -372,15 +367,6 @@ $("mode").onchange = () => {
   select();
 };
 $("course").onchange = select;
-try {
-  const saved = session.getItem("hover-cpu-difficulty");
-  if (saved !== null && /^[0-3]$/.test(saved)) $("difficulty").value = saved;
-} catch {}
-$("difficulty").onchange = () => {
-  try {
-    session.setItem("hover-cpu-difficulty", $("difficulty").value);
-  } catch {}
-};
 $("machine").onchange = () => {
   if (R.profile($("mode").value).training) {
     const value = $("course").value;
@@ -391,14 +377,6 @@ $("machine").onchange = () => {
 };
 select();
 const browserSettings = document.getElementById("browser-settings")!;
-for (const id of ["difficulty", "quality", "ghost-enabled"]) {
-  const element = $(id as "difficulty" | "quality" | "ghost-enabled");
-  const label = document.querySelector(`label[for="${id}"]`);
-  if (label) browserSettings.append(label);
-  if (id === "ghost-enabled") browserSettings.append(element.parentElement!);
-  else browserSettings.append(element);
-}
-browserSettings.append($("sound"));
 const originalMenu = new OriginalMenu({
   mode(value) {
     $("mode").value = value;
@@ -459,7 +437,6 @@ function captureSystem() {
 }
 function settingsChanged(slot: number) {
   const data = session.snapshot();
-  $("difficulty").value = String(data.level + 1);
   autoSaveSlot = data.auto & 2 ? slot : null;
 }
 function applySystem(data: SystemSave, slot: number) {
@@ -559,7 +536,11 @@ for (const slot of [0, 1]) {
     input.value = "";
   };
   importLabel.append(input);
-  browserSettings.append(exportButton, importLabel);
+  const slotGroup = document.createElement("fieldset");
+  const legend = document.createElement("legend");
+  legend.textContent = `SLOT ${slot + 1}`;
+  slotGroup.append(legend, exportButton, importLabel);
+  browserSettings.append(slotGroup);
 }
 const cardStatus = document.createElement("p");
 cardStatus.setAttribute("role", "status");
@@ -653,7 +634,6 @@ function playReplay(kind: "view" | "ending") {
   for (const id of ["hud", "pause-panel", "result", "touch"] as const)
     $(id).hidden = true;
   document.getElementById("continue-panel")!.hidden = true;
-  document.getElementById("menu-controls")!.hidden = true;
   $("menu").hidden = false;
   $("menu").dataset.screen = kind === "view" ? "replay" : "ending";
   $("menu").setAttribute(
@@ -697,10 +677,11 @@ function start(nextRound = false) {
   }
   track = selectedTrack();
   car = E.placeOnGrid(E.create(track, +$("machine").value), track);
+  recordingLevel = session.snapshot().level;
   bots = R.profile(mode).opponents
     ? R.opponents(car.type).map((type, i) => {
         const b = E.placeOnGrid(E.create(track, type), track, i + 1);
-        b.cpuLevel = E.cpuLevels[+$("difficulty").value][+$("course").value];
+        b.cpuLevel = E.cpuLevels[recordingLevel + 1][+$("course").value];
         b.cpuSlot = i + 1;
         return b;
       })
@@ -716,14 +697,12 @@ function start(nextRound = false) {
       : [];
     trainingSession = T.create(stage, car.heading);
   }
-  recordingLevel = +$("difficulty").value - 1;
   inputRecording = R.profile(mode).recordClass ? new ReplayRecorder() : null;
   replayClock = 0;
   const ghostTape = replayMemory.beginRace(
     tracks.indexOf(track),
     car.type,
     R.profile(mode).sourceMode,
-    $("ghost-enabled").checked,
   );
   ghostReplay = ghostTape ? new GhostReplay(ghostTape, track) : null;
   state = "countdown";
@@ -734,7 +713,6 @@ function start(nextRound = false) {
   view.yaw = null;
   toastTimer = 0;
   $("menu").hidden = true;
-  document.getElementById("menu-controls")!.hidden = true;
   $("result").hidden = true;
   $("pause-panel").hidden = true;
   $("hud").hidden = false;
@@ -766,7 +744,6 @@ function quit() {
   for (const id of ["hud", "pause-panel", "result", "touch"] as const)
     $(id).hidden = true;
   document.getElementById("continue-panel")!.hidden = true;
-  document.getElementById("menu-controls")!.hidden = true;
   $("message").textContent = "";
   $("menu").hidden = false;
   $("menu").dataset.screen = "exited";
@@ -848,7 +825,6 @@ function beginDemo() {
   $("menu").dataset.screen = "demo";
   $("menu").setAttribute("aria-label", "PRESS ANY BUTTON");
   originalMenu.button("PRESS ANY BUTTON", 0, 0, 320, 240, endDemo);
-  document.getElementById("menu-controls")!.hidden = true;
   document.querySelector(".game-wrap")!.classList.add("playing");
 }
 function endDemo() {
@@ -960,7 +936,6 @@ function syncFullscreen() {
 }
 document.addEventListener("fullscreenchange", syncFullscreen);
 $("start").onclick = () => start();
-$("pause").onclick = pause;
 $("resume").onclick = pause;
 $("restart").onclick = () => start(true);
 $("back").onclick = () => (trainingSession ? returnToSelection(true) : menu());
@@ -1355,10 +1330,7 @@ function render() {
   preparePostraceReplay();
   const display = postraceReplay?.car || car;
   const replayBots = postraceReplay?.bots || bots;
-  const ghost =
-    !postrace.phase && $("ghost-enabled").checked
-      ? ghostReplay?.car || null
-      : null;
+  const ghost = !postrace.phase ? ghostReplay?.car || null : null;
   view.nameEntry = postrace.entry;
   view.gpRecords = !!postrace.phase && postrace.batch.length > 0;
   view.continuePrompt = document.getElementById("continue-panel")!.hidden
@@ -1407,7 +1379,7 @@ function hud() {
     state,
     countdown,
     trainingSession,
-    $("ghost-enabled").checked ? ghostReplay?.car || null : null,
+    ghostReplay?.car || null,
   );
   const speed = car.sourceSpeed >> 1;
   $("speed").textContent = String(speed).padStart(3, "0");
@@ -1764,11 +1736,6 @@ function frame(ts: number) {
 $("menu").addEventListener("pointerdown", () => {
   menuIdleFrames = 0;
 });
-document
-  .getElementById("menu-controls")!
-  .addEventListener("pointerdown", () => {
-    menuIdleFrames = 0;
-  });
 beginDemo();
 requestAnimationFrame(frame);
 // Read-only snapshots for diagnostics; no controls or simulation bypasses exposed.
@@ -1814,6 +1781,7 @@ export const getHoverDiagnostics = () => ({
       : null,
   autoSaveSlot,
   autoLoadSave: session.snapshot().auto,
+  cpuDifficulty: session.snapshot().level,
   replay: replayRun
     ? {
         kind: replayKind,

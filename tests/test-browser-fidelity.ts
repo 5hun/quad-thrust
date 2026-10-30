@@ -796,7 +796,7 @@ module.exports = async function verify({
     await page.getByRole("button", { name: "START", exact: true }).click();
     await page.getByRole("button", { name: "TRAINING", exact: true }).click();
     await page.getByRole("button", { name: "LEVEL 1", exact: true }).click();
-    await page.locator("#menu-confirm").click();
+    await page.keyboard.press("Enter");
     await page.evaluate(() => {
       window.HoverTraining.step = (session) => {
         session.status = "complete";
@@ -804,7 +804,7 @@ module.exports = async function verify({
         return session.status;
       };
     });
-    await page.locator("#menu-confirm").click();
+    await page.keyboard.press("Enter");
     await page.waitForFunction(
       () => window.hoverDiagnostics().state === "finished",
     );

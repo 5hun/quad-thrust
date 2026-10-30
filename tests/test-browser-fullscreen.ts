@@ -77,7 +77,7 @@ module.exports = async function verify({
           viewportHeight: innerHeight,
           background: getComputedStyle(host).backgroundColor,
           hud: host.contains(document.getElementById("hud")),
-          controls: host.contains(document.getElementById("menu-controls")),
+          controls: !!host.querySelector("#fullscreen"),
           settings: !!host.querySelector(".browser-options"),
         };
       });

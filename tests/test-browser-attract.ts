@@ -32,7 +32,7 @@ module.exports = async function verify({
     assert.deepEqual(first.cpuLevels, [8, 8, 8]);
     assert.ok([1, 17, 33].includes(first.replayCameraMode!));
     assert.equal(await page.locator("#hud").isVisible(), false);
-    assert.equal(await page.locator("#menu-controls").isVisible(), false);
+    assert.equal(await page.locator("#menu-controls").count(), 0);
     await page.waitForTimeout(500);
     assert.notEqual((await snapshot()).opponents[0].z, first.opponents[0].z);
     // Any key exits the demo, but cannot also navigate the title.

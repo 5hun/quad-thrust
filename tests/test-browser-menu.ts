@@ -30,9 +30,9 @@ module.exports = async function verify({
         name,
       );
       assert.equal(
-        await page.locator("#menu-controls").isVisible(),
-        true,
-        name + " controls visible",
+        await page.locator("#menu-controls").count(),
+        0,
+        name + " has no external menu controls",
       );
     };
     const press = (key: string) => page.keyboard.press(key);
@@ -71,6 +71,18 @@ module.exports = async function verify({
     await page.goto(baseURL);
     await enterTitle();
     await screen("title");
+    assert.equal(await page.locator(".browser-options").isVisible(), true);
+    assert.equal(await page.locator(".browser-options summary").count(), 0);
+    assert.equal(
+      await page.locator("#difficulty, #ghost-enabled, #pause").count(),
+      0,
+    );
+    assert.equal(await page.locator("#quality").isVisible(), true);
+    assert.equal(await page.locator("#sound").isVisible(), true);
+    assert.equal(
+      await page.locator("#browser-settings input[type=file]").count(),
+      2,
+    );
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
       "START",
       "OPTION",
@@ -82,6 +94,7 @@ module.exports = async function verify({
     await press("ArrowDown");
     await press("Enter");
     await screen("car");
+    assert.equal(await page.locator("#menu nav button").count(), 0);
     assert.equal(await page.locator("#mode").inputValue(), "time");
     for (let i = 0; i < 6; i++) {
       assert.equal(await page.locator("#machine").inputValue(), String(i));
@@ -98,7 +111,7 @@ module.exports = async function verify({
     await screen("car");
     await press("Enter");
     await screen("course");
-    await click("決定 Enter / Z");
+    await press("Enter");
     await page.waitForFunction(
       () => window.hoverDiagnostics().state === "running",
     );
@@ -116,10 +129,10 @@ module.exports = async function verify({
       await click(label);
       await screen("car");
       assert.equal(await page.locator("#mode").inputValue(), mode);
-      await page.locator("#menu-confirm").click();
+      await press("Enter");
       if (mode === "practice") {
         await screen("course");
-        await page.locator("#menu-confirm").click();
+        await press("Enter");
       }
       await page.waitForFunction(
         () => window.hoverDiagnostics().state === "countdown",
@@ -332,13 +345,13 @@ module.exports = async function verify({
       window.menuTestPad.buttons[0].pressed = false;
     });
     await page.setViewportSize({ width: 375, height: 780 });
-    await page.locator("#menu-back").click();
+    await press("Escape");
     await screen("title");
     await click("START");
     await click("TIME ATTACK");
     await screen("car");
-    await page.locator("#menu-next").click();
-    await page.locator("#menu-confirm").click();
+    await press("ArrowRight");
+    await press("Enter");
     await screen("course");
     const size = await page.locator(".game-wrap").boundingBox();
     assert.ok(Math.abs(size!.width / size!.height - 4 / 3) < 0.01);
@@ -352,9 +365,9 @@ module.exports = async function verify({
       (await page.evaluate(() => window.hoverDiagnostics())).assetErrors,
       [],
     );
-    await page.locator("#menu-back").click();
+    await press("Escape");
     await screen("car");
-    await page.locator("#menu-back").click();
+    await press("Escape");
     await screen("modes");
     assert.equal(
       (await page.evaluate(() => window.hoverDiagnostics())).menuSelection,
@@ -366,7 +379,7 @@ module.exports = async function verify({
       () => window.hoverDiagnostics().state === "exited",
     );
     assert.equal(await page.locator(".browser-options").isVisible(), false);
-    assert.equal(await page.locator("#menu-controls").isVisible(), false);
+    assert.equal(await page.locator("#menu-controls").count(), 0);
     assert.equal(await page.locator("#menu nav button").count(), 0);
     assert.equal(
       await page.evaluate(() => window.hoverDiagnostics().music),
@@ -441,7 +454,7 @@ module.exports = async function verify({
     await title();
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: original title tree; all machines/courses; GP, practice, training and free-run selection order; cancel; race start; records/music/help; keyboard, gamepad and mobile controls",
+      "PASS: original title tree; all machines/courses; GP, practice, training and free-run selection order; cancel; race start; records/music/help; keyboard, gamepad and narrow-screen layout",
     );
   } finally {
     await browser.close();

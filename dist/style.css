@@ -439,11 +439,6 @@ footer b {
   background: var(--accent);
   color: #000;
 }
-.pause {
-  position: absolute;
-  top: 110px;
-  right: 35px;
-}
 #minimap {
   position: absolute;
   right: 22px;
@@ -630,10 +625,6 @@ footer b {
   .power {
     width: 150px;
   }
-  .pause {
-    right: 16px;
-    top: 100px;
-  }
   #minimap {
     width: 120px;
     height: 90px;
@@ -652,27 +643,6 @@ footer b {
   #message {
     font-size: 48px;
   }
-}
-.render-options {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 10px 0 14px;
-}
-.render-options select {
-  width: 120px;
-  font-size: 10px;
-  padding: 7px;
-}
-.render-options label {
-  margin: 0;
-  font: 10px sans-serif;
-  letter-spacing: 0;
-}
-.render-options .ghost-label {
-  display: flex;
-  align-items: center;
-  font-size: 9px;
 }
 .game-wrap {
   min-height: 680px;
@@ -766,15 +736,6 @@ footer b {
 #minimap {
   display: none;
 }
-.pause {
-  top: auto;
-  bottom: 8px;
-  left: 50%;
-  right: auto;
-  transform: translateX(-50%);
-  padding: 4px 8px;
-  opacity: 0.5;
-}
 #message {
   font-size: 24px;
 }
@@ -791,10 +752,6 @@ footer b {
   }
   .playing .modal {
     z-index: 5;
-  }
-  .playing .pause {
-    bottom: 3px;
-    font-size: 8px;
   }
 }
 
@@ -855,8 +812,8 @@ footer[hidden],
 }
 main {
   max-width: 1040px;
-  /* Keep the entire original 4:3 screen and browser controls in short windows. */
-  max-width: min(1040px, calc((100svh - 96px) * 4 / 3 + 32px));
+  /* Leave room for the always-visible browser settings below the 4:3 screen. */
+  max-width: min(1040px, calc((100svh - 260px) * 4 / 3 + 32px));
   padding: 0 16px 24px;
 }
 .game-wrap:not(.playing),
@@ -907,26 +864,7 @@ main {
   outline: 1px solid #00ff00;
   outline-offset: 3px;
 }
-#menu-controls {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 0;
-}
-#menu-controls[hidden] {
-  display: none;
-}
-.screen-controls {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  min-height: 56px;
-}
-#menu-controls button,
-#fullscreen {
+.browser-options button {
   border: 1px solid #444;
   background: #111;
   color: #ccc;
@@ -950,32 +888,66 @@ main {
   color: #aaa;
   text-align: center;
 }
-#menu-controls kbd {
-  border: 0;
-  margin-left: 5px;
-  font-size: 10px;
-}
 .browser-options {
-  max-width: 720px;
-  margin: 8px auto;
+  margin: 12px auto 0;
+  padding: 12px;
+  border: 1px solid #333;
   color: #aaa;
+  font-size: 12px;
 }
-#browser-settings {
+.browser-options[hidden] {
+  display: none;
+}
+.display-settings {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  padding: 16px 0;
   align-items: center;
+  gap: 10px;
 }
-#browser-settings select {
+.browser-options select {
   width: auto;
   margin: 0;
 }
-#browser-settings label {
+.browser-options label {
   margin: 0;
 }
+#browser-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+#browser-settings fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #333;
+}
+#browser-settings legend {
+  padding: 0 6px;
+  font: 11px monospace;
+}
+#browser-settings fieldset > label {
+  display: block;
+  margin-top: 10px;
+  letter-spacing: normal;
+  font-size: 11px;
+}
+#browser-settings input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  font-size: 11px;
+}
+#browser-settings > p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+#browser-settings > p:empty {
+  display: none;
+}
 .controls,
-main > details:not(.browser-options) {
+main > details {
   display: none;
 }
 .modal {
@@ -1010,14 +982,11 @@ main > details:not(.browser-options) {
     min-height: 0;
     aspect-ratio: 4 / 3;
   }
-  #menu-controls {
-    gap: 6px;
-  }
-  #menu-controls button {
-    padding: 8px;
-  }
   .browser-options {
-    padding: 0 12px;
+    margin: 12px;
+  }
+  #browser-settings {
+    grid-template-columns: 1fr;
   }
 }
 

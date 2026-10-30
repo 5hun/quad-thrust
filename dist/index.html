@@ -16,9 +16,6 @@
         ><span class="brand-mark">⫸</span> HOVER<span>RACING</span></a
       >
       <div class="edition">1997 → NOW <i></i> THREE.JS EDITION</div>
-      <button id="sound" class="small" aria-label="サウンドを切り替え">
-        SOUND ON
-      </button>
     </header>
     <main>
       <div id="fullscreen-host" tabindex="-1">
@@ -61,8 +58,7 @@
                 ><small id="position">TIME ATTACK</small>
               </div>
             </div>
-            <button id="pause" class="small pause">Ⅱ PAUSE</button
-            ><canvas id="minimap" width="220" height="160"></canvas>
+            <canvas id="minimap" width="220" height="160"></canvas>
           </div>
           <div id="message" aria-live="polite"></div>
           <section id="menu" class="menu" aria-label="タイトル画面"></section>
@@ -97,13 +93,6 @@
                 <option value="train2">TRAINING / LEVEL 3</option>
                 <option value="free">FREE RUN / ダメージなしで練習</option>
               </select>
-              <label for="difficulty">CPU 難易度</label>
-              <select id="difficulty">
-                <option value="0">EASY</option>
-                <option value="1" selected>NORMAL</option>
-                <option value="2">HARD</option>
-                <option value="3">EXPART</option>
-              </select>
               <p id="mode-description" aria-live="polite"></p>
               <p id="training-status" hidden></p>
               <label for="course" id="course-caption"
@@ -121,16 +110,6 @@
               ><select id="machine"></select>
               <p id="machine-description"></p>
               <div class="stats" id="stats"></div>
-              <div class="render-options">
-                <label for="quality">画質</label
-                ><select id="quality">
-                  <option value="retro">RETRO / 240p</option>
-                  <option value="hd">HIGH / HD</option></select
-                ><label class="ghost-label"
-                  ><input id="ghost-enabled" type="checkbox" checked />
-                  保持中のTAゴースト</label
-                >
-              </div>
               <button id="start" class="primary">
                 START RACE <span>↗</span></button
               ><small class="start-hint"
@@ -189,22 +168,23 @@
           </div>
         </div>
       </div>
-      <div class="screen-controls">
-        <nav id="menu-controls" aria-label="メニュー操作">
-          <button id="menu-back">戻る <kbd>Esc / X</kbd></button>
-          <button id="menu-prev" aria-label="前の項目">◀</button>
-          <button id="menu-next" aria-label="次の項目">▶</button>
-          <button id="menu-confirm">決定 <kbd>Enter / Z</kbd></button>
-        </nav>
-        <button id="fullscreen" hidden aria-controls="fullscreen-host">
-          全画面
-        </button>
-      </div>
-      <p id="fullscreen-status" role="status" hidden></p>
-      <details class="browser-options">
-        <summary>ブラウザ設定・操作</summary>
-        <div id="browser-settings"></div>
-      </details>
+      <section class="browser-options" aria-label="ブラウザ設定">
+        <div class="display-settings" role="group" aria-label="画面・サウンド">
+          <button id="fullscreen" hidden aria-controls="fullscreen-host">
+            全画面
+          </button>
+          <label for="quality">画質</label>
+          <select id="quality">
+            <option value="retro">RETRO / 240p</option>
+            <option value="hd">HIGH / HD</option>
+          </select>
+          <button id="sound" class="small" aria-label="サウンドを切り替え">
+            SOUND ON
+          </button>
+        </div>
+        <div id="browser-settings" role="group" aria-label="セーブデータ"></div>
+        <p id="fullscreen-status" role="status" hidden></p>
+      </section>
       <details id="records-panel">
         <summary>VIEW RECORDS / 選択中コースの記録</summary>
         <div id="records-list"></div>
