@@ -951,6 +951,27 @@ namespace HoverEngine {
     }
     setSourcePosition(car, nextPosition);
   }
+  // CAR_CTR.C car_resistance: products and sign tests are signed 32-bit.
+  export function sourceResistance(
+    car: Car,
+    brake = false,
+    floorBrake = false,
+  ) {
+    const m = MACHINES[car.type];
+    const drag =
+      Math.trunc(
+        Math.imul(car.sourceSpeed, m.drag) /
+          Math.imul(m.weight, (car.sourceSpeed + 1) | 0),
+      ) | 0;
+    const horizontal = (drag + (brake ? 240 : 0) + (floorBrake ? 240 : 0)) | 0;
+    for (const vector of [car.front, car.rear])
+      for (let k = 0; k < 3; k++) {
+        const old = vector[k];
+        vector[k] =
+          (old - (Math.imul(old, k === 1 ? drag : horizontal) >> 13)) | 0;
+        if (Math.imul(old, vector[k]) < 0) vector[k] = 0;
+      }
+  }
   export function tick(
     car: Car,
     track: Track,
@@ -1083,17 +1104,11 @@ namespace HoverEngine {
     // In car_chipeffect only J leaves ccc unchanged while airborne, so
     // landing on that same jump tile must still fire the jump.
     if (ch !== "J" || car.grip) car.previousTile = ch;
-    const drag = Math.trunc((speed * m.drag) / (m.weight * (speed + 1))),
-      horizontal =
-        drag +
-        (input.brake ? 240 : 0) +
-        (ch === "*" && car.grip && !car.cpuLevel ? 240 : 0);
-    for (const v of [f, b])
-      for (let j = 0; j < 3; j++) {
-        const old = v[j];
-        v[j] -= (v[j] * (j === 1 ? drag : horizontal)) >> 13;
-        if (old * v[j] < 0) v[j] = 0;
-      }
+    sourceResistance(
+      car,
+      !!input.brake,
+      ch === "*" && car.grip && !car.cpuLevel,
+    );
     if (source) {
       sourceGravity(car, car.sourceContact!);
       // car_enemy omits car_bank for lev>0; a lev=0 ghost uses car_action.
@@ -1337,11 +1352,7 @@ namespace HoverEngine {
           Math.hypot(...car.front.map((v, k) => v + car.rear[k])) /
             Math.sqrt(128),
         );
-    const drag = Math.trunc(
-      (car.sourceSpeed * m.drag) / (m.weight * (car.sourceSpeed + 1)),
-    );
-    for (const vector of [car.front, car.rear])
-      for (let k = 0; k < 3; k++) vector[k] -= Math.imul(vector[k], drag) >> 13;
+    sourceResistance(car);
     if (car.sourceContact) {
       sourceGravity(car, car.sourceContact, -256);
       if (!car.cpuLevel) sourceBank(car, car.sourceContact.normal);

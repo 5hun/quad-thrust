@@ -400,6 +400,14 @@ beyondApron.y = -72;
 E.step(beyondApron, t, {}, 1 / 60);
 assert.equal(beyondApron.reason, "course-out");
 assert.equal(beyondApron.onRoad, false);
+// car_resistance checks signed 32-bit products even during the fall wait.
+// A floating-point sign check leaves this high inertia running instead.
+const fallResistance = E.create(t);
+fallResistance.front = [50000, 0, 0];
+fallResistance.rear = [50000, 0, 0];
+E.stepFalling(fallResistance);
+assert.equal(fallResistance.front[0], 0);
+assert.equal(fallResistance.rear[0], 0);
 const frozenTime = beyondApron.time;
 const oldY = beyondApron.y;
 for (let i = 0; i < 60; i++) E.stepFalling(beyondApron);

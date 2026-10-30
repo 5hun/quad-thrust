@@ -47,6 +47,7 @@ typedef uintptr_t u_long;
 struct s_MAP_DATA { VECTOR center; int xdiv,ydiv,next,before,tmd_num; } map_storage[202], *map_data=map_storage+1;
 struct car { VECTOR pos,posr,npos,nposr,inertia_forward,inertia_back; SVECTOR status,statusk,statusb;
  int accer,side_boost,per_rot2,per_rot,radder_rot,boost_wr,turbo,breaking,breaking2,boost_timming2,draw;
+ int resi1,brek;
  int weight,now_on,now_chip_x,now_chip_y,now_chip,rank,line_position,before_line_position;
  int cource_out,over,lev,tei,damage,grip,car_type,speed,lhit,rhit,l_distans,r_distans; SVECTOR *VP,*VP2,*VN;
 } cars[4],*cars_scra[4]={&cars[0],&cars[1],&cars[2],&cars[3]},*car_data;
@@ -74,7 +75,7 @@ void add_tmd(int n,int pat,unsigned char *v,int vc,unsigned char *norm,int nc,in
                       function(controller, 'car_getplate'), function(controller, 'car_gravide'),
                       function(controller, 'car_wallcheck'), function(controller2, 'car_bank'),
                       function(controller, 'car_preope'), function(controller2, 'car_rotation'),
-                      function(controller, 'car_acceralate')])
+                      function(controller, 'car_acceralate'), function(controller, 'car_resistance')])
     wrapper = r'''
 int generate(int circle,int xs,int ys,int *left,int *right,int *cosine,int16_t *out) {
     memset(buffer,0,sizeof(buffer)); memset(cource_buff,0,sizeof(cource_buff)); cp=buffer;
@@ -235,6 +236,19 @@ void acceleration_probe(int *input,int *result) {
   result[5]=cars[0].inertia_back.vx;result[6]=cars[0].inertia_back.vy;result[7]=cars[0].inertia_back.vz;
 }
 '''
+    wrapper += r'''
+void resistance_probe(int *input,int *result) {
+  static int weights[6]={128,120,100,140,95,120},drag[6]={18000,17000,13000,22000,11000,32000};
+  memset(cars,0,sizeof(cars));int type=input[0];
+  cars[0].weight=weights[type];cars[0].resi1=drag[type];cars[0].brek=8;
+  cars[0].speed=input[1];cars[0].breaking=input[2];cars[0].breaking2=input[3];
+  cars[0].inertia_forward=(VECTOR){input[4],input[5],input[6],0};
+  cars[0].inertia_back=(VECTOR){input[7],input[8],input[9],0};
+  car_resistance(0);
+  result[0]=cars[0].inertia_forward.vx;result[1]=cars[0].inertia_forward.vy;result[2]=cars[0].inertia_forward.vz;
+  result[3]=cars[0].inertia_back.vx;result[4]=cars[0].inertia_back.vy;result[5]=cars[0].inertia_back.vz;
+}
+'''
     source = Path(directory)/'original-geometry.c'
     source.write_text(header+body+wrapper)
     target = Path(directory)/'original-geometry.so'
@@ -250,6 +264,7 @@ void acceleration_probe(int *input,int *result) {
     lib.air_roll_probe.argtypes = [ctypes.c_int]
     lib.rotation_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
     lib.acceleration_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
+    lib.resistance_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
     return lib
 
 

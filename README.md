@@ -105,6 +105,7 @@ npm run format:check
 npm run test:source-geometry # Python 3とCコンパイラを使う原作C関数との直接比較
 npm run test:source-walls    # 壁応答・整数移動・補正ループの原作C比較
 npm run test:source-hover    # 浮遊・着地・落下開始・斜面力・速度・空中ロールの原作C比較
+npm run test:source-resistance # 減速・ブレーキ・32bit符号判定の原作C比較
 npm run test:source-attitude # 機体・影の姿勢と推力の原作C比較（行列を明示入力）
 ```
 
@@ -160,3 +161,5 @@ npm run test:browser -- <Playwrightのモジュールパス> <Chromiumの実行�
 原作: Sato Tomokazu, Hover Racing (1997)。Three.jsのライセンスは `dist/vendor/THREE-LICENSE.txt`。
 
 実装時の参照資料: [Sony Net Yaroze Library Reference（RotMatrix / RotMatrixY / GsVIEW2）](https://psx.arthus.net/sdk/NetYaroze/Net%20Yaroze%20-%20Library%20Reference.pdf)、 [Sony Run-Time Library Reference（GsDOBJ2 / GsSetLightMode）](https://psx.arthus.net/sdk/Psy-Q/DOCS/LibRef47.pdf)、[PSX-SPX GTE仕様](https://psx-spx.consoledev.net/geometrytransformationenginegte/)、[PSX-SPX SPU仕様](https://psx-spx.consoledev.net/soundprocessingunitspu/)。
+
+`npm run test:source-resistance` は原作の `car_resistance` 本体と23,072ケースを照合します。6機体、通常・床ブレーキの組合せ、速度0〜2047、符号境界・32bit慣性値を含みます。通常走行と落下待機が同じ整数減速処理を使うことも回帰検証します。落下中の全タイル効果やフレーム全体の更新順序は引き続き未照合です。
