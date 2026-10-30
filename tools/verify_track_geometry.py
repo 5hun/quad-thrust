@@ -46,11 +46,13 @@ typedef uintptr_t u_long;
 #define INERTIA_KETA2 2
 struct s_MAP_DATA { VECTOR center; int xdiv,ydiv,next,before,tmd_num; } map_storage[202], *map_data=map_storage+1;
 struct car { VECTOR pos,posr,npos,nposr,inertia_forward,inertia_back; SVECTOR status,statusk,statusb;
- int per_rot,radder_rot,boost_wr,turbo,breaking,breaking2,boost_timming2,draw;
+ int accer,side_boost,per_rot2,per_rot,radder_rot,boost_wr,turbo,breaking,breaking2,boost_timming2,draw;
  int weight,now_on,now_chip_x,now_chip_y,now_chip,rank,line_position,before_line_position;
  int cource_out,over,lev,tei,damage,grip,car_type,speed,lhit,rhit,l_distans,r_distans; SVECTOR *VP,*VP2,*VN;
 } cars[4],*cars_scra[4]={&cars[0],&cars[1],&cars[2],&cars[3]},*car_data;
-struct { int hight; } CARS_PROPATIE[6]={{200},{200},{200},{200},{200},{200}};
+struct { int hight,weight,per_accer0,per_accer1,turbo0,turbo1; } CARS_PROPATIE[6]={
+ {200,128,240,0,250,5},{200,120,325,11,258,5},{200,100,135,-6,300,10},
+ {200,140,553,30,220,3},{200,95,93,-8,0,0},{200,120,620,21,350,8}};
 struct { uint32_t attribute; } DOBJ_KAGE[4],DOBJ_C[4];
 struct { struct { int16_t m[3][3]; int t[3]; } coord; } CRD_KAGE[4],CRD_C[4];
 int sound_count,last_tone,last_volume,debris_count,debris_calls;
@@ -71,7 +73,8 @@ void add_tmd(int n,int pat,unsigned char *v,int vc,unsigned char *norm,int nc,in
                       function(original, 'make_tmd_line'), function(original, 'make_tmd_circle'),
                       function(controller, 'car_getplate'), function(controller, 'car_gravide'),
                       function(controller, 'car_wallcheck'), function(controller2, 'car_bank'),
-                      function(controller, 'car_preope'), function(controller2, 'car_rotation')])
+                      function(controller, 'car_preope'), function(controller2, 'car_rotation'),
+                      function(controller, 'car_acceralate')])
     wrapper = r'''
 int generate(int circle,int xs,int ys,int *left,int *right,int *cosine,int16_t *out) {
     memset(buffer,0,sizeof(buffer)); memset(cource_buff,0,sizeof(cource_buff)); cp=buffer;
@@ -199,6 +202,39 @@ int air_roll_probe(int roll) {
   car_rotation(0);return cars[0].status.vz;
 }
 '''
+    wrapper += r'''
+void rotation_probe(int *input,int *result) {
+  static int rudder[6]={32,24,32,33,32,20};
+  memset(cars,0,sizeof(cars));
+  cars[0].status=(SVECTOR){input[0],input[1],input[2],0};
+  cars[0].statusk=(SVECTOR){input[3],input[4],input[5],0};
+  cars[0].statusb=(SVECTOR){input[6],input[7],input[8],0};
+  cars[0].speed=input[9];cars[0].radder_rot=input[10];cars[0].grip=input[11];cars[0].lev=input[12];
+  cars[0].boost_wr=(input[13]==2 || input[13]==4) ? 0:64;cars[0].per_rot=rudder[input[13]];
+  static SVECTOR normal;
+  normal=(SVECTOR){input[14],input[15],input[16],0};cars[0].VN=&normal;map_data[0].xdiv=1;
+  for(int i=0;i<9;i++) { CRD_C[0].coord.m[i/3][i%3]=input[17+i];CRD_KAGE[0].coord.m[i/3][i%3]=input[26+i]; }
+  car_rotation(0);
+  result[0]=cars[0].status.vx;result[1]=cars[0].status.vy;result[2]=cars[0].status.vz;
+  result[3]=cars[0].statusk.vx;result[4]=cars[0].statusk.vy;result[5]=cars[0].statusk.vz;
+  result[6]=cars[0].statusb.vx;result[7]=cars[0].statusb.vy;result[8]=cars[0].statusb.vz;
+}
+'''
+    wrapper += r'''
+void acceleration_probe(int *input,int *result) {
+  static int side[6]={150,160,140,155,140,0},turn[6]={11,18,15,11,15,22};
+  memset(cars,0,sizeof(cars));int type=input[0];
+  cars[0].car_type=type;cars[0].speed=input[1];cars[0].turbo=input[2];cars[0].lev=input[3];cars[0].accer=input[4];
+  cars[0].grip=input[5];cars[0].status.vy=input[6];cars[0].side_boost=side[type];cars[0].per_rot2=turn[type];cars[0].damage=input[7];
+  cars[0].inertia_forward=(VECTOR){input[8],input[9],input[10],0};
+  cars[0].inertia_back=(VECTOR){input[11],input[12],input[13],0};
+  for(int i=0;i<9;i++) CRD_C[0].coord.m[i/3][i%3]=input[14+i];
+  car_acceralate(0,input[23]);
+  result[0]=cars[0].status.vy;result[1]=cars[0].damage;
+  result[2]=cars[0].inertia_forward.vx;result[3]=cars[0].inertia_forward.vy;result[4]=cars[0].inertia_forward.vz;
+  result[5]=cars[0].inertia_back.vx;result[6]=cars[0].inertia_back.vy;result[7]=cars[0].inertia_back.vz;
+}
+'''
     source = Path(directory)/'original-geometry.c'
     source.write_text(header+body+wrapper)
     target = Path(directory)/'original-geometry.so'
@@ -212,6 +248,8 @@ int air_roll_probe(int roll) {
     lib.gravity_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
     lib.speed_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]
     lib.air_roll_probe.argtypes = [ctypes.c_int]
+    lib.rotation_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
+    lib.acceleration_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
     return lib
 
 

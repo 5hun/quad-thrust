@@ -24,7 +24,8 @@
     "test:card": "node tests/test-browser-card.cjs",
     "test:source-geometry": "npm run build && python3 tools/verify_track_geometry.py",
     "test:source-walls": "npm run build && python3 tools/verify_wall_physics.py",
-    "test:source-hover": "npm run build && python3 tools/verify_hover_physics.py"
+    "test:source-hover": "npm run build && python3 tools/verify_hover_physics.py",
+    "test:source-attitude": "npm run build && python3 tools/verify_attitude.py"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"
