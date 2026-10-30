@@ -478,6 +478,7 @@ namespace HoverEngine {
       z,
       y: 2,
       heading: 0,
+      sourcePosition: undefined,
       index: p.index,
       lastDistance: p.distance,
       progress:
@@ -511,6 +512,7 @@ namespace HoverEngine {
       reason: null,
       lastDistance: Math.max(8, car.progress + 8) % track.length,
       recovery: 1,
+      sourcePosition: undefined,
       lastLine: p.index,
       previousTile:
         track.nodes[p.index].tiles[
@@ -524,6 +526,121 @@ namespace HoverEngine {
     car.vy = (-(car.front[1] + car.rear[1]) * 60) / 1600;
     car.vz = ((car.front[2] + car.rear[2]) * 60) / 1600;
     car.energy = clamp(100 * (1 - car.damage / m.tank), 0, 100);
+  }
+  // CAR_CTR.C car_wallcheck. nextPosition is nposr in 1/4 PS1 units,
+  // with Y down. Keep 16-bit SVECTOR assignments and 32-bit products/shifts.
+  export function sourceWallCheck(
+    car: Car,
+    node: TrackNode,
+    nextPosition: Vec3,
+    racing = true,
+    mode = 0,
+  ): number {
+    const { origin, vertices } = node.source!;
+    const end = node.end!.source!.vertices;
+    const ys = node.allTiles.length;
+    const short = (v: number) => (v << 16) >> 16;
+    const old = [
+      Math.floor(car.x * 100 + 1e-8),
+      Math.floor(-car.y * 100 + 1e-8),
+      Math.floor(car.z * 100 + 1e-8),
+    ].map((v, k) => (v - origin[k]) >> 1);
+    const next = nextPosition.map((v, k) => ((v >> 2) - origin[k]) >> 1);
+    const dot = (a: Vec3, b: Vec3) =>
+      a.reduce((sum, v, k) => (sum + Math.imul(v, b[k])) | 0, 0);
+    const hr = car.cpuLevel ? 0 : (car.sourceSpeed >> 4) + 3;
+    car.leftHit = car.rightHit = 0;
+    for (const right of [false, true]) {
+      const row = right ? ys - 2 - mode : 2 + mode;
+      const a = vertices[row].slice();
+      const b = end[row].map((v, k) => short(v - a[k]));
+      const normal = node.sourceNormals![right ? ys - 2 : 1];
+      a[0] = short(a[0] + (normal[0] >> 6));
+      a[2] = short(a[2] + (normal[2] >> 6));
+      const before =
+        (Math.imul(b[2], old[0] - a[0]) - Math.imul(b[0], old[2] - a[2])) | 0;
+      a[0] = short(a[0] + (normal[0] >> 6));
+      a[2] = short(a[2] + (normal[2] >> 6));
+      const after =
+        (Math.imul(b[2], next[0] - a[0]) - Math.imul(b[0], next[2] - a[2])) | 0;
+      const distance = Math.abs(
+        dot(
+          normal,
+          next.map((v, k) => v - a[k]),
+        ) >> 12,
+      );
+      if (right) car.rightDistance = distance;
+      else car.leftDistance = distance;
+      const crossed = right ? before < 0 && after > 0 : before > 0 && after < 0;
+      const crest = vertices[right ? ys - 1 : 1][1];
+      if (
+        !crossed ||
+        !((crest - old[1] < 100 && car.reason !== "course-out") || car.cpuLevel)
+      )
+        continue;
+      nextPosition[0] =
+        (nextPosition[0] + (Math.imul(normal[0], distance + 10) >> 9)) | 0;
+      nextPosition[2] =
+        (nextPosition[2] + (Math.imul(normal[2], distance + 10) >> 9)) | 0;
+      if (right) car.rightHit = 1;
+      else car.leftHit = 1;
+      car.damage = (car.damage + 2 * hr * hr + 10) | 0;
+      // Both sides project onto the outer-left longitudinal edge, not onto
+      // a reconstructed road tangent or the nearest following segment.
+      const edge = end[0].map((v, k) => v - vertices[0][k]);
+      let projection = Math.trunc(
+        (dot(edge, car.front) << 6) / dot(edge, edge),
+      );
+      if (car.sourceSpeed > 80 && !car.cpuLevel && racing)
+        projection = Math.imul(projection, 180) >> 8;
+      for (const k of [0, 2])
+        car.front[k] = car.rear[k] =
+          ((Math.imul(edge[k], projection) >> 6) +
+            (Math.imul(normal[k], hr) >> 8)) |
+          0;
+      if (!car.cpuLevel && racing) {
+        car.events.push("wall");
+        if (hr > 16) car.events.push("wall-sound");
+        emitDebris(
+          car,
+          Math.max(0, hr - 3),
+          1,
+          normal.map((v, k) => (v * (k === 1 ? -1 : 1)) / 4096),
+        );
+      }
+      return 1;
+    }
+    return 0;
+  }
+  function nextSourcePosition(car: Car) {
+    return [car.x, -car.y, car.z].map((value, k) => {
+      const fixed = car.sourcePosition?.[k];
+      const start =
+        fixed !== undefined && Math.abs((fixed >> 2) / 100 - value) < 1e-9
+          ? fixed
+          : Math.round(value * 400);
+      return (start + ((car.front[k] + car.rear[k]) >> 2)) | 0;
+    });
+  }
+  function setSourcePosition(car: Car, position: Vec3) {
+    car.sourcePosition = position;
+    car.x = (position[0] >> 2) / 100;
+    car.y = -(position[1] >> 2) / 100;
+    car.z = (position[2] >> 2) / 100;
+  }
+  export function sourceMove(
+    car: Car,
+    node: TrackNode,
+    racing = true,
+    enemy = !!car.cpuLevel || !racing,
+  ) {
+    const nextPosition = nextSourcePosition(car);
+    // car_enemy first checks the inner (mode 1) walls, then repeats mode 0.
+    if (enemy) sourceWallCheck(car, node, nextPosition, racing, 1);
+    while (sourceWallCheck(car, node, nextPosition, racing)) {
+      /* original correction loop */
+    }
+    setSourcePosition(car, nextPosition);
   }
   export function tick(
     car: Car,
@@ -783,59 +900,72 @@ namespace HoverEngine {
       if (rightError > 40) car.roll -= 11 * UNIT;
       if (rightError < -40) car.roll += 11 * UNIT;
     } else car.roll -= clamp(car.roll, -5 * UNIT, 5 * UNIT);
-    const nx = car.x + (f[0] + b[0]) / 1600,
-      nz = car.z + (f[2] + b[2]) / 1600;
-    const next = nearest(track, nx, nz, car.index);
-    // The source offsets each wall by 128/256 PS1 units, independent of width.
-    const margin = 2.56;
-    const right = next.lane > 0.5;
-    const edgeHeight = right ? next.ry : next.ly;
-    const crossed =
-      near.lane >= 0 &&
-      near.lane <= 1 &&
-      (next.lane * next.width < margin ||
-        (1 - next.lane) * next.width < margin) &&
-      (right ? near.lane < next.lane : near.lane > next.lane) &&
-      (car.y < edgeHeight + 7.12 || !!car.cpuLevel);
-    car.x = nx;
-    car.z = nz;
-    car.y -= (f[1] + b[1]) / 1600;
-    if (crossed) {
-      const node = track.nodes[next.index],
-        end = node.end || track.nodes[(next.index + 1) % track.nodes.length];
-      const startEdge = right ? node.r : node.l,
-        endEdge = right ? end.r : end.l;
-      const edge = endEdge.map(
-        (v, k) => (v - startEdge[k]) * (k === 1 ? -50 : 50),
+    const node = track.nodes[near.index];
+    if (node.source && node.end?.source && node.sourceNormals) {
+      // car_chipeffect sets goal_count during the finish tick, but the
+      // current call remains car_action until the following frame.
+      sourceMove(
+        car,
+        node,
+        racing && car.reason !== "finish",
+        !!car.cpuLevel || !racing,
       );
-      const len = Math.hypot(edge[0], edge[2]) || 1;
-      const tx = edge[0] / len,
-        tz = edge[2] / len,
-        hr = car.cpuLevel || !racing ? 0 : (speed >> 4) + 3,
-        normalX = (right ? -1 : 1) * tz,
-        normalZ = (right ? 1 : -1) * tx;
-      let projection = Math.trunc(
-        (64 * (edge[0] * f[0] + edge[1] * f[1] + edge[2] * f[2])) /
-          (edge.reduce((s, v) => s + v * v, 0) || 1),
-      );
-      if (speed > 80 && !car.cpuLevel && racing)
-        projection = (projection * 180) >> 8;
-      f[0] = b[0] =
-        ((edge[0] * projection) >> 6) +
-        ((Math.round(normalX * 4096) * hr) >> 8);
-      f[2] = b[2] =
-        ((edge[2] * projection) >> 6) +
-        ((Math.round(normalZ * 4096) * hr) >> 8);
-      const distance = (right ? 1 - next.lane : next.lane) * next.width;
-      car.x += normalX * (margin - distance + 0.2);
-      car.z += normalZ * (margin - distance + 0.2);
-      car.damage += 2 * hr * hr + 10;
-      car.flash = 0.18;
-      car.events.push("wall");
-      if (hr > 16) car.events.push("wall-sound");
-      if (!car.cpuLevel)
-        emitDebris(car, Math.max(0, hr - 3), 1, [normalX, 0, normalZ]);
+    } else {
+      const nx = car.x + (f[0] + b[0]) / 1600,
+        nz = car.z + (f[2] + b[2]) / 1600;
+      const next = nearest(track, nx, nz, car.index);
+      // The source offsets each wall by 128/256 PS1 units, independent of width.
+      const margin = 2.56;
+      const right = next.lane > 0.5;
+      const edgeHeight = right ? next.ry : next.ly;
+      const crossed =
+        near.lane >= 0 &&
+        near.lane <= 1 &&
+        (next.lane * next.width < margin ||
+          (1 - next.lane) * next.width < margin) &&
+        (right ? near.lane < next.lane : near.lane > next.lane) &&
+        (car.y < edgeHeight + 7.12 || !!car.cpuLevel);
+      car.x = nx;
+      car.z = nz;
+      car.y -= (f[1] + b[1]) / 1600;
+      if (crossed) {
+        const node = track.nodes[next.index],
+          end = node.end || track.nodes[(next.index + 1) % track.nodes.length];
+        const startEdge = right ? node.r : node.l,
+          endEdge = right ? end.r : end.l;
+        const edge = endEdge.map(
+          (v, k) => (v - startEdge[k]) * (k === 1 ? -50 : 50),
+        );
+        const len = Math.hypot(edge[0], edge[2]) || 1;
+        const tx = edge[0] / len,
+          tz = edge[2] / len,
+          hr = car.cpuLevel || !racing ? 0 : (speed >> 4) + 3,
+          normalX = (right ? -1 : 1) * tz,
+          normalZ = (right ? 1 : -1) * tx;
+        let projection = Math.trunc(
+          (64 * (edge[0] * f[0] + edge[1] * f[1] + edge[2] * f[2])) /
+            (edge.reduce((s, v) => s + v * v, 0) || 1),
+        );
+        if (speed > 80 && !car.cpuLevel && racing)
+          projection = (projection * 180) >> 8;
+        f[0] = b[0] =
+          ((edge[0] * projection) >> 6) +
+          ((Math.round(normalX * 4096) * hr) >> 8);
+        f[2] = b[2] =
+          ((edge[2] * projection) >> 6) +
+          ((Math.round(normalZ * 4096) * hr) >> 8);
+        const distance = (right ? 1 - next.lane : next.lane) * next.width;
+        car.x += normalX * (margin - distance + 0.2);
+        car.z += normalZ * (margin - distance + 0.2);
+        car.damage += 2 * hr * hr + 10;
+        car.flash = 0.18;
+        car.events.push("wall");
+        if (hr > 16) car.events.push("wall-sound");
+        if (!car.cpuLevel)
+          emitDebris(car, Math.max(0, hr - 3), 1, [normalX, 0, normalZ]);
+      }
     }
+    const next = nearest(track, car.x, car.z, car.index);
     let delta = next.distance - car.lastDistance;
     if (delta < -track.length / 2) delta += track.length;
     if (delta > track.length / 2) delta -= track.length;
@@ -877,9 +1007,12 @@ namespace HoverEngine {
     car.roll -= clamp(car.roll, -5 * UNIT, 5 * UNIT);
     stepDebris(car);
     sync(car);
-    car.x += car.vx / 60;
-    car.y += car.vy / 60;
-    car.z += car.vz / 60;
+    if (car.sourcePosition) setSourcePosition(car, nextSourcePosition(car));
+    else {
+      car.x += car.vx / 60;
+      car.y += car.vy / 60;
+      car.z += car.vz / 60;
+    }
   }
   export function step(
     car: Car,

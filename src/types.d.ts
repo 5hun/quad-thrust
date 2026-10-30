@@ -97,6 +97,12 @@ interface Pose {
   active?: Input;
 }
 interface Car extends Pose {
+  // CAR_CTR.C posr: quarter PS1 world units, Y down.
+  sourcePosition?: Vec3;
+  leftDistance?: number;
+  rightDistance?: number;
+  leftHit?: number;
+  rightHit?: number;
   pitch: number;
   roll: number;
   sourceSpeed: number;

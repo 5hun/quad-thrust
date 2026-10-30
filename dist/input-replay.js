@@ -197,13 +197,7 @@ export class InputReplay {
             car.explosionFrames = (car.explosionFrames || 0) + 1;
         }
         else if (car.reason === "course-out") {
-            const gravity = (E.MACHINES[car.type].weight * 3) >> 4;
-            car.front[1] += gravity;
-            car.rear[1] += gravity;
-            E.sync(car);
-            car.x += car.vx * dt;
-            car.y += car.vy * dt;
-            car.z += car.vz * dt;
+            E.stepFalling(car);
         }
         else {
             E.step(car, this.track, input, dt);
@@ -261,14 +255,7 @@ export class GhostReplay {
         const input = read && this.reader.frame < this.tape.frames ? read : {};
         const E = HoverEngine, car = this.car, dt = 1 / 60;
         if (car.reason === "course-out") {
-            ++car.ticks;
-            const gravity = (E.MACHINES[car.type].weight * 3) >> 4;
-            car.front[1] += gravity;
-            car.rear[1] += gravity;
-            E.sync(car);
-            car.x += car.vx * dt;
-            car.y += car.vy * dt;
-            car.z += car.vz * dt;
+            E.stepFalling(car);
         }
         else if (car.reason === "destroyed") {
             ++car.ticks;

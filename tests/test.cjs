@@ -26,7 +26,11 @@ E.step(c, t, { accel: true }, 1 / 60);
 assert.equal(c.front[2], 60);
 assert.equal(c.rear[2], 60);
 near(c.vz, 4.5);
-near(c.z - E.create(t).z, 0.075);
+// (60+60)>>2 adds 30 quarter-units to posr; the displayed position
+// uses posr>>2, so seven PS1 units are visible and half a unit is retained.
+near(c.z - E.create(t).z, 0.07);
+assert.equal(c.sourcePosition[2] - Math.round(E.create(t).z * 400), 30);
+assert.equal(c.sourcePosition[2] & 3, 2);
 c = E.create(t);
 E.step(c, t, { l1: true, l2: true }, 1 / 60);
 near(c.heading, 0);
@@ -140,6 +144,38 @@ p = E.at(t, t.length - 3);
 Object.assign(c, { x: p.x, z: p.z, index: p.index });
 E.step(c, t, {}, 1 / 60);
 assert.equal(c.laps.length, 0);
+// The finish-line tick already has goal_count>0 inside car_wallcheck,
+// while movement still follows car_action (mode 0 only) until the next frame.
+const finishTrack = E.prepare(
+  JSON.parse(JSON.stringify(box.window.HOVER_TRACKS[0])),
+);
+const finishNode = finishTrack.nodes[0];
+finishNode.tiles = "g".repeat(finishNode.tiles.length);
+const finishCar = E.create(finishTrack);
+Object.assign(finishCar, {
+  x: 3,
+  z: (finishNode.z + finishNode.end.z) / 2,
+  y: 2,
+  index: 0,
+  lastLine: 0,
+  linePosition: 100,
+  lastGoal: 0,
+  previousTile: ".",
+  laps: [10, 10],
+  front: [-1600, 0, 0],
+  rear: [-1600, 0, 0],
+});
+E.step(finishCar, finishTrack, {}, 1 / 60);
+assert.equal(finishCar.reason, "finish");
+assert.ok(
+  finishCar.damage > 0,
+  "finish tick still resolves the wall and its damage",
+);
+assert.ok(
+  !finishCar.events.includes("wall") &&
+    !finishCar.events.includes("wall-sound"),
+  "finish tick suppresses wall effects immediately",
+);
 console.log(
   "PASS: source thrust/drag/yaw formulas, independent inertias, frame-rate invariance, no-rudder/no-thruster machines, one-shot repair/jump, lethal floor, falling, aerial wall clearance, collisions, forward/reverse lap checks.",
 );

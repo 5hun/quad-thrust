@@ -253,6 +253,47 @@ const E = require("../dist/engine.js");
     null,
     "a completed GP/practice replay replaces the TA buffer",
   );
+  // A source posr fraction must survive movement, and replay/ghost falling
+  // must use the same drag, gravity, attitude and integer movement as live play.
+  const fallingTape = { ...firstTape, machine: 0, gameMode: 4 };
+  const fallingRun = new InputReplay(fallingTape, track);
+  const fallingGhost = new GhostReplay(fallingTape, track);
+  const fallingCar = E.placeOnGrid(E.create(track, 0), track);
+  E.step(fallingCar, track, { accel: true }, 1 / 60);
+  fallingCar.finished = true;
+  fallingCar.reason = "course-out";
+  fallingCar.front = [777, 1234, -555];
+  fallingCar.rear = [212, 654, -124];
+  fallingCar.roll = 0.1;
+  fallingRun.car = structuredClone(fallingCar);
+  fallingGhost.car = structuredClone(fallingCar);
+  const fallSnapshot = (car) => [
+    car.x,
+    car.y,
+    car.z,
+    car.ticks,
+    car.time,
+    car.sourceSpeed,
+    car.roll,
+    ...car.front,
+    ...car.rear,
+    ...car.sourcePosition,
+  ];
+  for (let frame = 0; frame < 16; frame++) {
+    E.stepFalling(fallingCar);
+    assert.equal(fallingRun.step(), true);
+    fallingGhost.step();
+    assert.deepEqual(
+      fallSnapshot(fallingRun.car),
+      fallSnapshot(fallingCar),
+      "replay source falling prefix",
+    );
+    assert.deepEqual(
+      fallSnapshot(fallingGhost.car),
+      fallSnapshot(fallingCar),
+      "ghost source falling prefix",
+    );
+  }
   // Ghost simulation follows the recorded physics and keeps coasting when
   // the input stream ends. It does not wrap, freeze, or finish its own laps.
   const gr = new ReplayRecorder(),
