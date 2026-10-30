@@ -11,6 +11,7 @@ const E = require("../dist/engine.js");
     ReplayRecorder,
     ReplayReader,
     InputReplay,
+    GhostReplay,
     inputPad,
     padInput,
     encodeOriginalReplay,
@@ -167,6 +168,197 @@ const E = require("../dist/engine.js");
     });
     assert.equal(session.step(), false);
   }
+  const memorySource = fs.readFileSync(
+    __dirname + "/../dist/replay-memory.js",
+    "utf8",
+  );
+  const { ReplayMemory } = await import(
+    "data:text/javascript;base64," +
+      Buffer.from(memorySource).toString("base64")
+  );
+  const memory = new ReplayMemory();
+  const firstTape = {
+    ...tape,
+    gameMode: 4,
+    course: 0,
+    machine: 0,
+    totalTicks: 1000,
+  };
+  assert.equal(memory.beginRace(0, 0, 4), null);
+  memory.complete(firstTape);
+  assert.equal(
+    memory.beginRace(0, 1, 4),
+    firstTape,
+    "different machine uses the same source ghost",
+  );
+  const slower = { ...firstTape, machine: 1, totalTicks: 1100 };
+  memory.complete(slower);
+  assert.equal(memory.saved, firstTape);
+  assert.equal(memory.recent, slower);
+  memory.complete({ ...slower, frames: slower.frames + 1 });
+  assert.equal(
+    memory.saved,
+    firstTape,
+    "repeated finish snapshots retain the race's starting ghost",
+  );
+  memory.beginRace(0, 2, 4);
+  memory.complete({ ...slower, machine: 2, totalTicks: 1000 });
+  assert.equal(memory.saved, firstTape, "ties do not replace the ghost buffer");
+  memory.beginRace(0, 3, 4);
+  const faster = { ...firstTape, machine: 3, totalTicks: 900 };
+  memory.complete(faster);
+  assert.equal(memory.saved, faster);
+  assert.equal(memory.beginRace(1, 0, 4), null);
+  assert.equal(
+    memory.saved,
+    faster,
+    "choosing/aborting another course preserves the existing replay",
+  );
+  const otherCourse = { ...firstTape, course: 1, totalTicks: 1200 };
+  memory.complete(otherCourse);
+  assert.equal(
+    memory.beginRace(0, 0, 4),
+    null,
+    "there is one source buffer, not a per-course cache",
+  );
+  memory.beginRace(1, 0, 4, false);
+  const disabled = { ...otherCourse, totalTicks: 1300 };
+  memory.complete(disabled);
+  assert.equal(
+    memory.saved,
+    disabled,
+    "a run without a ghost records unconditionally",
+  );
+  const suzuki = { ...firstTape, machine: 5 };
+  memory.beginRace(0, 5, 4);
+  memory.complete(suzuki);
+  assert.equal(
+    memory.beginRace(0, 5, 4),
+    null,
+    "SUZUKI versus SUZUKI has no ghost",
+  );
+  const slowSuzuki = { ...suzuki, totalTicks: 2000 };
+  memory.complete(slowSuzuki);
+  assert.equal(
+    memory.saved,
+    slowSuzuki,
+    "the source's SUZUKI exception also affects replacement",
+  );
+  assert.equal(memory.beginRace(0, 0, 4), slowSuzuki);
+  assert.equal(memory.beginRace(0, 0, 1), null);
+  const practice = { ...firstTape, gameMode: 1 };
+  memory.complete(practice);
+  assert.equal(
+    memory.beginRace(0, 0, 4),
+    null,
+    "a completed GP/practice replay replaces the TA buffer",
+  );
+  // Ghost simulation follows the recorded physics and keeps coasting when
+  // the input stream ends. It does not wrap, freeze, or finish its own laps.
+  const gr = new ReplayRecorder(),
+    ghostBaseline = E.placeOnGrid(E.create(track, 0), track),
+    positions = [];
+  for (let i = 0; i < 120; i++) {
+    const input = { accel: true, l1: i % 20 < 3 };
+    gr.record(input);
+    E.step(ghostBaseline, track, input, 1 / 60);
+    positions.push([
+      ghostBaseline.x,
+      ghostBaseline.y,
+      ghostBaseline.z,
+      ...ghostBaseline.front,
+      ...ghostBaseline.rear,
+    ]);
+  }
+  const ghost = new GhostReplay(
+    gr.tape({ ...meta, machine: 0, gameMode: 4 }),
+    track,
+  );
+  for (let i = 0; i < 119; i++) {
+    ghost.step();
+    assert.deepEqual(
+      [
+        ghost.car.x,
+        ghost.car.y,
+        ghost.car.z,
+        ...ghost.car.front,
+        ...ghost.car.rear,
+      ],
+      positions[i],
+    );
+  }
+  ghost.step();
+  assert.equal(
+    ghost.car.active.accel,
+    false,
+    "the source clears the final tick's ghost input",
+  );
+  const endZ = ghost.car.z;
+  ghost.step();
+  ghost.step();
+  assert.equal(ghost.reader.frame, 120);
+  assert.equal(ghost.car.ticks, 122);
+  assert.notEqual(ghost.car.z, endZ);
+  const beforeCollision = JSON.stringify([
+    ghost.car.front,
+    ghost.car.rear,
+    ghost.car.damage,
+  ]);
+  const collisionPlayer = E.create(track);
+  Object.assign(collisionPlayer, {
+    x: ghost.car.x,
+    y: ghost.car.y,
+    z: ghost.car.z,
+  });
+  E.collide(ghost.car, collisionPlayer);
+  assert.equal(
+    JSON.stringify([ghost.car.front, ghost.car.rear, ghost.car.damage]),
+    beforeCollision,
+  );
+  const flatTile = (tile) =>
+    E.prepare({
+      name: "ghost floor",
+      theme: 0,
+      samples: [
+        {
+          l: [-100, 0, -100],
+          r: [100, 0, -100],
+          end: { l: [-100, 0, 1000], r: [100, 0, 1000] },
+          tiles: tile.repeat(4),
+          allTiles: tile.repeat(8),
+        },
+      ],
+    });
+  for (const tile of ["g", "d", "P"]) {
+    const floor = flatTile(tile),
+      gp = new GhostReplay(
+        gr.tape({ ...meta, machine: 0, gameMode: 4 }),
+        floor,
+      ),
+      player = E.placeOnGrid(E.create(floor, 0), floor);
+    gp.car.linePosition = player.linePosition = 64;
+    gp.car.previousTile = player.previousTile = ".";
+    gp.car.laps = [1, 1];
+    player.laps = [1, 1];
+    if (tile === "P") gp.car.damage = player.damage = 12000;
+    gp.step();
+    E.step(player, floor, {}, 1 / 60);
+    if (tile === "g") {
+      assert.equal(gp.car.laps.length, 2);
+      assert.equal(gp.car.finished, false);
+      assert.equal(player.finished, true);
+    }
+    if (tile === "d") {
+      assert.equal(gp.car.damage, 0);
+      assert.ok(player.damage > 0);
+      assert.equal(gp.car.damageSemi, false);
+    }
+    if (tile === "P") {
+      assert.equal(gp.car.damage, player.damage);
+      assert.equal(gp.car.repairFrames || 0, 0);
+      assert.ok(player.events.includes("repair"));
+    }
+  }
   const soundSource = fs.readFileSync(__dirname + "/../dist/sound.js", "utf8");
   const { OriginalSound } = await import(
     "data:text/javascript;base64," + Buffer.from(soundSource).toString("base64")
@@ -189,7 +381,7 @@ const E = require("../dist/engine.js");
     if (!loop) assert.equal(sound.pendingCourse, null);
   }
   console.log(
-    "PASS: original hR/128-byte header, 8KB RLE input, all pad combinations, 32-tick runs, immutable playback, malformed extents, deterministic 60Hz physics/CPU replay and analog sidecar",
+    "PASS: original hR/128-byte header, 8KB RLE input, all pad combinations, 32-tick runs, immutable playback, malformed extents, deterministic 60Hz physics/CPU replay, TA buffer policy, ghost floors/collisions/end coasting and analog sidecar",
   );
 })().catch((e) => {
   console.error(e);

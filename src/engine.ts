@@ -366,9 +366,17 @@ namespace HoverEngine {
     car.tile = ch;
     // DOBJ_C bit 6 disables lighting; bit 30 enables semitransparency.
     car.damageLight =
-      ch === "d" && car.grip && !car.cpuLevel && (car.ticks & 2) !== 0;
+      ch === "d" &&
+      car.grip &&
+      !car.cpuLevel &&
+      !car.ghost &&
+      (car.ticks & 2) !== 0;
     car.damageSemi =
-      ch === "d" && car.grip && !car.cpuLevel && (car.ticks & 1) === 0;
+      ch === "d" &&
+      car.grip &&
+      !car.cpuLevel &&
+      !car.ghost &&
+      (car.ticks & 1) === 0;
     car.turbo = !!input.turbo && m.turbo > 0;
     car.fireTail =
       !racing && !car.cpuLevel
@@ -379,13 +387,14 @@ namespace HoverEngine {
     car.fireRemaining =
       input.accel || car.turbo ? 64 : Math.max(0, (car.fireRemaining || 0) - 1);
     if (car.grip) {
-      if (ch === "d" && !car.cpuLevel) car.damage += 100;
+      if (ch === "d" && !car.cpuLevel && !car.ghost) car.damage += 100;
       if (ch === "B") car.damage += 100000;
     }
     // CAR_CTR.C: g is a line trigger (also active in the air), with a
     // 32-row guard against reversing across the same finish line.
     if (
       racing &&
+      !car.ghost &&
       !track.training &&
       ch === "g" &&
       car.previousTile !== "g" &&
@@ -404,7 +413,7 @@ namespace HoverEngine {
       if (track.training && ch === "s") car.events.push("stop");
       if (ch === "P" && car.grip) {
         car.damage = Math.max(0, car.damage - 6000);
-        car.events.push("repair");
+        if (!car.ghost) car.events.push("repair");
       }
       if (ch === "J" && car.grip) {
         if (track.training) f[1] = b[1] = 0;
@@ -659,6 +668,8 @@ namespace HoverEngine {
   }
   export function collide(a: Car, b: Car) {
     if (
+      a.ghost ||
+      b.ghost ||
       (a.finished && a.reason !== "finish") ||
       (b.finished && b.reason !== "finish")
     )

@@ -58,6 +58,7 @@ interface Pose {
   damageLight?: boolean;
   damageSemi?: boolean;
   cpuSlot?: number;
+  ghost?: boolean;
   turbo?: boolean;
   rudderAngle?: number;
   explosionFrames?: number;

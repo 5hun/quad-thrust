@@ -272,3 +272,60 @@ export class InputReplay {
     return true;
   }
 }
+
+// A TA ghost is a second car_action slot, not a CPU or a standalone replay.
+// It cannot count laps/finish the race, collide with the player, play repair
+// effects, or trigger the player's damage-floor treatment. At tape end the
+// original clears its input and keeps simulating; it does not wrap/disappear.
+export class GhostReplay {
+  reader: ReplayReader;
+  car: Car;
+  constructor(
+    public tape: ReplayTape,
+    public track: Track,
+  ) {
+    this.reader = new ReplayReader(tape);
+    const E = HoverEngine;
+    this.car = E.placeOnGrid(E.create(track, tape.machine), track);
+    this.car.cpuSlot = 1;
+    this.car.cpuLevel = 0;
+    this.car.ghost = true;
+  }
+  step(goal = false) {
+    const read = this.reader.next();
+    // GAME.C checks rec_point >= rec_last before car_action, so the final
+    // recorded input tick is cleared as well as all following input.
+    const input = read && this.reader.frame < this.tape.frames ? read : {};
+    const E = HoverEngine,
+      car = this.car,
+      dt = 1 / 60;
+    if (car.reason === "course-out") {
+      ++car.ticks;
+      const gravity = (E.MACHINES[car.type].weight * 3) >> 4;
+      car.front[1] += gravity;
+      car.rear[1] += gravity;
+      E.sync(car);
+      car.x += car.vx * dt;
+      car.y += car.vy * dt;
+      car.z += car.vz * dt;
+    } else if (car.reason === "destroyed") {
+      ++car.ticks;
+      E.stepDebris(car);
+      car.explosionFrames = (car.explosionFrames || 0) + 1;
+    } else {
+      E.step(
+        car,
+        this.track,
+        goal ? E.driveCPU(car, this.track, car) : input,
+        dt,
+        false,
+        !goal,
+      );
+      if ((car as Car).reason === "destroyed") {
+        car.explosionFrames = 0;
+        E.emitDebris(car, 64, 2, [0, 1, 0]);
+      }
+    }
+    car.events.length = 0;
+  }
+}
