@@ -232,6 +232,7 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await page.waitForFunction(
       () => window.hoverDiagnostics().state === "exited",
     );
+    assert.equal(await page.locator(".browser-options").isVisible(), false);
     assert.equal(await page.locator("#menu-controls").isVisible(), false);
     assert.equal(await page.locator("#menu nav button").count(), 0);
     assert.equal(

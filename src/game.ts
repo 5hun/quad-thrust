@@ -531,6 +531,7 @@ function quit() {
   originalSound.pause(true);
   postrace.close();
   state = "exited";
+  (document.querySelector(".browser-options") as HTMLElement).hidden = true;
   keys = {};
   ghostReplay = null;
   replayRun = null;
