@@ -56,11 +56,12 @@ c = E.create(t, 4);
 E.step(c, t, { turbo: true }, 1 / 60);
 assert.equal(c.damage, 0);
 assert.equal(c.turbo, false);
-// Resistance, raw PS1 units (sum=3200 => speed282; drag140; 240 brake).
+// Resistance, raw PS1 units (sum=3200 => source speed283; drag140; 240 brake).
 c = E.create(t);
 c.front[2] = c.rear[2] = 1600;
 E.step(c, t, { brake: true }, 1 / 60);
-const sp = Math.floor(3200 / Math.sqrt(128)),
+assert.equal(c.sourceSpeed, 283);
+const sp = 283,
   drag = Math.trunc((sp * 18000) / (128 * (sp + 1)));
 assert.equal(c.front[2], 1600 - ((1600 * (drag + 240)) >> 13));
 // Clone stage: place effect underneath stationary ship; repeated P doesn't re-fire.
@@ -99,6 +100,19 @@ c.x -= 100;
 c.y = -75;
 E.step(c, t, {}, 1 / 60);
 assert.equal(c.reason, "course-out");
+// car_chipeffect uses the previous grip, then car_gravide updates it.
+// The sound must retain that same floor decision instead of reading new grip.
+const damageTrack = floor("d"),
+  edgeCar = E.create(damageTrack);
+edgeCar.y = 3.51;
+edgeCar.grip = true;
+E.step(edgeCar, damageTrack, {}, 1 / 60);
+assert.equal(edgeCar.damage, 100);
+assert.equal(edgeCar.grip, false);
+assert.equal(edgeCar.damageFloorActive, true);
+E.step(edgeCar, damageTrack, {}, 1 / 60);
+assert.equal(edgeCar.grip, true);
+assert.equal(edgeCar.damageFloorActive, false);
 // Wall crossing vs overflying above the curb.
 function hit(height) {
   const c = E.create(t);

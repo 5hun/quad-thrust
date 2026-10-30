@@ -1,3 +1,11 @@
+interface SourceContact {
+  origin: Vec3;
+  d: Vec3;
+  a: Vec3;
+  b: Vec3;
+  normal: Vec3;
+  outside: boolean;
+}
 type Vec3 = number[];
 interface RawBoundary {
   l: Vec3;
@@ -71,6 +79,7 @@ interface Pose {
   sourceSpeed?: number;
   ticks?: number;
   energy?: number;
+  damageFloorActive?: boolean;
   damageLight?: boolean;
   damageSemi?: boolean;
   cpuSlot?: number;
@@ -97,6 +106,7 @@ interface Pose {
   active?: Input;
 }
 interface Car extends Pose {
+  sourceContact?: SourceContact;
   // CAR_CTR.C posr: quarter PS1 world units, Y down.
   sourcePosition?: Vec3;
   leftDistance?: number;

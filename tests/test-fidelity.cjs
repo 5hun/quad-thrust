@@ -127,16 +127,6 @@ assert.equal(a.front[0], 0);
 const slope = flat(20, 20, 10);
 const n = E.nearest(slope, 0, 30);
 assert.ok(Math.abs(n.surface - 11) < 0.01);
-const cpuSlope = E.create(slope),
-  playerSlope = E.create(slope);
-cpuSlope.cpuLevel = 2;
-E.step(cpuSlope, slope, {}, 1 / 60);
-E.step(playerSlope, slope, {}, 1 / 60);
-assert.deepEqual(
-  cpuSlope.front,
-  playerSlope.front,
-  "CPU also receives slope forces",
-);
 a = E.create(slope);
 E.step(a, slope, {}, 1 / 60);
 assert.ok(a.front[0] < 0 && a.front[2] < 0);
@@ -432,4 +422,40 @@ assert.ok(
 );
 console.log(
   "PASS: rideable outer slopes, banked collision faces, outside fall datum, falling wind speed, crossing-road selection",
+);
+
+// Production source tracks use car_enemy's lev>0 path: no cushion impulse
+// or car_bank. Compare on an actual sloped cell rather than a legacy fixture.
+const bankTrack = E.prepare(structuredClone(mapContext.window.HOVER_TRACKS[6]));
+let bankPose;
+for (let index = 0; index < bankTrack.nodes.length; index++) {
+  const node = bankTrack.nodes[index],
+    end = node.end;
+  const x =
+    Math.floor((node.l[0] + node.r[0] + end.l[0] + end.r[0]) * 25) / 100;
+  const z =
+    Math.floor((node.l[2] + node.r[2] + end.l[2] + end.r[2]) * 25) / 100;
+  const contact = E.nearest(bankTrack, x, z, index);
+  if (!contact.supported || !(contact.normal[0] || contact.normal[2])) continue;
+  bankTrack.nodes[contact.index].tiles = ".".repeat(
+    bankTrack.nodes[contact.index].tiles.length,
+  );
+  bankPose = { x, z, y: contact.surface + 2, index: contact.index, grip: true };
+  break;
+}
+assert.ok(bankPose, "actual source bank fixture exists");
+const sourcePlayer = E.create(bankTrack),
+  sourceCPU = E.create(bankTrack);
+Object.assign(sourcePlayer, bankPose);
+Object.assign(sourceCPU, bankPose, { cpuLevel: 2 });
+E.step(sourcePlayer, bankTrack, {}, 1 / 60);
+E.step(sourceCPU, bankTrack, {}, 1 / 60);
+assert.deepEqual(
+  sourceCPU.front,
+  [0, 0, 0],
+  "source CPU gets neither cushion impulse nor bank force",
+);
+assert.ok(
+  sourcePlayer.front[0] || sourcePlayer.front[2],
+  "source player receives the original bank force",
 );

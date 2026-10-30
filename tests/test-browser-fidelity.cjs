@@ -569,7 +569,11 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     assert.ok(result.notes > 0);
     await page.evaluate(() => {
       const f = window.fidelity;
-      f.sound.update({ ...f.c, energy: 5, grip: true, tile: "d" }, {}, true);
+      f.sound.update(
+        { ...f.c, energy: 5, grip: true, tile: "d", damageFloorActive: true },
+        {},
+        true,
+      );
     });
     assert.deepEqual(
       await page.evaluate(() =>

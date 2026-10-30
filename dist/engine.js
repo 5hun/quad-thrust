@@ -441,6 +441,7 @@ var HoverEngine;
             y: 2,
             heading: 0,
             sourcePosition: undefined,
+            sourceContact: undefined,
             index: p.index,
             lastDistance: p.distance,
             progress: p.distance > track.length / 2 ? p.distance - track.length : p.distance,
@@ -475,6 +476,7 @@ var HoverEngine;
             lastDistance: Math.max(8, car.progress + 8) % track.length,
             recovery: 1,
             sourcePosition: undefined,
+            sourceContact: undefined,
             lastLine: p.index,
             previousTile: track.nodes[p.index].tiles[Math.floor(track.nodes[p.index].tiles.length / 2)],
         });
@@ -488,6 +490,137 @@ var HoverEngine;
         car.energy = HoverEngine.clamp(100 * (1 - car.damage / m.tank), 0, 100);
     }
     HoverEngine.sync = sync;
+    // CAR_CTR.C car_preope uses LIB.C sqr_i(2048), whose last search step
+    // differs from floor(sqrt). Keep the original 32-bit sum and products.
+    function sourceSpeed(front, rear) {
+        const sum = front.map((v, k) => (v + rear[k]) | 0);
+        const value = sum.reduce((total, v) => (total + Math.imul(v, v)) | 0, 0) >> 7;
+        if (value === 0)
+            return 0;
+        let current = 1024, step = 512;
+        while (step) {
+            const square = current * current;
+            if (square === value)
+                return current;
+            current += square > value ? -step : step;
+            step >>= 1;
+        }
+        return current;
+    }
+    HoverEngine.sourceSpeed = sourceSpeed;
+    // CAR_CTR2.C car_rotation's airborne roll branch, including its two
+    // independent comparisons. Source roll has the opposite sign after Y/Z flip.
+    function sourceAirRoll(roll) {
+        let value = ((Math.round(-roll / UNIT) + 4096) & 8191) - 4096;
+        if (value > 5)
+            value -= 5;
+        if (value < 5)
+            value += 5;
+        return -value * UNIT;
+    }
+    HoverEngine.sourceAirRoll = sourceAirRoll;
+    function sourceContact(node, row, supported) {
+        const d = node.source.vertices[row];
+        return {
+            origin: node.source.origin,
+            d,
+            a: node.end.source.vertices[row].map((v, k) => v - d[k]),
+            b: node.source.vertices[row + 1].map((v, k) => v - d[k]),
+            normal: node.sourceNormals[row],
+            outside: !supported,
+        };
+    }
+    HoverEngine.sourceContact = sourceContact;
+    // CAR_CTR.C car_gravide: the shadow attribute is evaluated before a new
+    // fall starts, while grip is evaluated after cushion/landing corrections.
+    function sourceGravity(car, contact, over = car.reason === "course-out"
+        ? -256
+        : car.reason === "destroyed"
+            ? 300
+            : 0) {
+        const weight = HoverEngine.MACHINES[car.type].weight, lev = car.cpuLevel || 0;
+        const { origin, d, a, b, outside } = contact;
+        const cross = [
+            (Math.imul(a[1], b[2]) - Math.imul(a[2], b[1])) | 0,
+            (Math.imul(a[2], b[0]) - Math.imul(a[0], b[2])) | 0,
+            (Math.imul(a[0], b[1]) - Math.imul(a[1], b[0])) | 0,
+        ];
+        const x = (Math.floor(car.x * 100 + 1e-8) - origin[0]) >> 1;
+        const z = (Math.floor(car.z * 100 + 1e-8) - origin[2]) >> 1;
+        const numerator = (-Math.imul(cross[0], x - d[0]) - Math.imul(cross[2], z - d[2])) | 0;
+        const localY = outside
+            ? d[1] * 2 + 5000
+            : cross[1] === 0
+                ? 0
+                : (Math.trunc(numerator / cross[1]) + d[1]) << 1;
+        const plane = (localY + origin[1]) | 0;
+        const target = (plane - 200) | 0, landing = (plane - 100) | 0;
+        let y = Math.floor(-car.y * 100 + 1e-8);
+        const position = currentSourcePosition(car);
+        const pitch = ((Math.round(car.pitch / UNIT) + 2048) & 4095) - 2048;
+        const gravity = ((weight * 3) >> 4) - (pitch >> 8);
+        car.groundY = -plane / 100;
+        car.groundNormal = contact.normal.map((v, k) => (k === 1 ? -v : v));
+        car.onRoad = !outside && over >= 0;
+        if (!lev &&
+            over === 0 &&
+            (outside ? y >= target + 2048 : y >= landing + 512)) {
+            over = -256;
+            car.finished = true;
+            car.reason = "course-out";
+        }
+        if (!outside && over >= 0 && !lev && y >= landing && car.tei === 0) {
+            car.front[1] = car.rear[1] = Math.imul(-200, weight) >> 7;
+            y = landing - 10;
+            position[1] = y << 2;
+            car.tei = 16;
+            car.damage = (car.damage + 100) | 0;
+            car.events.push("land");
+            car.damageLight = true;
+        }
+        else if (!outside && y >= target && (over >= 0 || lev)) {
+            if (!lev) {
+                const depth = y - target;
+                const lift = Math.max(-8 * gravity, Math.imul((-25 - (Math.imul(depth, depth) >> 2)) | 0, weight) >> 7);
+                car.front[1] = (car.front[1] + lift) | 0;
+                car.rear[1] = (car.rear[1] + lift) | 0;
+            }
+            if (lev ||
+                car.tei ||
+                (y - target < 70 && Math.abs((car.front[1] + car.rear[1]) | 0) < 500)) {
+                y = target;
+                position[1] = y << 2;
+                car.tei = 60;
+            }
+        }
+        else {
+            car.front[1] = (car.front[1] + gravity) | 0;
+            car.rear[1] = (car.rear[1] + gravity) | 0;
+            if (car.tei)
+                car.tei--;
+        }
+        car.y = -y / 100;
+        car.sourcePosition = position;
+        car.grip = y >= target - 150;
+        return over;
+    }
+    HoverEngine.sourceGravity = sourceGravity;
+    // CAR_CTR2.C car_bank consumes the stored TMD normal in Y-down units.
+    function sourceBank(car, normal) {
+        if (!car.grip)
+            return;
+        const weight = HoverEngine.MACHINES[car.type].weight;
+        const square = (Math.imul(normal[0], normal[0]) + Math.imul(normal[2], normal[2])) | 0;
+        const force = [
+            normal[0] >> 2,
+            normal[1] ? -Math.trunc(square / normal[1]) >> 2 : 0,
+            normal[2] >> 2,
+        ].map((v) => Math.imul(v, weight) >> 12);
+        for (const vector of [car.front, car.rear])
+            for (let k = 0; k < 3; k++)
+                vector[k] = (vector[k] + force[k]) | 0;
+    }
+    HoverEngine.sourceBank = sourceBank;
     // CAR_CTR.C car_wallcheck. nextPosition is nposr in 1/4 PS1 units,
     // with Y down. Keep 16-bit SVECTOR assignments and 32-bit products/shifts.
     function sourceWallCheck(car, node, nextPosition, racing = true, mode = 0) {
@@ -556,14 +689,17 @@ var HoverEngine;
         return 0;
     }
     HoverEngine.sourceWallCheck = sourceWallCheck;
-    function nextSourcePosition(car) {
+    function currentSourcePosition(car) {
         return [car.x, -car.y, car.z].map((value, k) => {
             const fixed = car.sourcePosition?.[k];
             const start = fixed !== undefined && Math.abs((fixed >> 2) / 100 - value) < 1e-9
                 ? fixed
                 : Math.round(value * 400);
-            return (start + ((car.front[k] + car.rear[k]) >> 2)) | 0;
+            return start;
         });
+    }
+    function nextSourcePosition(car) {
+        return currentSourcePosition(car).map((v, k) => (v + ((car.front[k] + car.rear[k]) >> 2)) | 0);
     }
     function setSourcePosition(car, position) {
         car.sourcePosition = position;
@@ -589,7 +725,9 @@ var HoverEngine;
             car.time = car.ticks / 60;
         car.flash = Math.max(0, car.flash - 1 / 60);
         car.recovery = Math.max(0, car.recovery - 1 / 60);
-        car.sourceSpeed = Math.floor(Math.hypot(f[0] + b[0], f[1] + b[1], f[2] + b[2]) / Math.sqrt(128));
+        car.sourceSpeed = track.sourceParts
+            ? sourceSpeed(f, b)
+            : Math.floor(Math.hypot(f[0] + b[0], f[1] + b[1], f[2] + b[2]) / Math.sqrt(128));
         const speed = car.sourceSpeed;
         if (car.damage > 4)
             car.damage -= 6 + Math.floor((car.damage * 9) / m.tank);
@@ -610,9 +748,18 @@ var HoverEngine;
         car.groundNormal = near.normal;
         car.onRoad = inside;
         stepDebris(car);
-        car.grip = inside && car.y <= target + 1.5 && car.y >= surface - 1;
+        const node = track.nodes[near.index];
+        const source = !!(node.source && node.end?.source && node.sourceNormals);
+        if (source)
+            car.sourceContact = sourceContact(node, near.row, inside);
+        else
+            car.grip = inside && car.y <= target + 1.5 && car.y >= surface - 1;
         const ch = inside ? near.tile : "outside";
         car.tile = ch;
+        // Preserve the grip used by car_chipeffect for audio as well as drawing;
+        // car_gravide updates car.grip later in this same frame.
+        car.damageFloorActive =
+            ch === "d" && car.grip && !car.cpuLevel && !car.ghost;
         // DOBJ_C bit 6 disables lighting; bit 30 enables semitransparency.
         car.damageLight =
             ch === "d" &&
@@ -704,52 +851,60 @@ var HoverEngine;
                 if (old * v[j] < 0)
                     v[j] = 0;
             }
-        // Test falling before the cushion can snap an already submerged car up.
-        if (car.y <= near.fallY) {
-            car.finished = true;
-            car.reason = "course-out";
-            car.onRoad = false;
-            sync(car);
-            return;
-        }
-        // Original gravity and anti-gravity cushion, in PS1 Y-down inertia units.
-        const gravity = ((m.weight * 3) >> 4) - (Math.round(-car.pitch / UNIT) >> 8);
-        if (inside && car.y <= surface + 1 && car.tei === 0) {
-            f[1] = b[1] = (-200 * m.weight) >> 7;
-            car.y = surface + 1.1;
-            car.tei = 16;
-            car.damage += 100;
-            car.events.push("land");
-            car.damageLight = true;
-        }
-        else if (inside && car.y <= target) {
-            const depth = Math.max(0, Math.round((target - car.y) * 100));
-            const lift = Math.max(-8 * gravity, ((-25 - ((depth * depth) >> 2)) * m.weight) >> 7);
-            f[1] += lift;
-            b[1] += lift;
-            if (car.tei > 0 || (depth < 70 && Math.abs(f[1] + b[1]) < 500)) {
-                car.y = target;
-                car.tei = 60;
-            }
+        if (source) {
+            sourceGravity(car, car.sourceContact);
+            // car_enemy omits car_bank for lev>0; a lev=0 ghost uses car_action.
+            if (!car.cpuLevel)
+                sourceBank(car, car.sourceContact.normal);
         }
         else {
-            f[1] += gravity;
-            b[1] += gravity;
-            if (car.tei > 0)
-                car.tei--;
-        }
-        car.grip = inside && car.y <= target + 1.5;
-        if (car.grip) {
-            const [nx, ny, nz] = near.normal;
-            // CAR_CTR2.C car_bank, including its formerly missing Y component.
-            const bank = [
-                ((nx >> 2) * m.weight) >> 12,
-                ((Math.trunc((nx * nx + nz * nz) / (ny || 1)) >> 2) * m.weight) >> 12,
-                ((nz >> 2) * m.weight) >> 12,
-            ];
-            for (const v of [f, b]) {
-                for (let j = 0; j < 3; j++)
-                    v[j] += bank[j];
+            // Test falling before the cushion can snap an already submerged car up.
+            if (car.y <= near.fallY) {
+                car.finished = true;
+                car.reason = "course-out";
+                car.onRoad = false;
+                sync(car);
+                return;
+            }
+            // Original gravity and anti-gravity cushion, in PS1 Y-down inertia units.
+            const gravity = ((m.weight * 3) >> 4) - (Math.round(-car.pitch / UNIT) >> 8);
+            if (inside && car.y <= surface + 1 && car.tei === 0) {
+                f[1] = b[1] = (-200 * m.weight) >> 7;
+                car.y = surface + 1.1;
+                car.tei = 16;
+                car.damage += 100;
+                car.events.push("land");
+                car.damageLight = true;
+            }
+            else if (inside && car.y <= target) {
+                const depth = Math.max(0, Math.round((target - car.y) * 100));
+                const lift = Math.max(-8 * gravity, ((-25 - ((depth * depth) >> 2)) * m.weight) >> 7);
+                f[1] += lift;
+                b[1] += lift;
+                if (car.tei > 0 || (depth < 70 && Math.abs(f[1] + b[1]) < 500)) {
+                    car.y = target;
+                    car.tei = 60;
+                }
+            }
+            else {
+                f[1] += gravity;
+                b[1] += gravity;
+                if (car.tei > 0)
+                    car.tei--;
+            }
+            car.grip = inside && car.y <= target + 1.5;
+            if (car.grip) {
+                const [nx, ny, nz] = near.normal;
+                // CAR_CTR2.C car_bank, including its formerly missing Y component.
+                const bank = [
+                    ((nx >> 2) * m.weight) >> 12,
+                    ((Math.trunc((nx * nx + nz * nz) / (ny || 1)) >> 2) * m.weight) >> 12,
+                    ((nz >> 2) * m.weight) >> 12,
+                ];
+                for (const v of [f, b]) {
+                    for (let j = 0; j < 3; j++)
+                        v[j] += bank[j];
+                }
             }
         }
         car.rudderAngle = HoverEngine.clamp(car.rudderAngle, -220, 220);
@@ -823,10 +978,11 @@ var HoverEngine;
             if (rightError < -40)
                 car.roll += 11 * UNIT;
         }
+        else if (source && !car.cpuLevel)
+            car.roll = sourceAirRoll(car.roll);
         else
             car.roll -= HoverEngine.clamp(car.roll, -5 * UNIT, 5 * UNIT);
-        const node = track.nodes[near.index];
-        if (node.source && node.end?.source && node.sourceNormals) {
+        if (source) {
             // car_chipeffect sets goal_count during the finish tick, but the
             // current call remains car_action until the following frame.
             sourceMove(car, node, racing && car.reason !== "finish", !!car.cpuLevel || !racing);
@@ -887,7 +1043,7 @@ var HoverEngine;
         car.index = next.index;
         if (free)
             car.damage = 0;
-        if (car.damage >= m.tank) {
+        if (car.reason !== "course-out" && car.damage >= m.tank) {
             car.finished = true;
             car.reason = "destroyed";
         }
@@ -899,19 +1055,35 @@ var HoverEngine;
     function stepFalling(car) {
         const m = HoverEngine.MACHINES[car.type];
         car.ticks++;
-        car.sourceSpeed = Math.floor(Math.hypot(...car.front.map((v, k) => v + car.rear[k])) / Math.sqrt(128));
+        car.sourceSpeed = car.sourceContact
+            ? sourceSpeed(car.front, car.rear)
+            : Math.floor(Math.hypot(...car.front.map((v, k) => v + car.rear[k])) /
+                Math.sqrt(128));
         const drag = Math.trunc((car.sourceSpeed * m.drag) / (m.weight * (car.sourceSpeed + 1)));
-        const gravity = ((m.weight * 3) >> 4) - (Math.round(-car.pitch / UNIT) >> 8);
-        for (const vector of [car.front, car.rear]) {
+        for (const vector of [car.front, car.rear])
             for (let k = 0; k < 3; k++)
-                vector[k] -= (vector[k] * drag) >> 13;
-            vector[1] += gravity;
+                vector[k] -= Math.imul(vector[k], drag) >> 13;
+        if (car.sourceContact) {
+            sourceGravity(car, car.sourceContact, -256);
+            if (!car.cpuLevel)
+                sourceBank(car, car.sourceContact.normal);
         }
-        car.onRoad = car.grip = car.turbo = false;
-        car.damageLight = car.damageSemi = false;
+        else {
+            const gravity = ((m.weight * 3) >> 4) - (Math.round(-car.pitch / UNIT) >> 8);
+            car.front[1] += gravity;
+            car.rear[1] += gravity;
+            car.onRoad = car.grip = false;
+        }
+        car.turbo = false;
+        car.damageFloorActive = car.damageLight = car.damageSemi = false;
         car.fireTail = car.fireRemaining = Math.max(0, (car.fireRemaining || 0) - 1);
         car.active = {};
-        car.roll -= HoverEngine.clamp(car.roll, -5 * UNIT, 5 * UNIT);
+        if (car.sourceContact) {
+            if (!car.grip && !car.cpuLevel)
+                car.roll = sourceAirRoll(car.roll);
+        }
+        else
+            car.roll -= HoverEngine.clamp(car.roll, -5 * UNIT, 5 * UNIT);
         stepDebris(car);
         sync(car);
         if (car.sourcePosition)
