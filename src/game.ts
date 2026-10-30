@@ -2,6 +2,9 @@
 interface Elements {
   sound: HTMLButtonElement;
   game: HTMLCanvasElement;
+  "fullscreen-host": HTMLDivElement;
+  fullscreen: HTMLButtonElement;
+  "fullscreen-status": HTMLParagraphElement;
   hud: HTMLElement;
   "original-hud": HTMLCanvasElement;
   "course-label": HTMLElement;
@@ -898,7 +901,12 @@ function confirmPause() {
   [$("resume"), $("restart"), $("back")][pauseSelection].click();
 }
 function pause() {
-  if (state === "running" || state === "countdown" || state === "destroyed") {
+  if (
+    state === "running" ||
+    state === "countdown" ||
+    state === "destroyed" ||
+    state === "falling"
+  ) {
     stateBeforePause = state;
     state = "paused";
     originalSound.pause(true);
@@ -916,6 +924,41 @@ function pause() {
   }
 }
 let stateBeforePause = "running";
+const fullscreenHost = $("fullscreen-host");
+const fullscreenButton = $("fullscreen");
+const fullscreenStatus = $("fullscreen-status");
+let gameFullscreen = false;
+fullscreenButton.hidden = !document.fullscreenEnabled;
+function fullscreenError() {
+  fullscreenStatus.textContent =
+    "全画面に切り替えられませんでした。ブラウザの全画面表示の許可を確認してください。";
+  fullscreenStatus.hidden = false;
+}
+fullscreenButton.onclick = () => {
+  fullscreenStatus.hidden = true;
+  // fullscreenchange is queued; track entry before a quick Esc can exit again.
+  void fullscreenHost.requestFullscreen().then(syncFullscreen, fullscreenError);
+};
+function syncFullscreen() {
+  const active = document.fullscreenElement === fullscreenHost;
+  if (gameFullscreen && !active) {
+    keys = {};
+    if (
+      state === "running" ||
+      state === "countdown" ||
+      state === "destroyed" ||
+      state === "falling"
+    )
+      pause();
+    fullscreenButton.focus({ preventScroll: true });
+  } else if (!gameFullscreen && active) {
+    keys = {};
+    menuIdleFrames = 0;
+    fullscreenHost.focus({ preventScroll: true });
+  }
+  gameFullscreen = active;
+}
+document.addEventListener("fullscreenchange", syncFullscreen);
 $("start").onclick = () => start();
 $("pause").onclick = pause;
 $("resume").onclick = pause;
@@ -1027,6 +1070,16 @@ const handled = [
   "Enter",
 ];
 window.addEventListener("keydown", (e) => {
+  if (
+    e.target === fullscreenButton &&
+    (e.code === "Enter" || e.code === "Space")
+  )
+    return;
+  if (e.code === "Escape" && document.fullscreenElement === fullscreenHost) {
+    e.preventDefault();
+    void document.exitFullscreen().catch(fullscreenError);
+    return;
+  }
   if (state === "exited" || autoSaveFrames > 0) return;
   if (/SELECT|INPUT|TEXTAREA/.test((e.target as HTMLElement).tagName)) return;
   if (handled.includes(e.code)) e.preventDefault();

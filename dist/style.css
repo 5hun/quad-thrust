@@ -917,11 +917,38 @@ main {
 #menu-controls[hidden] {
   display: none;
 }
-#menu-controls button {
+.screen-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+}
+#menu-controls button,
+#fullscreen {
   border: 1px solid #444;
   background: #111;
   color: #ccc;
   padding: 8px 12px;
+}
+#fullscreen-host:fullscreen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #000;
+}
+#fullscreen-host::backdrop {
+  background: #000;
+}
+#fullscreen-host:fullscreen > .game-wrap {
+  width: min(100vw, calc(100vh * 4 / 3));
+  height: auto;
+  flex: none;
+}
+#fullscreen-status {
+  color: #aaa;
+  text-align: center;
 }
 #menu-controls kbd {
   border: 0;

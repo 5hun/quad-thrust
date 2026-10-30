@@ -21,170 +21,186 @@
       </button>
     </header>
     <main>
-      <div class="game-wrap">
-        <canvas id="game" aria-label="ホバーレーシングの3Dゲーム画面"></canvas>
-        <div class="vignette"></div>
-        <div id="hud" hidden>
+      <div id="fullscreen-host" tabindex="-1">
+        <div class="game-wrap">
           <canvas
-            id="original-hud"
-            width="320"
-            height="240"
-            aria-label="原作HUD"
+            id="game"
+            aria-label="ホバーレーシングの3Dゲーム画面"
           ></canvas>
-          <div class="hud-top">
-            <div>
-              <label id="course-label">GULF CITY</label
-              ><strong id="lap">LAP 1 / 3</strong>
-            </div>
-            <div class="time-box">
-              <label>RACE TIME</label><strong id="time">00:00.000</strong
-              ><small id="best">BEST —</small>
-            </div>
-          </div>
-          <div class="hud-bottom">
-            <div class="power">
-              <label>POWER <span id="energy-num">100%</span></label>
-              <div class="bar"><i id="energy"></i></div>
-              <div id="thrusters">
-                <span data-thruster="KeyQ">L1</span
-                ><span data-thruster="KeyA">L2</span
-                ><span data-thruster="KeyE">R1</span
-                ><span data-thruster="KeyD">R2</span>
-              </div>
-            </div>
-            <div class="speed">
-              <strong id="speed">000</strong><span>KM/H</span
-              ><small id="position">TIME ATTACK</small>
-            </div>
-          </div>
-          <button id="pause" class="small pause">Ⅱ PAUSE</button
-          ><canvas id="minimap" width="220" height="160"></canvas>
-        </div>
-        <div id="message" aria-live="polite"></div>
-        <section id="menu" class="menu" aria-label="タイトル画面"></section>
-        <section id="legacy-setup" hidden inert>
-          <div class="intro">
-            <div class="eyebrow">
-              <i></i> ORIGINAL ASSETS · THREE.JS · 60 HZ
-            </div>
-            <h1>HOVER<br /><em>RACING</em><span>Three.js ポート</span></h1>
-            <p>
-              浮遊するマシン。消えない慣性。<br />4つのスラスターで、コーナーを支配する。
-            </p>
-            <div class="source-tag">ORIGINAL COURSE DATA <b>HOVER.PAC</b></div>
-          </div>
-          <div class="setup">
-            <div class="section-title">
-              <span>RACE SETUP</span><span>01 / READY</span>
-            </div>
-            <label for="mode">GAME MODE</label
-            ><select id="mode">
-              <option value="time">TIME ATTACK / 3周タイムアタック</option>
-              <option value="practice">
-                PRACTICE / GP練習・コース自由選択
-              </option>
-              <option value="gp0">Blue GP / GRANDPRIX</option>
-              <option value="gp1">Yellow GP / GRANDPRIX</option>
-              <option value="gp2">Red GP / GRANDPRIX</option>
-              <option value="train0">TRAINING / LEVEL 1</option>
-              <option value="train1">TRAINING / LEVEL 2</option>
-              <option value="train2">TRAINING / LEVEL 3</option>
-              <option value="free">FREE RUN / ダメージなしで練習</option>
-            </select>
-            <label for="difficulty">CPU 難易度</label>
-            <select id="difficulty">
-              <option value="0">EASY</option>
-              <option value="1" selected>NORMAL</option>
-              <option value="2">HARD</option>
-              <option value="3">EXPART</option>
-            </select>
-            <p id="mode-description" aria-live="polite"></p>
-            <p id="training-status" hidden></p>
-            <label for="course" id="course-caption"
-              >CIRCUIT <span>9 ORIGINAL TRACKS</span></label
-            ><select id="course"></select>
-            <div class="course-info">
-              <canvas id="preview-map" width="210" height="90"></canvas>
+          <div class="vignette"></div>
+          <div id="hud" hidden>
+            <canvas
+              id="original-hud"
+              width="320"
+              height="240"
+              aria-label="原作HUD"
+            ></canvas>
+            <div class="hud-top">
               <div>
-                <b id="course-number">01 / 09</b
-                ><small id="course-distance"></small
-                ><span id="record">BEST LAP —</span>
+                <label id="course-label">GULF CITY</label
+                ><strong id="lap">LAP 1 / 3</strong>
+              </div>
+              <div class="time-box">
+                <label>RACE TIME</label><strong id="time">00:00.000</strong
+                ><small id="best">BEST —</small>
               </div>
             </div>
-            <label for="machine">MACHINE</label
-            ><select id="machine"></select>
-            <p id="machine-description"></p>
-            <div class="stats" id="stats"></div>
-            <div class="render-options">
-              <label for="quality">画質</label
-              ><select id="quality">
-                <option value="retro">RETRO / 240p</option>
-                <option value="hd">HIGH / HD</option></select
-              ><label class="ghost-label"
-                ><input id="ghost-enabled" type="checkbox" checked />
-                保持中のTAゴースト</label
+            <div class="hud-bottom">
+              <div class="power">
+                <label>POWER <span id="energy-num">100%</span></label>
+                <div class="bar"><i id="energy"></i></div>
+                <div id="thrusters">
+                  <span data-thruster="KeyQ">L1</span
+                  ><span data-thruster="KeyA">L2</span
+                  ><span data-thruster="KeyE">R1</span
+                  ><span data-thruster="KeyD">R2</span>
+                </div>
+              </div>
+              <div class="speed">
+                <strong id="speed">000</strong><span>KM/H</span
+                ><small id="position">TIME ATTACK</small>
+              </div>
+            </div>
+            <button id="pause" class="small pause">Ⅱ PAUSE</button
+            ><canvas id="minimap" width="220" height="160"></canvas>
+          </div>
+          <div id="message" aria-live="polite"></div>
+          <section id="menu" class="menu" aria-label="タイトル画面"></section>
+          <section id="legacy-setup" hidden inert>
+            <div class="intro">
+              <div class="eyebrow">
+                <i></i> ORIGINAL ASSETS · THREE.JS · 60 HZ
+              </div>
+              <h1>HOVER<br /><em>RACING</em><span>Three.js ポート</span></h1>
+              <p>
+                浮遊するマシン。消えない慣性。<br />4つのスラスターで、コーナーを支配する。
+              </p>
+              <div class="source-tag">
+                ORIGINAL COURSE DATA <b>HOVER.PAC</b>
+              </div>
+            </div>
+            <div class="setup">
+              <div class="section-title">
+                <span>RACE SETUP</span><span>01 / READY</span>
+              </div>
+              <label for="mode">GAME MODE</label
+              ><select id="mode">
+                <option value="time">TIME ATTACK / 3周タイムアタック</option>
+                <option value="practice">
+                  PRACTICE / GP練習・コース自由選択
+                </option>
+                <option value="gp0">Blue GP / GRANDPRIX</option>
+                <option value="gp1">Yellow GP / GRANDPRIX</option>
+                <option value="gp2">Red GP / GRANDPRIX</option>
+                <option value="train0">TRAINING / LEVEL 1</option>
+                <option value="train1">TRAINING / LEVEL 2</option>
+                <option value="train2">TRAINING / LEVEL 3</option>
+                <option value="free">FREE RUN / ダメージなしで練習</option>
+              </select>
+              <label for="difficulty">CPU 難易度</label>
+              <select id="difficulty">
+                <option value="0">EASY</option>
+                <option value="1" selected>NORMAL</option>
+                <option value="2">HARD</option>
+                <option value="3">EXPART</option>
+              </select>
+              <p id="mode-description" aria-live="polite"></p>
+              <p id="training-status" hidden></p>
+              <label for="course" id="course-caption"
+                >CIRCUIT <span>9 ORIGINAL TRACKS</span></label
+              ><select id="course"></select>
+              <div class="course-info">
+                <canvas id="preview-map" width="210" height="90"></canvas>
+                <div>
+                  <b id="course-number">01 / 09</b
+                  ><small id="course-distance"></small
+                  ><span id="record">BEST LAP —</span>
+                </div>
+              </div>
+              <label for="machine">MACHINE</label
+              ><select id="machine"></select>
+              <p id="machine-description"></p>
+              <div class="stats" id="stats"></div>
+              <div class="render-options">
+                <label for="quality">画質</label
+                ><select id="quality">
+                  <option value="retro">RETRO / 240p</option>
+                  <option value="hd">HIGH / HD</option></select
+                ><label class="ghost-label"
+                  ><input id="ghost-enabled" type="checkbox" checked />
+                  保持中のTAゴースト</label
+                >
+              </div>
+              <button id="start" class="primary">
+                START RACE <span>↗</span></button
+              ><small class="start-hint"
+                >ENTER でもスタート · キーボード / ゲームパッド対応</small
               >
             </div>
-            <button id="start" class="primary">START RACE <span>↗</span></button
-            ><small class="start-hint"
-              >ENTER でもスタート · キーボード / ゲームパッド対応</small
-            >
-          </div>
-        </section>
-        <section id="pause-panel" hidden aria-label="ポーズメニュー">
-          <canvas
-            id="pause-menu"
-            width="320"
-            height="240"
-            aria-hidden="true"
-          ></canvas>
-          <button id="resume" aria-label="CONTINUE">CONTINUE</button>
-          <button id="restart" aria-label="RESTART">RESTART</button>
-          <button id="back" aria-label="EXIT">EXIT</button>
-        </section>
-        <section id="continue-panel" hidden aria-label="CONTINUE?">
-          <button id="continue-toggle" aria-label="YES / NO 切り替え">
-            YES / NO
-          </button>
-          <button id="continue-confirm" aria-label="CONTINUE 決定">決定</button>
-        </section>
-        <section id="postrace" hidden aria-label="レース記録">
-          <canvas
-            id="postrace-canvas"
-            width="320"
-            height="240"
-            aria-hidden="true"
-          ></canvas>
-          <button id="postrace-prev" aria-label="前の文字">◀</button>
-          <button id="postrace-next" aria-label="次の文字">▶</button>
-          <button id="postrace-confirm" aria-label="記録の決定">決定</button>
-          <button id="postrace-exit" aria-label="記録表示を終了">戻る</button>
-        </section>
-        <section id="result" hidden inert></section>
-        <div id="touch" hidden>
-          <div>
-            <button data-key="KeyQ">L1</button
-            ><button data-key="KeyA">L2</button
-            ><button data-key="ArrowLeft">◀</button>
-          </div>
-          <div>
-            <button data-key="KeyE">R1</button
-            ><button data-key="KeyD">R2</button
-            ><button data-key="ArrowRight">▶</button>
-          </div>
-          <div>
-            <button data-key="Space">加速</button
-            ><button data-key="ShiftLeft">TURBO</button
-            ><button data-key="KeyS">減速</button>
+          </section>
+          <section id="pause-panel" hidden aria-label="ポーズメニュー">
+            <canvas
+              id="pause-menu"
+              width="320"
+              height="240"
+              aria-hidden="true"
+            ></canvas>
+            <button id="resume" aria-label="CONTINUE">CONTINUE</button>
+            <button id="restart" aria-label="RESTART">RESTART</button>
+            <button id="back" aria-label="EXIT">EXIT</button>
+          </section>
+          <section id="continue-panel" hidden aria-label="CONTINUE?">
+            <button id="continue-toggle" aria-label="YES / NO 切り替え">
+              YES / NO
+            </button>
+            <button id="continue-confirm" aria-label="CONTINUE 決定">
+              決定
+            </button>
+          </section>
+          <section id="postrace" hidden aria-label="レース記録">
+            <canvas
+              id="postrace-canvas"
+              width="320"
+              height="240"
+              aria-hidden="true"
+            ></canvas>
+            <button id="postrace-prev" aria-label="前の文字">◀</button>
+            <button id="postrace-next" aria-label="次の文字">▶</button>
+            <button id="postrace-confirm" aria-label="記録の決定">決定</button>
+            <button id="postrace-exit" aria-label="記録表示を終了">戻る</button>
+          </section>
+          <section id="result" hidden inert></section>
+          <div id="touch" hidden>
+            <div>
+              <button data-key="KeyQ">L1</button
+              ><button data-key="KeyA">L2</button
+              ><button data-key="ArrowLeft">◀</button>
+            </div>
+            <div>
+              <button data-key="KeyE">R1</button
+              ><button data-key="KeyD">R2</button
+              ><button data-key="ArrowRight">▶</button>
+            </div>
+            <div>
+              <button data-key="Space">加速</button
+              ><button data-key="ShiftLeft">TURBO</button
+              ><button data-key="KeyS">減速</button>
+            </div>
           </div>
         </div>
       </div>
-      <nav id="menu-controls" aria-label="メニュー操作">
-        <button id="menu-back">戻る <kbd>Esc / X</kbd></button>
-        <button id="menu-prev" aria-label="前の項目">◀</button>
-        <button id="menu-next" aria-label="次の項目">▶</button>
-        <button id="menu-confirm">決定 <kbd>Enter / Z</kbd></button>
-      </nav>
+      <div class="screen-controls">
+        <nav id="menu-controls" aria-label="メニュー操作">
+          <button id="menu-back">戻る <kbd>Esc / X</kbd></button>
+          <button id="menu-prev" aria-label="前の項目">◀</button>
+          <button id="menu-next" aria-label="次の項目">▶</button>
+          <button id="menu-confirm">決定 <kbd>Enter / Z</kbd></button>
+        </nav>
+        <button id="fullscreen" hidden aria-controls="fullscreen-host">
+          全画面
+        </button>
+      </div>
+      <p id="fullscreen-status" role="status" hidden></p>
       <details class="browser-options">
         <summary>ブラウザ設定・操作</summary>
         <div id="browser-settings"></div>
