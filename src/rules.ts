@@ -1,6 +1,12 @@
 // Source: src/rules.ts. Build with npm run build; do not edit dist/rules.js directly.
 /* GP1_MAIN.C GameMode selection; GAME.C opponent composition / GP progression. */
 namespace HoverRules {
+  let stateStorage: Pick<Storage, "getItem" | "setItem"> | null = null;
+  export function useStorage(value: Pick<Storage, "getItem" | "setItem">) {
+    stateStorage = value;
+    sessionUnlocks = 0;
+  }
+
   export const cups = [
     "BLUE GRAND PRIX",
     "YELLOW GRAND PRIX",
@@ -10,16 +16,29 @@ namespace HoverRules {
   let sessionUnlocks = 0;
   export function unlocks() {
     try {
-      sessionUnlocks |= Number(localStorage.getItem("hover-unlocks")) & 15;
+      sessionUnlocks |=
+        Number((stateStorage || localStorage).getItem("hover-unlocks")) & 15;
     } catch {}
-    if (HoverTraining.loadMarks().every((mark) => (mark & 31) === 31))
-      sessionUnlocks |= 8;
     return sessionUnlocks;
   }
   export function completeCup(cup: number) {
     sessionUnlocks = unlocks() | (1 << cup);
     try {
-      localStorage.setItem("hover-unlocks", String(sessionUnlocks));
+      (stateStorage || localStorage).setItem(
+        "hover-unlocks",
+        String(sessionUnlocks),
+      );
+    } catch {}
+  }
+  // TRAINIG.C awards SUZUKI only after leaving the training-selection loop.
+  export function completeTraining() {
+    if (!HoverTraining.loadMarks().every((mark) => (mark & 31) === 31)) return;
+    sessionUnlocks = unlocks() | 8;
+    try {
+      (stateStorage || localStorage).setItem(
+        "hover-unlocks",
+        String(sessionUnlocks),
+      );
     } catch {}
   }
   export function machineCount() {

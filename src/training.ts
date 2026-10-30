@@ -1,6 +1,11 @@
 // Source: src/training.ts. Build with npm run build; do not edit dist/training.js directly.
 /* TRAINIG.C training_set / training_check / game_init_tr. Rules run at 60 Hz. */
 namespace HoverTraining {
+  let stateStorage: Pick<Storage, "getItem" | "setItem"> | null = null;
+  export function useStorage(value: Pick<Storage, "getItem" | "setItem">) {
+    stateStorage = value;
+  }
+
   const descriptions = [
     "スラスターのみで一回転せよ",
     "ゴールせよ",
@@ -135,7 +140,7 @@ namespace HoverTraining {
   export function loadMarks() {
     try {
       const marks = JSON.parse(
-        localStorage.getItem("hover-training-marks") || "[]",
+        (stateStorage || localStorage).getItem("hover-training-marks") || "[]",
       );
       return tasks.map((_, i) => (Number(marks[i]) || 0) & 63);
     } catch {
@@ -146,7 +151,10 @@ namespace HoverTraining {
     const marks = loadMarks();
     marks[stage] |= 1 << type;
     try {
-      localStorage.setItem("hover-training-marks", JSON.stringify(marks));
+      (stateStorage || localStorage).setItem(
+        "hover-training-marks",
+        JSON.stringify(marks),
+      );
     } catch {}
     return marks;
   }

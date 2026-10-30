@@ -3,6 +3,12 @@
 /* GP1_MAIN.C GameMode selection; GAME.C opponent composition / GP progression. */
 var HoverRules;
 (function (HoverRules) {
+    let stateStorage = null;
+    function useStorage(value) {
+        stateStorage = value;
+        sessionUnlocks = 0;
+    }
+    HoverRules.useStorage = useStorage;
     HoverRules.cups = [
         "BLUE GRAND PRIX",
         "YELLOW GRAND PRIX",
@@ -12,22 +18,32 @@ var HoverRules;
     let sessionUnlocks = 0;
     function unlocks() {
         try {
-            sessionUnlocks |= Number(localStorage.getItem("hover-unlocks")) & 15;
+            sessionUnlocks |=
+                Number((stateStorage || localStorage).getItem("hover-unlocks")) & 15;
         }
         catch { }
-        if (HoverTraining.loadMarks().every((mark) => (mark & 31) === 31))
-            sessionUnlocks |= 8;
         return sessionUnlocks;
     }
     HoverRules.unlocks = unlocks;
     function completeCup(cup) {
         sessionUnlocks = unlocks() | (1 << cup);
         try {
-            localStorage.setItem("hover-unlocks", String(sessionUnlocks));
+            (stateStorage || localStorage).setItem("hover-unlocks", String(sessionUnlocks));
         }
         catch { }
     }
     HoverRules.completeCup = completeCup;
+    // TRAINIG.C awards SUZUKI only after leaving the training-selection loop.
+    function completeTraining() {
+        if (!HoverTraining.loadMarks().every((mark) => (mark & 31) === 31))
+            return;
+        sessionUnlocks = unlocks() | 8;
+        try {
+            (stateStorage || localStorage).setItem("hover-unlocks", String(sessionUnlocks));
+        }
+        catch { }
+    }
+    HoverRules.completeTraining = completeTraining;
     function machineCount() {
         const flags = unlocks();
         return flags & 8 ? 6 : flags & 4 ? 5 : 4;

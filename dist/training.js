@@ -3,6 +3,11 @@
 /* TRAINIG.C training_set / training_check / game_init_tr. Rules run at 60 Hz. */
 var HoverTraining;
 (function (HoverTraining) {
+    let stateStorage = null;
+    function useStorage(value) {
+        stateStorage = value;
+    }
+    HoverTraining.useStorage = useStorage;
     const descriptions = [
         "スラスターのみで一回転せよ",
         "ゴールせよ",
@@ -128,7 +133,7 @@ var HoverTraining;
     HoverTraining.drive = drive;
     function loadMarks() {
         try {
-            const marks = JSON.parse(localStorage.getItem("hover-training-marks") || "[]");
+            const marks = JSON.parse((stateStorage || localStorage).getItem("hover-training-marks") || "[]");
             return HoverTraining.tasks.map((_, i) => (Number(marks[i]) || 0) & 63);
         }
         catch {
@@ -140,7 +145,7 @@ var HoverTraining;
         const marks = loadMarks();
         marks[stage] |= 1 << type;
         try {
-            localStorage.setItem("hover-training-marks", JSON.stringify(marks));
+            (stateStorage || localStorage).setItem("hover-training-marks", JSON.stringify(marks));
         }
         catch { }
         return marks;

@@ -1,6 +1,11 @@
 // Source: src/records.ts. Build with npm run build; do not edit dist/records.js directly.
 /* Six entries per course and TimeMode, as BESTLAP records in the original. */
 namespace HoverRecords {
+  let stateStorage: Pick<Storage, "getItem" | "setItem"> | null = null;
+  export function useStorage(value: Pick<Storage, "getItem" | "setItem">) {
+    stateStorage = value;
+  }
+
   export function key(
     category: string | null,
     course: string | number,
@@ -16,7 +21,8 @@ namespace HoverRecords {
     if (!category) return [];
     try {
       const data = JSON.parse(
-        localStorage.getItem(key(category, course, kind)) || "[]",
+        (stateStorage || localStorage).getItem(key(category, course, kind)) ||
+          "[]",
       );
       return Array.isArray(data)
         ? data
@@ -48,7 +54,7 @@ namespace HoverRecords {
     );
     rows.sort((a, b) => a.time - b.time);
     try {
-      localStorage.setItem(
+      (stateStorage || localStorage).setItem(
         key(category, course, kind),
         JSON.stringify(rows.slice(0, 6)),
       );

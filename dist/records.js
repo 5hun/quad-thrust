@@ -3,6 +3,11 @@
 /* Six entries per course and TimeMode, as BESTLAP records in the original. */
 var HoverRecords;
 (function (HoverRecords) {
+    let stateStorage = null;
+    function useStorage(value) {
+        stateStorage = value;
+    }
+    HoverRecords.useStorage = useStorage;
     function key(category, course, kind) {
         return `hover-records-${category}-${course}-${kind}`;
     }
@@ -11,7 +16,8 @@ var HoverRecords;
         if (!category)
             return [];
         try {
-            const data = JSON.parse(localStorage.getItem(key(category, course, kind)) || "[]");
+            const data = JSON.parse((stateStorage || localStorage).getItem(key(category, course, kind)) ||
+                "[]");
             return Array.isArray(data)
                 ? data
                     .filter((x) => Number.isFinite(x.time) &&
@@ -33,7 +39,7 @@ var HoverRecords;
         rows.push(name ? { time, machine, name: name.slice(0, 3) } : { time, machine });
         rows.sort((a, b) => a.time - b.time);
         try {
-            localStorage.setItem(key(category, course, kind), JSON.stringify(rows.slice(0, 6)));
+            (stateStorage || localStorage).setItem(key(category, course, kind), JSON.stringify(rows.slice(0, 6)));
         }
         catch { }
     }
