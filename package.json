@@ -22,7 +22,8 @@
     "test:replay": "node tests/test-browser-replay.cjs",
     "test:ghost": "node tests/test-browser-ghost.cjs",
     "test:card": "node tests/test-browser-card.cjs",
-    "test:source-geometry": "npm run build && python3 tools/verify_track_geometry.py"
+    "test:source-geometry": "npm run build && python3 tools/verify_track_geometry.py",
+    "test:source-walls": "npm run build && python3 tools/verify_wall_physics.py"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"
