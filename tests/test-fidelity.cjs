@@ -377,3 +377,59 @@ console.log(
     "lev=0 car_enemy does not draw residual exhaust",
   );
 }
+
+// MAKEMAP.C outer rows are physical sloping tiles, including on banked roads.
+for (const bank of [0, 10]) {
+  const track = flat(20, 0, bank);
+  const p = track.nodes[0];
+  for (const row of [0, p.allTiles.length - 1]) {
+    const a = E.boundaryVertex(p, row, p.allTiles.length);
+    const b = E.boundaryVertex(p, row + 1, p.allTiles.length);
+    const x = (a[0] + b[0]) / 2;
+    const n = E.nearest(track, x, 30);
+    assert.equal(n.supported, true, "outer apron supports the ship");
+    assert.equal(n.row, row);
+    assert.ok(Math.abs(n.surface - (a[1] + b[1]) / 2) < 0.005);
+    const car = E.create(track);
+    car.x = x;
+    car.z = 30;
+    car.y = n.surface + 2;
+    E.step(car, track, {}, 1 / 60);
+    assert.equal(car.finished, false);
+    assert.equal(car.onRoad, true);
+    assert.ok(!car.events.includes("wall"), "apron is not an invisible wall");
+  }
+}
+// Outside uses the last tile's vertex +5000, not an extrapolated slope plane.
+const beyondApron = E.create(t);
+beyondApron.x = -30;
+beyondApron.y = -70;
+E.step(beyondApron, t, {}, 1 / 60);
+assert.equal(beyondApron.finished, false);
+beyondApron.y = -72;
+E.step(beyondApron, t, {}, 1 / 60);
+assert.equal(beyondApron.reason, "course-out");
+assert.equal(beyondApron.onRoad, false);
+const frozenTime = beyondApron.time;
+const oldY = beyondApron.y;
+for (let i = 0; i < 60; i++) E.stepFalling(beyondApron);
+assert.ok(beyondApron.y < oldY);
+assert.ok(beyondApron.sourceSpeed > 0, "falling speed drives the wind sound");
+assert.equal(beyondApron.time, frozenTime);
+assert.equal(beyondApron.fireTail, 0);
+assert.equal(beyondApron.onRoad, false);
+const mapContext = { window: {} };
+require("node:vm").runInNewContext(
+  fs.readFileSync("dist/tracks.js", "utf8"),
+  mapContext,
+);
+const desert = E.prepare(mapContext.window.HOVER_TRACKS[8]);
+const crossing = E.nearest(desert, 1347.1353648417648, 480.3176647437638, 175);
+assert.equal(desert.nodes[crossing.index].part, desert.nodes[175].part);
+assert.ok(
+  crossing.surface < 0,
+  "nearby upper road must not cause false course-out",
+);
+console.log(
+  "PASS: rideable outer slopes, banked collision faces, outside fall datum, falling wind speed, crossing-road selection",
+);

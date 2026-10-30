@@ -124,6 +124,9 @@ interface Car extends Pose {
   explosionPlayed?: boolean;
 }
 interface Nearest {
+  supported: boolean;
+  row: number;
+  fallY: number;
   index: number;
   t: number;
   x: number;

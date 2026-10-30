@@ -353,25 +353,12 @@ export class HoverRenderer {
           [0.985, 0.985],
           [0.985, 0.015],
         ];
-      for (const i of [0, 1, 2, 2, 1, 3]) {
+      for (const i of [0, 2, 1, 2, 3, 1]) {
         bucket.p.push(points[i][0], points[i][1], -points[i][2]);
         bucket.uv.push(...uvs[i]);
       }
     };
-    const boundary = (p: Boundary, row: number, ys: number) => {
-      const l = p.l,
-        r = p.r,
-        w = Math.hypot(r[0] - l[0], r[2] - l[2]),
-        dx = (r[0] - l[0]) / w,
-        dz = (r[2] - l[2]) / w;
-      if (row === 0) return [l[0] - dx * 10.24, l[1] - 2.56, l[2] - dz * 10.24];
-      if (row === 1) return [l[0], l[1] + 5.12, l[2]];
-      if (row === ys - 1) return [r[0], r[1] + 5.12, r[2]];
-      if (row === ys)
-        return [r[0] + dx * 10.24, r[1] - 2.56, r[2] + dz * 10.24];
-      const t = (row - 2) / (ys - 4);
-      return l.map((x, i) => E.mix(x, r[i], t));
-    };
+    const boundary = E.boundaryVertex;
     for (let i = 0; i < track.nodes.length; i++) {
       const p = track.nodes[i],
         q = p.end || track.nodes[(i + 1) % track.nodes.length],
@@ -385,6 +372,12 @@ export class HoverRenderer {
           boundary(q, row + 1, ys),
           TILE[tiles[row]] ?? 0,
         );
+      // MAKEMAP.C adds a dark, double-sided V-shaped underside. It becomes
+      // visible while falling; the textured road faces remain one-sided.
+      const bottom = (v: RawBoundary) =>
+        v.l.map((x, k) => (x + v.r[k]) / 2 - (k === 1 ? 10.24 : 0));
+      add(boundary(p, 0, ys), boundary(q, 0, ys), bottom(p), bottom(q), -1);
+      add(bottom(p), bottom(q), boundary(p, ys, ys), boundary(q, ys, ys), -1);
     }
     for (const [tile, data] of buffers) {
       const geometry = new THREE.BufferGeometry();
@@ -395,8 +388,9 @@ export class HoverRenderer {
       geometry.setAttribute("uv", new THREE.Float32BufferAttribute(data.uv, 2));
       geometry.computeVertexNormals();
       const mat = new THREE.MeshBasicMaterial({
-        map: this.texture("tile-" + tile + ".png"),
-        side: THREE.DoubleSide,
+        map: tile < 0 ? null : this.texture("tile-" + tile + ".png"),
+        color: tile < 0 ? 0x080808 : 0xffffff,
+        side: tile < 0 ? THREE.DoubleSide : THREE.FrontSide,
         alphaTest: 0.1,
       });
       this.sourceMaterial(mat);
@@ -808,14 +802,7 @@ export class HoverRenderer {
             this.follow.distance /
               (this.replayView || this.finishCamera ? 100 : 400) +
             (this.countdown || 0);
-      const yaw = menu ? car.heading - 0.42 : this.follow.yaw,
-        sy = Math.sin(yaw),
-        cy = Math.cos(yaw);
-      this.camera.position.set(
-        car.x - sy * distance,
-        car.y + (menu ? 10 : 8.5),
-        -car.z + cy * distance,
-      );
+      const yaw = menu ? car.heading - 0.42 : this.follow.yaw;
       const pitch = menu
         ? -0.18
         : this.follow.pitch *
@@ -826,16 +813,19 @@ export class HoverRenderer {
           (Math.trunc((4096 * 7) / 360) * Math.PI * 2) / 4096;
       const roll =
         menu || this.replayView || this.finishCamera ? 0 : this.follow.roll;
-      this.camera.up.set(
-        -Math.cos(yaw) * Math.sin(roll),
-        Math.cos(roll),
-        Math.sin(yaw) * Math.sin(roll),
+      // GsSetView2 is a view matrix: its translation must be inverted
+      // through the entire pitch/yaw/roll basis, including the 850 Y offset.
+      const rotation = new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(pitch, -yaw, roll, "YXZ"),
       );
-      this.camera.lookAt(
-        car.x + sy * 30,
-        car.y + 8.5 + Math.tan(pitch) * (distance + 30),
-        -car.z - cy * 30,
-      );
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(rotation);
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(rotation);
+      this.camera.position
+        .set(car.x, car.y, -car.z)
+        .addScaledVector(up, menu ? 10 : 8.5)
+        .addScaledVector(forward, -distance);
+      this.camera.up.copy(up);
+      this.camera.lookAt(this.camera.position.clone().add(forward));
     }
     if (this.replayView && this.replayDirector.anchor && !this.holdCamera) {
       const anchor = this.replayDirector.anchor;

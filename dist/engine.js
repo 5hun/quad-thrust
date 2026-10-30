@@ -148,23 +148,68 @@ var HoverEngine;
         };
     }
     HoverEngine.at = at;
+    // MAKEMAP.C: the two outer rows form a rideable sloping apron.
+    // Share these vertices with rendering so banks have identical collision faces.
+    function boundaryVertex(p, row, ys) {
+        const { l, r } = p;
+        const length = Math.hypot(...r.map((v, k) => v - l[k])) || 1;
+        const outward = l.map((v, k) => ((v - r[k]) * 10.24) / length);
+        if (row === 0)
+            return l.map((v, k) => v + outward[k] - (k === 1 ? 2.56 : 0));
+        if (row === 1)
+            return l.map((v, k) => v + (k === 1 ? 5.12 : 0));
+        if (row === ys - 1)
+            return r.map((v, k) => v + (k === 1 ? 5.12 : 0));
+        if (row === ys)
+            return r.map((v, k) => v - outward[k] - (k === 1 ? 2.56 : 0));
+        return l.map((v, k) => HoverEngine.mix(v, r[k], (row - 2) / (ys - 4)));
+    }
+    HoverEngine.boundaryVertex = boundaryVertex;
     function nearest(track, x, z, hint = null) {
         let best = null;
         const n = track.nodes.length;
         const ids = hint === null
             ? track.nodes.map((_, i) => i)
-            : Array.from({ length: 25 }, (_, j) => (hint + j - 12 + n) % n);
+            : Array.from(new Set(Array.from({ length: 7 }, (_, j) => (hint + j - 3 + n) % n)));
         for (const i of ids) {
-            const p = track.nodes[i], q = p.end || track.nodes[(i + 1) % n], dx = q.x - p.x, dz = q.z - p.z, t = HoverEngine.clamp(((x - p.x) * dx + (z - p.z) * dz) / (dx * dx + dz * dz || 1), 0, 1), cx = HoverEngine.mix(p.x, q.x, t), cz = HoverEngine.mix(p.z, q.z, t), dist = Math.hypot(x - cx, z - cz);
+            const p = track.nodes[i], q = p.end || track.nodes[(i + 1) % n], dx = q.x - p.x, dz = q.z - p.z, initialT = ((x - p.x) * dx + (z - p.z) * dz) / (dx * dx + dz * dz || 1);
+            // Invert the actual road quad, rather than projecting onto its centre
+            // segment. At bends the closest centre segment need not contain the car.
+            let longitudinal = initialT, lane = 0.5;
+            for (let iteration = 0; iteration < 6; iteration++) {
+                const left = p.l.map((v, k) => HoverEngine.mix(v, q.l[k], longitudinal));
+                const across = p.r.map((v, k) => HoverEngine.mix(v, q.r[k], longitudinal) - left[k]);
+                const along = p.l.map((v, k) => HoverEngine.mix(q.l[k] - v, q.r[k] - p.r[k], lane));
+                const ex = left[0] + across[0] * lane - x;
+                const ez = left[2] + across[2] * lane - z;
+                if (Math.abs(ex) + Math.abs(ez) < 1e-8)
+                    break;
+                const determinant = along[0] * across[2] - along[2] * across[0];
+                if (Math.abs(determinant) < 1e-8)
+                    break;
+                longitudinal -= (ex * across[2] - ez * across[0]) / determinant;
+                lane -= (along[0] * ez - along[2] * ex) / determinant;
+            }
+            const t = HoverEngine.clamp(longitudinal, 0, 1), cx = HoverEngine.mix(p.x, q.x, t), cz = HoverEngine.mix(p.z, q.z, t), l = p.l.map((v, k) => HoverEngine.mix(v, q.l[k], t)), r = p.r.map((v, k) => HoverEngine.mix(v, q.r[k], t)), wx = r[0] - l[0], wz = r[2] - l[2], width = Math.hypot(wx, wz), outsideLong = Math.abs(longitudinal - t) * p.len, dist = outsideLong > 1e-5 ? 1e6 + outsideLong : Math.abs(lane - 0.5) * width;
             if (!best || dist < best.dist) {
-                const l = p.l.map((v, k) => HoverEngine.mix(v, q.l[k], t)), r = p.r.map((v, k) => HoverEngine.mix(v, q.r[k], t));
-                const wx = r[0] - l[0], wz = r[2] - l[2], lane = ((x - l[0]) * wx + (z - l[2]) * wz) / (wx * wx + wz * wz || 1);
                 // CAR_CTR.C car_gravide: plane through the current tile's first
                 // vertex, its next longitudinal vertex and its next lateral vertex.
-                const row = Math.floor(HoverEngine.clamp(lane, 0, 0.9999) * p.tiles.length);
-                const a = p.l.map((v, k) => HoverEngine.mix(v, p.r[k], row / p.tiles.length));
-                const along = q.l.map((v, k) => HoverEngine.mix(v, q.r[k], row / p.tiles.length) - a[k]);
-                const across = p.l.map((v, k) => (p.r[k] - v) / p.tiles.length);
+                const ys = p.allTiles.length;
+                const row = lane < 0
+                    ? 0
+                    : lane > 1
+                        ? ys - 1
+                        : 2 + Math.floor(HoverEngine.clamp(lane, 0, 0.9999) * p.tiles.length);
+                const a = boundaryVertex(p, row, ys);
+                const along = boundaryVertex(q, row, ys).map((v, k) => v - a[k]);
+                const across = boundaryVertex(p, row + 1, ys).map((v, k) => v - a[k]);
+                const outer = boundaryVertex(p, lane < 0 ? 0 : ys, ys);
+                const outerEnd = boundaryVertex(q, lane < 0 ? 0 : ys, ys);
+                const outerPoint = outer.map((v, k) => HoverEngine.mix(v, outerEnd[k], t));
+                const outerLane = ((outerPoint[0] - l[0]) * wx + (outerPoint[2] - l[2]) * wz) /
+                    (width * width || 1);
+                const supported = (lane >= 0 && lane <= 1) ||
+                    (lane < 0 ? lane >= outerLane : lane <= outerLane);
                 let normal = [
                     along[1] * across[2] - along[2] * across[1],
                     along[2] * across[0] - along[0] * across[2],
@@ -179,6 +224,9 @@ var HoverEngine;
                 best = {
                     surface,
                     normal,
+                    supported,
+                    row,
+                    fallY: supported ? surface - 4.12 : a[1] - 68.48,
                     index: i,
                     t,
                     x: cx,
@@ -188,7 +236,7 @@ var HoverEngine;
                     width: Math.hypot(wx, wz),
                     heading: p.heading,
                     distance: p.distance + p.len * t,
-                    tile: p.tiles[Math.floor(HoverEngine.clamp(lane, 0, 0.9999) * p.tiles.length)],
+                    tile: row >= 2 && row < ys - 2 ? p.tiles[row - 2] : p.allTiles[row],
                     lane,
                     ly: l[1],
                     ry: r[1],
@@ -325,7 +373,7 @@ var HoverEngine;
         }
         car.linePosition += lines;
         car.lastLine = near.index;
-        const inside = near.lane >= 0 && near.lane <= 1;
+        const inside = near.supported;
         const surface = near.surface, target = surface + 2;
         car.groundY = surface;
         car.groundNormal = near.normal;
@@ -424,10 +472,10 @@ var HoverEngine;
                     v[j] = 0;
             }
         // Test falling before the cushion can snap an already submerged car up.
-        if ((!inside && car.y <= surface - 68.48) ||
-            (inside && car.y <= surface - 4.12)) {
+        if (car.y <= near.fallY) {
             car.finished = true;
             car.reason = "course-out";
+            car.onRoad = false;
             sync(car);
             return;
         }
@@ -550,7 +598,8 @@ var HoverEngine;
         const margin = 2.56;
         const right = next.lane > 0.5;
         const edgeHeight = right ? next.ry : next.ly;
-        const crossed = inside &&
+        const crossed = near.lane >= 0 &&
+            near.lane <= 1 &&
             (next.lane * next.width < margin ||
                 (1 - next.lane) * next.width < margin) &&
             (right ? near.lane < next.lane : near.lane > next.lane) &&
@@ -603,6 +652,31 @@ var HoverEngine;
         sync(car);
     }
     HoverEngine.tick = tick;
+    // CAR_CTR.C car_action continues resistance, gravity and wind speed after
+    // over becomes negative; course selection and the camera remain frozen.
+    function stepFalling(car) {
+        const m = HoverEngine.MACHINES[car.type];
+        car.ticks++;
+        car.sourceSpeed = Math.floor(Math.hypot(...car.front.map((v, k) => v + car.rear[k])) / Math.sqrt(128));
+        const drag = Math.trunc((car.sourceSpeed * m.drag) / (m.weight * (car.sourceSpeed + 1)));
+        const gravity = ((m.weight * 3) >> 4) - (Math.round(-car.pitch / UNIT) >> 8);
+        for (const vector of [car.front, car.rear]) {
+            for (let k = 0; k < 3; k++)
+                vector[k] -= (vector[k] * drag) >> 13;
+            vector[1] += gravity;
+        }
+        car.onRoad = car.grip = car.turbo = false;
+        car.damageLight = car.damageSemi = false;
+        car.fireTail = car.fireRemaining = Math.max(0, (car.fireRemaining || 0) - 1);
+        car.active = {};
+        car.roll -= HoverEngine.clamp(car.roll, -5 * UNIT, 5 * UNIT);
+        stepDebris(car);
+        sync(car);
+        car.x += car.vx / 60;
+        car.y += car.vy / 60;
+        car.z += car.vz / 60;
+    }
+    HoverEngine.stepFalling = stepFalling;
     function step(car, track, input, dt, free = false, racing = true) {
         // GAME.C keeps car_enemy running after the finish, while total_time
         // and the completed lap records stay fixed. Failures still stop physics.
