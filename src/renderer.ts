@@ -422,7 +422,9 @@ export class HoverRenderer {
       const mat = new THREE.MeshLambertMaterial({
         map: textureName === "solid" ? null : this.texture(textureName),
         vertexColors: true,
-        side: THREE.DoubleSide,
+        // Rear/side jet TMD packets have flag=0 (single-sided). Their nested
+        // shells expose three blue colours; back faces would hide the core.
+        side: fx && name !== "OTHER" ? THREE.FrontSide : THREE.DoubleSide,
         transparent: translucent || !!semi,
         opacity: translucent || semi ? 0.5 : 1,
         depthWrite: !translucent && !semi,

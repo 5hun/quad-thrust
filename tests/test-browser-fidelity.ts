@@ -417,6 +417,56 @@ module.exports = async function verify({
       ],
       "turbo disables flame lighting without changing blend mode",
     );
+    // CAR_CTR.C uses TMD object 2. Its three nested blue shells have
+    // single-sided packets (flag=0); drawing their backs hides the inner colours.
+    const jetColours = await page.evaluate(async () => {
+      const THREE = await import("./vendor/three.module.js");
+      const { r, c } = window.fidelity;
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+      camera.position.set(0, 0, 13);
+      camera.lookAt(0, 0, 2);
+      const target = new THREE.WebGLRenderTarget(256, 256);
+      const pixels = new Uint8Array(256 * 256 * 4);
+      const results: { type: number; turbo: boolean; bands: number[] }[] = [];
+      const retro = r.retroUniform.value;
+      r.retroUniform.value = 0;
+      r.renderer.setRenderTarget(target);
+      for (let type = 0; type < 5; type++) {
+        const ship = r.makeShip(type);
+        for (const turbo of [false, true]) {
+          r.updateShip(
+            ship,
+            { ...c, type, turbo, ticks: 2 },
+            { accel: true },
+            0,
+          );
+          const flame = ship.flames[0];
+          flame.position.set(0, 0, 0);
+          scene.add(flame);
+          r.renderer.render(scene, camera);
+          r.renderer.readRenderTargetPixels(target, 0, 0, 256, 256, pixels);
+          const bands = [0, 0, 0];
+          for (let i = 0; i < pixels.length; i += 4) {
+            const red = pixels[i],
+              blue = pixels[i + 2];
+            if (blue > 0) bands[red / blue > 0.4 ? 0 : red > 0 ? 1 : 2]++;
+          }
+          results.push({ type, turbo, bands });
+          ship.body.add(flame);
+        }
+        r.clear(ship.root);
+      }
+      r.renderer.setRenderTarget(null);
+      r.retroUniform.value = retro;
+      target.dispose();
+      return results;
+    });
+    for (const { type, turbo, bands } of jetColours)
+      assert.ok(
+        bands.every((count) => count > 20),
+        `machine ${type}, turbo=${turbo}: all three jet colours visible (${bands})`,
+      );
     const replayView = await page.evaluate(async () => {
       const { ReplayDirector } = (await import(
         "./replay.js" as string
