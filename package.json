@@ -6,7 +6,7 @@
     "prepare": "husky",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node tests/test-assets.cjs && node tests/test-training.cjs && node tests/test.cjs && node tests/test-fidelity.cjs && node tests/test-circuits.cjs && node tests/test-replay.cjs",
+    "test": "npm run build && node tests/test-assets.cjs && node tests/test-training.cjs && node tests/test.cjs && node tests/test-fidelity.cjs && node tests/test-circuits.cjs && node tests/test-replay.cjs && node tests/test-input-replay.cjs",
     "start": "python3 start-server.py",
     "lint": "eslint src tests/*.cjs eslint.config.mjs --max-warnings=0",
     "lint:fix": "npm run lint -- --fix",
@@ -16,7 +16,10 @@
     "test:menu": "node tests/test-browser-menu.cjs",
     "test:postrace": "node tests/test-browser-postrace.cjs",
     "test:credits": "node tests/test-browser-credits.cjs",
-    "test:phases": "node tests/test-browser-race-phases.cjs"
+    "test:phases": "node tests/test-browser-race-phases.cjs",
+    "test:attract": "node tests/test-browser-attract.cjs",
+    "test:help": "node tests/test-browser-help.cjs",
+    "test:replay": "node tests/test-browser-replay.cjs"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

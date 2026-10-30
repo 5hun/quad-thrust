@@ -21,8 +21,14 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         (state) => window.hoverDiagnostics?.().state === state,
         state,
       );
+    await page.addInitScript(() => localStorage.setItem("hover-unlocks", "15"));
     async function start(mode) {
       await page.goto(baseURL);
+      await page.waitForFunction(
+        () => window.hoverDiagnostics?.().state === "demo",
+      );
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("Enter");
       await wait("menu");
       await page.evaluate(async () => {
         const { HoverRenderer } = await import("./renderer.js");

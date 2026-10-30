@@ -33,15 +33,25 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     const press = (key) => page.keyboard.press(key);
     const click = (name) =>
       page.getByRole("button", { name, exact: true }).click();
+    const enterTitle = async () => {
+      await page.waitForFunction(
+        () => window.hoverDiagnostics?.().state === "demo",
+      );
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("Enter");
+    };
     const title = async () => {
       await page.reload();
+      await enterTitle();
       await screen("title");
     };
     const choose = async (mode) => {
       await click("START");
       await click(mode);
     };
+    await page.addInitScript(() => localStorage.setItem("hover-unlocks", "15"));
     await page.goto(baseURL);
+    await enterTitle();
     await screen("title");
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
       "START",

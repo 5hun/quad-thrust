@@ -8,6 +8,36 @@ var HoverRules;
         "YELLOW GRAND PRIX",
         "RED GRAND PRIX",
     ];
+    // GP1_MAIN.C save_data.omake; keep progress separate from race records.
+    let sessionUnlocks = 0;
+    function unlocks() {
+        try {
+            sessionUnlocks |= Number(localStorage.getItem("hover-unlocks")) & 15;
+        }
+        catch { }
+        if (HoverTraining.loadMarks().every((mark) => (mark & 31) === 31))
+            sessionUnlocks |= 8;
+        return sessionUnlocks;
+    }
+    HoverRules.unlocks = unlocks;
+    function completeCup(cup) {
+        sessionUnlocks = unlocks() | (1 << cup);
+        try {
+            localStorage.setItem("hover-unlocks", String(sessionUnlocks));
+        }
+        catch { }
+    }
+    HoverRules.completeCup = completeCup;
+    function machineCount() {
+        const flags = unlocks();
+        return flags & 8 ? 6 : flags & 4 ? 5 : 4;
+    }
+    HoverRules.machineCount = machineCount;
+    function availableCups() {
+        const flags = unlocks();
+        return flags & 2 ? 3 : flags & 1 ? 2 : 1;
+    }
+    HoverRules.availableCups = availableCups;
     function profile(mode) {
         const gp = /^gp[0-2]$/.test(mode), practice = mode === "practice" || mode === "race", free = mode === "free", training = /^train[0-2]$/.test(mode);
         return {

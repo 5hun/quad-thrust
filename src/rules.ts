@@ -6,6 +6,30 @@ namespace HoverRules {
     "YELLOW GRAND PRIX",
     "RED GRAND PRIX",
   ];
+  // GP1_MAIN.C save_data.omake; keep progress separate from race records.
+  let sessionUnlocks = 0;
+  export function unlocks() {
+    try {
+      sessionUnlocks |= Number(localStorage.getItem("hover-unlocks")) & 15;
+    } catch {}
+    if (HoverTraining.loadMarks().every((mark) => (mark & 31) === 31))
+      sessionUnlocks |= 8;
+    return sessionUnlocks;
+  }
+  export function completeCup(cup: number) {
+    sessionUnlocks = unlocks() | (1 << cup);
+    try {
+      localStorage.setItem("hover-unlocks", String(sessionUnlocks));
+    } catch {}
+  }
+  export function machineCount() {
+    const flags = unlocks();
+    return flags & 8 ? 6 : flags & 4 ? 5 : 4;
+  }
+  export function availableCups() {
+    const flags = unlocks();
+    return flags & 2 ? 3 : flags & 1 ? 2 : 1;
+  }
   export function profile(mode: string) {
     const gp = /^gp[0-2]$/.test(mode),
       practice = mode === "practice" || mode === "race",

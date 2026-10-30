@@ -1,3 +1,5 @@
+// MENU_ETC.C / GP1_MAIN.C: original title tree and selection order.
+import { OriginalHelp } from "./help.js";
 const lists = {
     title: ["START", "OPTION", "HELP", "EXIT"],
     modes: ["GRANDPRIX", "TIME ATTACK", "TRAINING", "2P BATTLE"],
@@ -24,6 +26,7 @@ export class OriginalMenu {
     hooks;
     screen = "title";
     selected = 0;
+    introFrames = 0;
     entered = performance.now();
     mode = "time";
     recordClass = "gp";
@@ -40,6 +43,10 @@ export class OriginalMenu {
     palettes = new Map();
     curves = [];
     padHeld = new Set();
+    help = new OriginalHelp(() => this.show("help", this.help.selected), () => {
+        this.hooks.music(null);
+        this.show("title", 2);
+    });
     constructor(hooks) {
         this.hooks = hooks;
         this.panel = document.getElementById("menu");
@@ -80,13 +87,48 @@ export class OriginalMenu {
         document.getElementById("menu-back").onclick = () => this.back();
         this.show("title");
     }
+    beginIntro() {
+        this.introFrames = 120;
+        this.buttons.inert = true;
+        document.getElementById("menu-controls").hidden = true;
+    }
+    tick(keys = {}) {
+        if (this.screen === "help") {
+            const held = (code) => !!keys[code] || this.padHeld.has(code);
+            this.help.tick(+held("ArrowDown") - +held("ArrowUp"), held("KeyZ") || held("Space"));
+        }
+        if (this.introFrames > 0 && --this.introFrames === 0) {
+            this.buttons.inert = false;
+            document.getElementById("menu-controls").hidden = false;
+        }
+    }
     show(screen, selected = 0) {
+        this.introFrames = 0;
+        this.buttons.inert = false;
+        lists.slots =
+            HoverRules.unlocks() & 1
+                ? ["SLOT 1", "SLOT 2", "ENDING"]
+                : ["SLOT 1", "SLOT 2"];
+        lists.gp = ["Blue GP", "Yellow GP", "Red GP"]
+            .slice(0, HoverRules.availableCups())
+            .concat("PRACTICE");
         this.screen = screen;
         this.selected = selected;
         this.entered = performance.now();
         this.panel.dataset.screen = screen;
         this.buttons.replaceChildren();
-        if (lists[screen])
+        if (screen === "help") {
+            if (this.help.page === "book") {
+                this.button("上へスクロール", 296, 0, 24, 100, () => this.help.move(-1));
+                this.button("下へスクロール", 296, 140, 24, 100, () => this.help.move(1));
+            }
+            else
+                this.help.items.forEach((label, i) => this.button(label, 32, 40 + i * 24, 280, 16, () => {
+                    this.help.selected = i;
+                    this.help.confirm();
+                }, i));
+        }
+        else if (lists[screen])
             lists[screen].forEach((label, i) => {
                 const count = lists[screen].length;
                 const y = count === 2
@@ -123,6 +165,16 @@ export class OriginalMenu {
             .forEach((b) => b.setAttribute("aria-current", String(+b.dataset.index === this.selected)));
     }
     move(delta) {
+        if (this.introFrames)
+            return;
+        if (this.screen === "help") {
+            this.help.move(delta);
+            this.selected = this.help.selected;
+            this.syncSelection();
+            if (this.help.page !== "book")
+                this.hooks.sound("move");
+            return;
+        }
         this.hooks.sound("move");
         if (lists[this.screen])
             this.selected = Math.max(0, Math.min(lists[this.screen].length - 1, this.selected + delta));
@@ -187,12 +239,21 @@ export class OriginalMenu {
         this.show("notice");
     }
     confirm() {
+        if (this.introFrames ||
+            (this.screen === "help" && this.help.page === "book"))
+            return;
         this.hooks.sound("ok");
         const i = this.selected;
         switch (this.screen) {
             case "title":
-                if (i < 3)
+                if (i < 3) {
                     this.show(["modes", "option", "help"][i]);
+                    if (i === 2) {
+                        this.help.reset();
+                        this.show("help");
+                        this.hooks.music("SAMPLE26");
+                    }
+                }
                 else
                     this.message("終了しました。\n決定でタイトル画面に戻ります。", "title");
                 break;
@@ -207,7 +268,7 @@ export class OriginalMenu {
                     this.message("2P BATTLE\n画面分割対戦は未対応です。", "modes");
                 break;
             case "gp":
-                this.choose(i === 3 ? "practice" : "gp" + i);
+                this.choose(i === HoverRules.availableCups() ? "practice" : "gp" + i);
                 break;
             case "levels":
                 this.choose(i === 3 ? "free" : "train" + i);
@@ -218,11 +279,15 @@ export class OriginalMenu {
                 if (i === 1)
                     this.show("record-kind");
                 if (i === 2)
-                    this.message("VIEW REPLAY\n原作形式のリプレイは未対応です。", "option");
+                    this.hooks.replay();
                 if (i === 3)
                     this.show("music");
                 break;
             case "slots":
+                if (i === 2) {
+                    this.hooks.ending();
+                    break;
+                }
                 this.message("MEMORY CARD\n記録・ゴースト・課題クリアは\nこのブラウザに自動保存します。\nPS1のカード形式は未対応です。", "slots");
                 break;
             case "record-kind":
@@ -248,7 +313,7 @@ export class OriginalMenu {
                 this.show(this.noticeParent, this.noticeSelection);
                 break;
             case "help":
-                this.back();
+                this.help.confirm();
                 break;
             case "records":
                 this.recordCourse = this.selected;
@@ -260,7 +325,13 @@ export class OriginalMenu {
         }
     }
     back() {
+        if (this.introFrames)
+            return;
         this.hooks.sound("cancel");
+        if (this.screen === "help") {
+            this.help.back();
+            return;
+        }
         if (this.screen === "course")
             this.show("car");
         else if (this.screen === "car") {
@@ -274,9 +345,11 @@ export class OriginalMenu {
                         ? "levels"
                         : "modes", this.mode.startsWith("gp")
                     ? +this.mode.slice(2)
-                    : this.mode === "practice" || this.mode === "free"
-                        ? 3
-                        : 1);
+                    : this.mode === "practice"
+                        ? HoverRules.availableCups()
+                        : this.mode === "free"
+                            ? 3
+                            : 1);
             }
         }
         else if (this.screen === "record-detail")
@@ -295,6 +368,26 @@ export class OriginalMenu {
         }
     }
     key(code) {
+        if (this.introFrames) {
+            if (code === "Enter") {
+                this.introFrames = 1;
+                this.tick();
+            }
+            return;
+        }
+        if (this.screen === "help" && ["ArrowLeft", "ArrowRight"].includes(code))
+            return;
+        if (this.screen === "help" &&
+            this.help.page === "book" &&
+            [
+                "ArrowUp",
+                "ArrowDown",
+                "ArrowLeft",
+                "ArrowRight",
+                "KeyZ",
+                "Space",
+            ].includes(code))
+            return;
         if (["ArrowUp", "ArrowLeft"].includes(code))
             this.move(-1);
         else if (["ArrowDown", "ArrowRight"].includes(code))
@@ -304,7 +397,7 @@ export class OriginalMenu {
         else if (["Escape", "Backspace", "KeyX"].includes(code))
             this.back();
     }
-    gamepad() {
+    gamepad(dispatch = true) {
         const p = Array.from(navigator.getGamepads?.() || []).find(Boolean);
         const active = new Set();
         if (p) {
@@ -320,9 +413,13 @@ export class OriginalMenu {
                 active.add("Enter");
             if (p.buttons[1]?.pressed)
                 active.add("Escape");
+            if (p.buttons[2]?.pressed &&
+                this.screen === "help" &&
+                this.help.page === "book")
+                active.add("KeyZ");
         }
         for (const code of active)
-            if (!this.padHeld.has(code))
+            if (dispatch && !this.padHeld.has(code))
                 this.key(code);
         this.padHeld = active;
     }
@@ -368,17 +465,23 @@ export class OriginalMenu {
         const list = lists[this.screen];
         if (list) {
             if (this.logo.complete && this.logo.naturalWidth) {
-                const age = (performance.now() - this.entered) / 1000;
-                const offset = this.screen === "title" ? Math.max(0, 60 - age * 60) * 8 : 0;
+                const offset = Math.max(0, this.introFrames - 60) * 8;
                 g.drawImage(this.logo, 0, 0, 256, 51, 40 - offset, 8 + (offset * 50) / 116, 256, 51);
                 g.drawImage(this.logo, 0, 78, 256, 50, 40 + offset, 58 - (offset * 50) / 116, 256, 50);
             }
-            list.forEach((label, i) => this.text(label, 160 - label.length * 8, list.length === 2
-                ? 140 + i * 32
-                : list.length === 3
-                    ? 124 + i * 32
-                    : 124 + i * 24, 16, i === this.selected ? "#00ff00" : "white"));
-            this.text("Copyright (C) 1997 Sato Tomokazu", 40, 224);
+            if (this.introFrames <= 60)
+                list.forEach((label, i) => this.text(label, 160 - label.length * 8, list.length === 2
+                    ? 140 + i * 32
+                    : list.length === 3
+                        ? 124 + i * 32
+                        : 124 + i * 24, 16, i === this.selected ? "#00ff00" : "white"));
+            if (this.introFrames <= 60) {
+                this.text("Copyright (C) 1997 Sato Tomokazu", 40, 224);
+                if (this.introFrames > 0) {
+                    g.fillStyle = `rgba(0,0,0,${this.introFrames / 60})`;
+                    g.fillRect(0, 0, 320, 240);
+                }
+            }
         }
         else if (this.screen === "car") {
             const type = +field("machine").value, m = HoverEngine.MACHINES[type];
@@ -392,7 +495,7 @@ export class OriginalMenu {
                 "Weight",
                 "Power",
             ];
-            const props = HoverEngine.MACHINES.map((m) => [
+            const props = HoverEngine.MACHINES.slice(0, HoverRules.machineCount()).map((m) => [
                 m.accel - m.falloff * 8,
                 m.side,
                 m.rudder ? m.rotation + 227 / m.rudder : 0,
@@ -470,8 +573,7 @@ export class OriginalMenu {
             this.songNames.forEach((s, i) => this.text(s, 32, 32 + i * 17, 16, i === this.selected ? "#00ff00" : "white"));
         }
         else if (this.screen === "help") {
-            this.text("HELP", 16, 16, 16);
-            this.jp("↑↓ / ←→ : 選択\nEnter / Z : 決定\nEsc / X : 戻る\n\nSpace / ↑ : 加速\n←→ : ラダー  Shift : ターボ\nQ A / E D : スラスター\nS / ↓ : ブレーキ\nEsc / P : ポーズ", 24, 48);
+            this.help.draw(g, (text, x, y, color) => this.text(text, x, y, 8, color));
         }
         else if (this.screen === "notice")
             this.jp(this.notice, 16, 32);
@@ -485,7 +587,7 @@ export class OriginalMenu {
                 g.fill();
             }
         }
-        this.panel.setAttribute("aria-label", `${this.screen}: ${list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : this.screen === "training" ? HoverTraining.tasks[+field("course").value].description : this.screen === "notice" ? this.notice : "選択画面")}`);
+        this.panel.setAttribute("aria-label", `${this.screen}: ${list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : this.screen === "training" ? HoverTraining.tasks[+field("course").value].description : this.screen === "notice" ? this.notice : this.screen === "help" ? (this.help.page === "book" ? `${this.help.book} ${this.help.scroll}/${this.help.maxScroll}\n${this.help.description}` : this.help.items[this.help.selected]) : "選択画面")}`);
     }
     jp(text, x, y, size = 12) {
         this.g.fillStyle = "white";

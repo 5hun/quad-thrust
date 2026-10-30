@@ -21,7 +21,13 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     page.on("console", (m) => {
       if (m.type() === "error") errors.push(m.text());
     });
+    await page.addInitScript(() => localStorage.setItem("hover-unlocks", "15"));
     await page.goto(baseURL);
+    await page.waitForFunction(
+      () => window.hoverDiagnostics?.().state === "demo",
+    );
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
     await page.waitForFunction(
       () => window.hoverDiagnostics?.().menuScreen === "title",
     );
@@ -523,6 +529,13 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       await f.sound.context.close();
     });
     await page.evaluate(() => window.fidelity.canvas.remove());
+    // The audio stress runs longer than the original 30-second title timeout.
+    // Return from its attract demo before exercising the training menu.
+    await page.waitForFunction(
+      () => window.hoverDiagnostics().state === "demo",
+    );
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
     await page.getByRole("button", { name: "START", exact: true }).click();
     await page.getByRole("button", { name: "TRAINING", exact: true }).click();
     await page.getByRole("button", { name: "LEVEL 1", exact: true }).click();

@@ -825,6 +825,100 @@ export class HoverRenderer {
     menuHeading = "";
     menuShip = null;
     menuCamera = new THREE.PerspectiveCamera((2 * Math.atan(120 / 320) * 180) / Math.PI, 4 / 3, 0.1, 10000);
+    getMenuShip(type) {
+        if (this.menuShip?.type !== type) {
+            if (this.menuShip) {
+                this.clear(this.menuShip.root);
+                if (this.menuShip.shadow) {
+                    this.scene.remove(this.menuShip.shadow);
+                    this.clear(this.menuShip.shadow);
+                }
+            }
+            this.menuShip = this.makeShip(type);
+            this.scene.remove(this.menuShip.root);
+            if (this.menuShip.shadow)
+                this.scene.remove(this.menuShip.shadow);
+        }
+        return this.menuShip;
+    }
+    helpScene = new THREE.Scene();
+    helpTexture = null;
+    drawHelp(help) {
+        this.retroUniform.value = this.retro ? 1 : 0;
+        if (!this.helpTexture) {
+            this.helpTexture = new THREE.CanvasTexture(help.background);
+            this.helpTexture.colorSpace = THREE.SRGBColorSpace;
+            this.helpTexture.magFilter = THREE.NearestFilter;
+            this.helpTexture.minFilter = THREE.NearestFilter;
+            this.helpScene.background = this.helpTexture;
+            this.helpScene.add(new THREE.AmbientLight(0xffffff, 1.6));
+            const light = new THREE.DirectionalLight(0xffffff, 1.5);
+            light.position.set(0, 256, 128);
+            this.helpScene.add(light);
+        }
+        help.paintBackground();
+        this.helpTexture.needsUpdate = true;
+        this.menuCamera.position.set(0, 9.6, -3.2 * 1.7320508 * 3);
+        this.menuCamera.up.set(0, 1, 0);
+        this.menuCamera.lookAt(0, 0, 0);
+        this.menuCamera.setViewOffset(320, 240, 0, help.scroll, 320, 240);
+        help.annotations = [];
+        const mode = help.mode;
+        let ship = null;
+        if (mode >= 3) {
+            ship = this.getMenuShip(mode > 5 ? mode - 6 : 0);
+            const angle = ((mode === 5 ? 2176 : help.frame * 8) * Math.PI * 2) / 4096;
+            this.updateShip(ship, {
+                type: ship.type,
+                x: 0,
+                y: 0,
+                z: 0,
+                heading: -angle,
+                ticks: help.frame,
+                groundY: 0,
+            }, {
+                accel: mode === 4,
+                l1: mode === 5,
+                l2: mode === 5,
+                r1: mode === 5,
+                r2: mode === 5,
+            }, help.frame / 60);
+            this.helpScene.add(ship.root);
+            if (ship.shadow)
+                this.helpScene.add(ship.shadow);
+            ship.root.updateMatrixWorld(true);
+            this.menuCamera.updateMatrixWorld(true);
+            const annotate = (mount, text, left = false, offset) => {
+                const world = offset
+                    ? ship.body.localToWorld(offset)
+                    : mount.getWorldPosition(new THREE.Vector3());
+                const screen = world.project(this.menuCamera);
+                help.annotations.push({
+                    x: (screen.x + 1) * 160,
+                    y: (1 - screen.y) * 120,
+                    text,
+                    left,
+                });
+            };
+            if (mode === 3) {
+                const p = MOUNTS[0].rudder[0];
+                annotate(ship.rudders[0], "RADDER", false, new THREE.Vector3(p[0] / 100, -(p[1] + 32) / 100, -(p[2] - 64) / 100));
+            }
+            if (mode === 4)
+                annotate(ship.flames[0], "BOOSTER");
+            if (mode === 5)
+                ship.sides.forEach((side, i) => annotate(side, ["SLASTER L1", "SLASTER L2", "SLASTER R1", "SLASTER R2"][i], i < 2));
+        }
+        this.renderer.autoClear = true;
+        this.renderer.render(this.helpScene, this.menuCamera);
+        if (ship) {
+            this.helpScene.remove(ship.root);
+            if (ship.shadow)
+                this.helpScene.remove(ship.shadow);
+        }
+        this.menuCamera.clearViewOffset();
+        ++this.frames;
+    }
     drawMenu(screen, track, type, time, age = 1) {
         this.retroUniform.value = this.retro ? 1 : 0;
         if (this.menuScene.children.length === 0) {
@@ -868,20 +962,7 @@ export class HoverRenderer {
         this.renderer.autoClear = true;
         this.renderer.render(this.menuScene, this.menuCamera);
         if (screen === "car") {
-            if (this.menuShip?.type !== type) {
-                if (this.menuShip) {
-                    this.clear(this.menuShip.root);
-                    if (this.menuShip.shadow) {
-                        this.scene.remove(this.menuShip.shadow);
-                        this.clear(this.menuShip.shadow);
-                    }
-                }
-                this.menuShip = this.makeShip(type);
-                this.scene.remove(this.menuShip.root);
-                if (this.menuShip.shadow)
-                    this.scene.remove(this.menuShip.shadow);
-            }
-            const ship = this.menuShip;
+            const ship = this.getMenuShip(type);
             ship.flames.forEach((m) => (m.visible = false));
             ship.sides.forEach((m) => (m.visible = false));
             ship.root.position.set(3.5 - entryFrame * 0.08, 0, 0);

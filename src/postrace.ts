@@ -220,7 +220,7 @@ export class OriginalPostrace {
       this.phase === "laps" ? "lap" : this.phase === "lap" ? "total" : "laps";
     this.frame = 0;
   }
-  tick() {
+  tick(gamepad = true) {
     if (!this.phase) return;
     this.frame++;
     if (this.rotation) {
@@ -258,6 +258,7 @@ export class OriginalPostrace {
       this.frame >= (this.batch.length ? 420 : 600)
     )
       this.advance();
+    if (!gamepad) return;
     const pad = Array.from(navigator.getGamepads?.() || []).find(Boolean);
     const keys = new Set<string>();
     if (pad) {

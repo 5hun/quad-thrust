@@ -41,7 +41,13 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         { reason, winner },
       );
     }
+    await page.addInitScript(() => localStorage.setItem("hover-unlocks", "15"));
     await page.goto(baseURL);
+    await page.waitForFunction(
+      () => window.hoverDiagnostics?.().state === "demo",
+    );
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
     await wait("menu");
     for (const code of ["Enter", "Enter", "Enter", "Enter"]) await key(code);
     await wait("running");
@@ -119,6 +125,11 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await key("Escape");
     await wait("menu");
     await page.reload();
+    await page.waitForFunction(
+      () => window.hoverDiagnostics?.().state === "demo",
+    );
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
     await wait("menu");
     for (const code of ["Enter", "ArrowDown", "Enter", "Enter", "Enter"])
       await key(code);
@@ -160,6 +171,11 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
     await page.setViewportSize({ width: 1100, height: 900 });
     // Complete a full GP: automatic rounds, source credits, one name for all courses.
     await page.reload();
+    await page.waitForFunction(
+      () => window.hoverDiagnostics?.().state === "demo",
+    );
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
     await wait("menu");
     for (const code of ["Enter", "Enter", "Enter", "Enter"]) await key(code);
     for (let round = 0; round < 3; round++) {
@@ -218,6 +234,9 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       await key("Enter");
       await key("Enter");
     }
+    await wait("demo");
+    await key("Enter");
+    await key("Enter");
     await wait("menu");
     // Training success returns to the same task; a miss retries automatically.
     await page.getByRole("button", { name: "START", exact: true }).click();
