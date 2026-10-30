@@ -1,5 +1,3 @@
-# Instructions for Agents
-
-In this repository, you may create Git commits without additional confirmation after completing the changes and verification required for the user's requested work.
-
-Push only when the user requests it.
+- You can create Git commits without additional confirmation after completing the changes and verification required for the user's requested work.
+- You should break down the work into smaller commits to make it easier to review and understand.
+- Push only when the user requests it.
