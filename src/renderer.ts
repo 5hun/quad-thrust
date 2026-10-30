@@ -621,7 +621,8 @@ export class HoverRenderer {
       if (!(o instanceof THREE.Mesh)) return;
       const mat = o.material as THREE.MeshLambertMaterial;
       const critical =
-        (p.energy ?? 100) < 12.5 && explosion === undefined && !p.cpuSlot;
+        p.warningActive ??
+        ((p.energy ?? 100) < 12.5 && explosion === undefined && !p.cpuSlot);
       (mat.userData.sourceUnlit ||= { value: 0 }).value =
         p.damageLight || (critical && (tick & 7) === 0) ? 1 : 0;
       const semi = ship.ghost || !!p.damageSemi;

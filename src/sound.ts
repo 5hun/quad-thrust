@@ -365,7 +365,8 @@ export class OriginalSound {
       71,
       90,
       64,
-      running && (car.damageFloorActive ?? (car.grip && car.tile === "d")),
+      (running || falling) &&
+        (car.damageFloorActive ?? (car.grip && car.tile === "d")),
     );
     for (const { name, source, gain, pan } of this.loops) {
       const note = name === "wind" ? 8 : name === "rear" && car.turbo ? 32 : 20;

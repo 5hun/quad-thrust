@@ -325,8 +325,22 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         { ticks: 8, damageLight: false, damageSemi: false, energy: 5 },
         { ticks: 9, damageLight: false, damageSemi: false, energy: 5 },
         { ticks: 16, damageLight: false, damageSemi: false, energy: 100 },
+        {
+          ticks: 16,
+          damageLight: false,
+          damageSemi: false,
+          energy: 5,
+          warningActive: false,
+        },
+        {
+          ticks: 16,
+          damageLight: true,
+          damageSemi: true,
+          energy: 5,
+          warningActive: false,
+        },
       ]) {
-        r.updateShip(ship, { ...c, ...p }, {}, 0);
+        r.updateShip(ship, { ...c, warningActive: undefined, ...p }, {}, 0);
         result.push([material.userData.sourceUnlit.value, material.opacity]);
       }
       const tail = [];
@@ -347,6 +361,8 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
       [1, 1],
       [0, 1],
       [0, 1],
+      [0, 1],
+      [1, 0.5],
     ]);
     assert.deepEqual(damageDisplay.tail, [true, false, true, false]);
     const turboFlame = await page.evaluate(() => {
@@ -649,6 +665,40 @@ module.exports = async function verify({ chromium, executablePath, baseURL }) {
         [...window.fidelity.sound.effects.keys()].sort(),
       ),
       [70, 71],
+    );
+    // Falling stops the warning, but frozen-cell damage audio follows the
+    // pre-gravity floor decision even when the visible car is off the road.
+    await page.evaluate(() => {
+      const f = window.fidelity;
+      f.sound.update(
+        {
+          ...f.c,
+          energy: 5,
+          grip: false,
+          tile: "outside",
+          damageFloorActive: true,
+        },
+        {},
+        false,
+        true,
+      );
+    });
+    assert.deepEqual(
+      await page.evaluate(() => [...window.fidelity.sound.effects.keys()]),
+      [71],
+    );
+    await page.evaluate(() => {
+      const f = window.fidelity;
+      f.sound.update(
+        { ...f.c, energy: 5, grip: true, tile: "d", damageFloorActive: false },
+        {},
+        false,
+        true,
+      );
+    });
+    assert.deepEqual(
+      await page.evaluate(() => [...window.fidelity.sound.effects.keys()]),
+      [],
     );
     await page.evaluate(() => {
       const f = window.fidelity;

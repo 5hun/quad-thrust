@@ -83,6 +83,7 @@ interface Pose {
   ticks?: number;
   energy?: number;
   damageFloorActive?: boolean;
+  warningActive?: boolean;
   damageLight?: boolean;
   damageSemi?: boolean;
   cpuSlot?: number;
@@ -112,6 +113,7 @@ interface Car extends Pose {
   sourceShadowAngles?: Vec3;
   sourcePreviousAngles?: Vec3;
   sourceContact?: SourceContact;
+  sourceTile?: string;
   // CAR_CTR.C posr: quarter PS1 world units, Y down.
   sourcePosition?: Vec3;
   leftDistance?: number;

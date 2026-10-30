@@ -44,10 +44,11 @@ typedef uintptr_t u_long;
 #define _abs(v) abs(v)
 #define _addVECTOR(R,A,B) ((R)->vx=A.vx+B.vx,(R)->vy=A.vy+B.vy,(R)->vz=A.vz+B.vz)
 #define INERTIA_KETA2 2
-struct s_MAP_DATA { VECTOR center; int xdiv,ydiv,next,before,tmd_num; } map_storage[202], *map_data=map_storage+1;
+struct s_MAP_DATA { VECTOR center; int xdiv,ydiv,next,before,tmd_num,pat; } map_storage[202], *map_data=map_storage+1;
 struct car { VECTOR pos,posr,npos,nposr,inertia_forward,inertia_back; SVECTOR status,statusk,statusb;
  int accer,side_boost,per_rot2,per_rot,radder_rot,boost_wr,turbo,breaking,breaking2,boost_timming2,draw;
  int resi1,brek;
+ int damageVoice,last_goal,time,lap,lap_time[4],last_lap,lap_draw,finish_rank,effect,effect_time;
  int weight,now_on,now_chip_x,now_chip_y,now_chip,rank,line_position,before_line_position;
  int cource_out,over,lev,tei,damage,grip,car_type,speed,lhit,rhit,l_distans,r_distans; SVECTOR *VP,*VP2,*VN;
 } cars[4],*cars_scra[4]={&cars[0],&cars[1],&cars[2],&cars[3]},*car_data;
@@ -57,7 +58,7 @@ struct { int hight,weight,per_accer0,per_accer1,turbo0,turbo1; } CARS_PROPATIE[6
 struct { uint32_t attribute; } DOBJ_KAGE[4],DOBJ_C[4];
 struct { struct { int16_t m[3][3]; int t[3]; } coord; } CRD_KAGE[4],CRD_C[4];
 int sound_count,last_tone,last_volume,debris_count,debris_calls;
-struct { int wall_ch; } Trn;
+struct { int wall_ch,stop[4],time; } Trn;
 void car_hitsound(int tone,int volume,int n) { sound_count++;last_tone=tone;last_volume=volume; }
 void add_crash_chip(VECTOR v,SVECTOR normal,int width,int count,int mode,int player) { debris_count+=count;debris_calls++; }
 #define SIDE_HIGHT 100
@@ -66,8 +67,18 @@ void add_crash_chip(VECTOR v,SVECTOR normal,int width,int count,int mode,int pla
 #define SIDE_SIZE 1024
 #define K_HIGHT 512
 struct { int xs[1],ys[1]; } patterns, *Mp=&patterns;
-struct { int cosd[720],sind[720],GameMode,goal_count,cars_pos[4]; char *cource_tmd_addr; } Gsys;
+struct { int cosd[720],sind[720],GameMode,goal_count,cars_pos[4],replaying,vab_se,time,best_lap_time[24],cource_number,best_draw,etone,effectVoice; char *cource_tmd_addr; } Gsys;
 unsigned char buffer[1024*1024], *cp, cource_buff[16];
+unsigned char chip_pattern[512];
+#define COURCE_PAT_ADDR chip_pattern
+#define SND_DAMAGE 71
+#define SND_POWUP 73
+int chip_key_on,chip_key_off;
+int SsUtKeyOn(int bank,int program,int tone,int note,int fine,int left,int right) { chip_key_on++;return 7; }
+void SsUtKeyOff(int voice,int bank,int program,int tone,int note) { chip_key_off++; }
+void SsUtSetVVol(int voice,int left,int right) {}
+void get_record_time(char *text,int time) {}
+void alphabet88(int x,int y,char *text) {}
 void add_tmd(int n,int pat,unsigned char *v,int vc,unsigned char *norm,int nc,int scale) {}
 '''
     body = '\n'.join([function(library, 'sqr_i'), function(original, 'normal_set'),
@@ -75,7 +86,8 @@ void add_tmd(int n,int pat,unsigned char *v,int vc,unsigned char *norm,int nc,in
                       function(controller, 'car_getplate'), function(controller, 'car_gravide'),
                       function(controller, 'car_wallcheck'), function(controller2, 'car_bank'),
                       function(controller, 'car_preope'), function(controller2, 'car_rotation'),
-                      function(controller, 'car_acceralate'), function(controller, 'car_resistance')])
+                      function(controller, 'car_acceralate'), function(controller, 'car_resistance'),
+                      function(controller, 'car_chipeffect')])
     wrapper = r'''
 int generate(int circle,int xs,int ys,int *left,int *right,int *cosine,int16_t *out) {
     memset(buffer,0,sizeof(buffer)); memset(cource_buff,0,sizeof(cource_buff)); cp=buffer;
@@ -249,6 +261,21 @@ void resistance_probe(int *input,int *result) {
   result[3]=cars[0].inertia_back.vx;result[4]=cars[0].inertia_back.vy;result[5]=cars[0].inertia_back.vz;
 }
 '''
+    wrapper += r'''
+void continuous_tile_probe(int *input,int *result) {
+  memset(cars,0,sizeof(cars));memset(DOBJ_C,0,sizeof(DOBJ_C));
+  memset(chip_pattern,input[0],sizeof(chip_pattern));
+  int n=input[1];cars[n].grip=input[2];cars[n].lev=input[3];cars[n].damage=input[4];
+  cars[n].over=input[5];cars[n].damageVoice=input[7];
+  Gsys.time=input[6];Gsys.GameMode=0;Gsys.replaying=input[8];
+  map_data[0].pat=0;map_data[0].xdiv=1;map_data[0].ydiv=1;
+  DOBJ_C[n].attribute=(1<<6)+(1<<30);chip_key_on=chip_key_off=0;
+  car_chipeffect(n);
+  result[0]=cars[n].damage;result[1]=!!(DOBJ_C[n].attribute & (1<<6));
+  result[2]=!!(DOBJ_C[n].attribute & (1<<30));result[3]=cars[n].breaking2;
+  result[4]=cars[n].damageVoice;result[5]=chip_key_on;result[6]=chip_key_off;
+}
+'''
     source = Path(directory)/'original-geometry.c'
     source.write_text(header+body+wrapper)
     target = Path(directory)/'original-geometry.so'
@@ -265,6 +292,7 @@ void resistance_probe(int *input,int *result) {
     lib.rotation_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
     lib.acceleration_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
     lib.resistance_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
+    lib.continuous_tile_probe.argtypes = [ctypes.POINTER(ctypes.c_int)]*2
     return lib
 
 

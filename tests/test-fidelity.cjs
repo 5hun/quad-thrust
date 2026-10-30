@@ -266,6 +266,18 @@ damageCar.y = 10;
 E.step(damageCar, tileTrack("d"), {}, 1 / 60);
 assert.equal(damageCar.damageLight, false);
 assert.equal(damageCar.damageSemi, false);
+const warningCar = E.create(t);
+warningCar.damage = 30000;
+E.step(warningCar, t, {}, 1 / 60);
+assert.equal(warningCar.warningActive, true);
+warningCar.finished = true;
+warningCar.reason = "finish";
+E.step(warningCar, t, {}, 1 / 60, false, false);
+assert.equal(
+  warningCar.warningActive,
+  false,
+  "car_enemy does not add warning lighting",
+);
 const tail = E.create(t);
 E.step(tail, t, { accel: true }, 1 / 60);
 for (let size = 64; size >= 0; size--) {
@@ -421,6 +433,70 @@ require("node:vm").runInNewContext(
   fs.readFileSync("dist/tracks.js", "utf8"),
   mapContext,
 );
+// Outside selection retains the clamped source cell. Falling reuses that
+// tile and applies continuous effects before updating grip, without entry effects.
+const fallFloor = E.prepare(mapContext.window.HOVER_TRACKS[0]);
+for (const node of fallFloor.nodes) {
+  node.tiles = "d".repeat(node.tiles.length);
+  node.allTiles = "d".repeat(node.allTiles.length);
+}
+const damageFall = E.create(fallFloor);
+damageFall.x = -100;
+damageFall.z = 0;
+damageFall.y = -80;
+E.step(damageFall, fallFloor, {}, 1 / 60);
+assert.equal(damageFall.reason, "course-out");
+assert.equal(damageFall.tile, "outside");
+assert.equal(damageFall.sourceTile, "d");
+assert.equal(damageFall.damage, 100);
+for (const node of fallFloor.nodes) {
+  node.tiles = ".".repeat(node.tiles.length);
+  node.allTiles = ".".repeat(node.allTiles.length);
+}
+damageFall.grip = false;
+E.stepFalling(damageFall);
+assert.equal(damageFall.damage, 100, "floor consumes previous grip");
+assert.equal(damageFall.damageFloorActive, false);
+assert.equal(
+  damageFall.grip,
+  true,
+  "gravity can set grip while over is negative",
+);
+for (let i = 0; i < 4; i++) {
+  E.stepFalling(damageFall);
+  assert.equal(damageFall.damage, 200 + i * 100);
+  assert.equal(damageFall.damageFloorActive, true);
+  assert.equal(damageFall.damageLight, (damageFall.ticks & 2) !== 0);
+  assert.equal(damageFall.damageSemi, (damageFall.ticks & 1) === 0);
+}
+for (const tile of ["P", "J", ">", "s", "g"]) {
+  damageFall.sourceTile = tile;
+  damageFall.events.length = 0;
+  E.stepFalling(damageFall);
+  assert.equal(damageFall.damage, 500);
+  assert.ok(
+    !damageFall.events.some((event) =>
+      ["repair", "jump", "boost", "stop", "goal"].includes(event),
+    ),
+  );
+  assert.equal(damageFall.damageFloorActive, false);
+}
+damageFall.sourceTile = "B";
+E.stepFalling(damageFall);
+assert.equal(damageFall.damage, 100500, "B remains continuous during falling");
+assert.equal(damageFall.reason, "course-out");
+assert.equal(damageFall.warningActive, false);
+const fallingBrake = E.create(t),
+  fallingCoast = E.create(t);
+for (const c of [fallingBrake, fallingCoast]) {
+  c.front = [10000, 0, 0];
+  c.rear = [10000, 0, 0];
+  c.grip = true;
+}
+fallingBrake.sourceTile = "*";
+E.stepFalling(fallingBrake);
+E.stepFalling(fallingCoast);
+assert.ok(fallingBrake.front[0] < fallingCoast.front[0]);
 const desert = E.prepare(mapContext.window.HOVER_TRACKS[8]);
 const crossing = E.nearest(desert, 1347.1353648417648, 480.3176647437638, 175);
 assert.equal(desert.nodes[crossing.index].part, desert.nodes[175].part);

@@ -25,6 +25,7 @@
     "test:source-geometry": "npm run build && python3 tools/verify_track_geometry.py",
     "test:source-walls": "npm run build && python3 tools/verify_wall_physics.py",
     "test:source-hover": "npm run build && python3 tools/verify_hover_physics.py",
+    "test:source-tiles": "npm run build && python3 tools/verify_tile_effects.py",
     "test:source-resistance": "npm run build && python3 tools/verify_resistance.py",
     "test:source-attitude": "npm run build && python3 tools/verify_attitude.py"
   },

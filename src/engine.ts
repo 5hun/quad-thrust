@@ -480,6 +480,8 @@ namespace HoverEngine {
       heading: 0,
       sourcePosition: undefined,
       sourceContact: undefined,
+      sourceTile: undefined,
+      warningActive: undefined,
       sourceMatrix: undefined,
       sourceShadowMatrix: undefined,
       sourceShadowAngles: undefined,
@@ -519,6 +521,8 @@ namespace HoverEngine {
       recovery: 1,
       sourcePosition: undefined,
       sourceContact: undefined,
+      sourceTile: undefined,
+      warningActive: undefined,
       sourceMatrix: undefined,
       sourceShadowMatrix: undefined,
       sourceShadowAngles: undefined,
@@ -951,6 +955,22 @@ namespace HoverEngine {
     }
     setSourcePosition(car, nextPosition);
   }
+  // Continuous branch of car_chipeffect; reads the previous gravity's grip.
+  // Unlike entry triggers, these effects continue while over is nonzero.
+  export function sourceContinuousTile(
+    car: Car,
+    tile: string,
+    time = car.ticks,
+  ) {
+    const player = !car.ghost && (car.cpuSlot ?? (car.cpuLevel ? 1 : 0)) === 0;
+    const damaging = tile === "d" && car.grip && player;
+    car.damageFloorActive = damaging;
+    car.damageLight = damaging && (time & 2) !== 0;
+    car.damageSemi = damaging && (time & 1) === 0;
+    if (damaging) car.damage = (car.damage + 100) | 0;
+    if (tile === "B" && car.grip) car.damage = (car.damage + 100000) | 0;
+    return tile === "*" && car.grip && !car.cpuLevel;
+  }
   // CAR_CTR.C car_resistance: products and sign tests are signed 32-bit.
   export function sourceResistance(
     car: Car,
@@ -1015,25 +1035,11 @@ namespace HoverEngine {
       car.sourceContact = sourceContact(node, near.row, inside);
       ensureSourceAttitude(car);
     } else car.grip = inside && car.y <= target + 1.5 && car.y >= surface - 1;
-    const ch = inside ? near.tile : "outside";
-    car.tile = ch;
-    // Preserve the grip used by car_chipeffect for audio as well as drawing;
-    // car_gravide updates car.grip later in this same frame.
-    car.damageFloorActive =
-      ch === "d" && car.grip && !car.cpuLevel && !car.ghost;
-    // DOBJ_C bit 6 disables lighting; bit 30 enables semitransparency.
-    car.damageLight =
-      ch === "d" &&
-      car.grip &&
-      !car.cpuLevel &&
-      !car.ghost &&
-      (car.ticks & 2) !== 0;
-    car.damageSemi =
-      ch === "d" &&
-      car.grip &&
-      !car.cpuLevel &&
-      !car.ghost &&
-      (car.ticks & 1) === 0;
+    // car_getplate retains the selected edge cell even outside the course.
+    const ch = source || inside ? near.tile : "outside";
+    car.tile = inside ? near.tile : "outside";
+    car.sourceTile = source ? ch : undefined;
+    const floorBrake = sourceContinuousTile(car, ch);
     car.turbo = !!input.turbo && m.turbo > 0;
     car.fireTail =
       !racing && !car.cpuLevel
@@ -1043,10 +1049,6 @@ namespace HoverEngine {
           : car.fireRemaining || 0;
     car.fireRemaining =
       input.accel || car.turbo ? 64 : Math.max(0, (car.fireRemaining || 0) - 1);
-    if (car.grip) {
-      if (ch === "d" && !car.cpuLevel && !car.ghost) car.damage += 100;
-      if (ch === "B") car.damage += 100000;
-    }
     // CAR_CTR.C: g is a line trigger (also active in the air), with a
     // 32-row guard against reversing across the same finish line.
     if (
@@ -1104,11 +1106,7 @@ namespace HoverEngine {
     // In car_chipeffect only J leaves ccc unchanged while airborne, so
     // landing on that same jump tile must still fire the jump.
     if (ch !== "J" || car.grip) car.previousTile = ch;
-    sourceResistance(
-      car,
-      !!input.brake,
-      ch === "*" && car.grip && !car.cpuLevel,
-    );
+    sourceResistance(car, !!input.brake, floorBrake);
     if (source) {
       sourceGravity(car, car.sourceContact!);
       // car_enemy omits car_bank for lev>0; a lev=0 ghost uses car_action.
@@ -1119,6 +1117,7 @@ namespace HoverEngine {
         car.finished = true;
         car.reason = "course-out";
         car.onRoad = false;
+        car.warningActive = false;
         sync(car);
         return;
       }
@@ -1262,6 +1261,15 @@ namespace HoverEngine {
         if (rightError < -40) car.roll += 11 * UNIT;
       } else car.roll -= clamp(car.roll, -5 * UNIT, 5 * UNIT);
     }
+    // car_action tests warning after thrust/rotation and before wall damage.
+    // car_enemy does not add the warning attribute, even for a lev=0 driver.
+    car.warningActive =
+      racing &&
+      !car.cpuLevel &&
+      !car.ghost &&
+      m.tank - car.damage < m.tank >> 3 &&
+      car.reason !== "course-out" &&
+      car.reason !== "destroyed";
     if (source) {
       // car_chipeffect sets goal_count during the finish tick, but the
       // current call remains car_action until the following frame.
@@ -1345,6 +1353,7 @@ namespace HoverEngine {
   // over becomes negative; course selection and the camera remain frozen.
   export function stepFalling(car: Car) {
     const m = MACHINES[car.type];
+    car.warningActive = false;
     car.ticks++;
     car.sourceSpeed = car.sourceContact
       ? sourceSpeed(car.front, car.rear)
@@ -1352,7 +1361,11 @@ namespace HoverEngine {
           Math.hypot(...car.front.map((v, k) => v + car.rear[k])) /
             Math.sqrt(128),
         );
-    sourceResistance(car);
+    const floorBrake = sourceContinuousTile(
+      car,
+      car.sourceTile ?? car.tile ?? "outside",
+    );
+    sourceResistance(car, false, floorBrake);
     if (car.sourceContact) {
       sourceGravity(car, car.sourceContact, -256);
       if (!car.cpuLevel) sourceBank(car, car.sourceContact.normal);
@@ -1364,7 +1377,6 @@ namespace HoverEngine {
       car.onRoad = car.grip = false;
     }
     car.turbo = false;
-    car.damageFloorActive = car.damageLight = car.damageSemi = false;
     car.fireTail = car.fireRemaining = Math.max(
       0,
       (car.fireRemaining || 0) - 1,
