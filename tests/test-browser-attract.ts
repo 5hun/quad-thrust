@@ -38,7 +38,10 @@ module.exports = async function verify({
     };
     await assertTitle();
     const first = await snapshot();
-    assert.deepEqual(first.demo.opponentTypes, [0, 1, 2]);
+    assert.deepEqual(
+      [first.demo.cameraType, ...first.demo.opponentTypes].sort(),
+      [0, 1, 2, 3],
+    );
     assert.deepEqual(first.demo.cpuLevels, [8, 8, 8, 8]);
     assert.equal(await page.locator("#hud").isVisible(), false);
     assert.equal(

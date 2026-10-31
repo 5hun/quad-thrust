@@ -403,8 +403,9 @@ function beginDemo() {
   originalSound.cancel();
   originalSound.pause(false);
   const demoTrack = tracks[Math.floor(Math.random() * tracks.length)];
-  const demoCar = E.placeOnGrid(E.create(demoTrack, 3), demoTrack);
-  const demoBots = R.opponents(3).map((type, i) =>
+  const demoType = Math.floor(Math.random() * 4);
+  const demoCar = E.placeOnGrid(E.create(demoTrack, demoType), demoTrack);
+  const demoBots = R.opponents(demoType).map((type, i) =>
     E.placeOnGrid(E.create(demoTrack, type), demoTrack, i + 1),
   );
   [demoCar, ...demoBots].forEach((racer, i) => {
@@ -1175,6 +1176,7 @@ export const getHoverDiagnostics = () => ({
   demoFrames,
   demo: {
     course: titleDemo.track.name,
+    cameraType: titleDemo.car.type,
     opponentTypes: titleDemo.bots.map((bot) => bot.type),
     cpuLevels: [titleDemo.car, ...titleDemo.bots].map(
       (racer) => racer.cpuLevel,
