@@ -40,10 +40,8 @@ module.exports = async function verify({
       page.getByRole("button", { name, exact: true }).click();
     const enterTitle = async () => {
       await page.waitForFunction(
-        () => window.hoverDiagnostics?.().state === "demo",
+        () => window.hoverDiagnostics?.().state === "menu",
       );
-      await page.keyboard.press("Enter");
-      await page.keyboard.press("Enter");
     };
     const title = async () => {
       await page.reload();
@@ -51,7 +49,6 @@ module.exports = async function verify({
       await screen("title");
     };
     const choose = async (mode: string) => {
-      await click("START");
       await click(mode);
     };
     await page.addInitScript(() => {
@@ -80,11 +77,10 @@ module.exports = async function verify({
       0,
     );
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
-      "START",
+      "GRANDPRIX",
+      "TIME ATTACK",
       "OPTION",
     ]);
-    await press("Enter");
-    await screen("modes");
     await press("ArrowDown");
     await press("Enter");
     await screen("car");
@@ -299,14 +295,13 @@ module.exports = async function verify({
       navigator.getGamepads = () => [window.menuTestPad as unknown as Gamepad];
       window.menuTestPad.buttons[0].pressed = true;
     });
-    await screen("modes");
+    await screen("car");
     await page.evaluate(() => {
       window.menuTestPad.buttons[0].pressed = false;
     });
     await page.setViewportSize({ width: 375, height: 780 });
     await press("Escape");
     await screen("title");
-    await click("START");
     await click("TIME ATTACK");
     await screen("car");
     await press("ArrowRight");
@@ -327,7 +322,7 @@ module.exports = async function verify({
     await press("Escape");
     await screen("car");
     await press("Escape");
-    await screen("modes");
+    await screen("title");
     assert.equal(
       (await page.evaluate(() => window.hoverDiagnostics())).menuSelection,
       1,

@@ -30,9 +30,7 @@ module.exports = async function verify({
     const click = (name: string) =>
       page.getByRole("button", { name, exact: true }).click();
     await page.goto(baseURL);
-    await wait("demo");
-    await press("Enter");
-    await press("Enter");
+    await wait("menu");
     await page.evaluate(() =>
       window.localStorage.setItem(
         "hover-v2-0-0-ghost",
@@ -45,7 +43,6 @@ module.exports = async function verify({
         }),
       ),
     );
-    await click("START");
     await click("TIME ATTACK");
     await press("Enter");
     await press("Enter");
@@ -251,9 +248,7 @@ module.exports = async function verify({
       "old local data is not deleted",
     );
     await page.reload();
-    await wait("demo");
-    await press("Enter");
-    await press("Enter");
+    await wait("menu");
     assert.equal(
       (await snap()).lastReplay,
       null,

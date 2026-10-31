@@ -48,9 +48,7 @@ module.exports = async function verify({
       await fullscreen(false);
     };
     await page.goto(baseURL);
-    await wait("demo");
-    await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter");
+    await wait("menu");
     await click("OPTION");
     const viewports = [
       { width: 960, height: 720 },
@@ -97,7 +95,8 @@ module.exports = async function verify({
       });
       assert.ok(Math.abs(layout.width - viewport.width) < 1);
       assert.ok(Math.abs(layout.y * 2 + layout.height - viewport.height) < 1);
-      assert.ok(Math.abs(layout.menuWidth / layout.menuHeight - 4 / 3) < 0.01);
+      assert.ok(Math.abs(layout.menuWidth - layout.width) < 1);
+      assert.ok(Math.abs(layout.menuHeight - layout.height) < 1);
       assert.ok(
         Math.abs(layout.menuX * 2 + layout.menuWidth - viewport.width) < 1,
       );
@@ -156,7 +155,6 @@ module.exports = async function verify({
     assert.equal((await snapshot()).menuScreen, "option");
     await enter();
     await page.keyboard.press("KeyX");
-    await page.getByRole("button", { name: "START", exact: true }).click();
     await page
       .getByRole("button", { name: "TIME ATTACK", exact: true })
       .click();
@@ -197,7 +195,6 @@ module.exports = async function verify({
     await click("OPTION");
     await enter();
     await page.keyboard.press("KeyX");
-    await click("START");
     await click("TIME ATTACK");
     await page.keyboard.press("Enter");
     await page.keyboard.press("Enter");
@@ -226,8 +223,6 @@ module.exports = async function verify({
     });
     await unsupported.goto(baseURL);
     await unsupported.waitForFunction(() => !!window.hoverDiagnostics);
-    await unsupported.keyboard.press("Enter");
-    await unsupported.keyboard.press("Enter");
     await unsupported
       .getByRole("button", { name: "OPTION", exact: true })
       .click();

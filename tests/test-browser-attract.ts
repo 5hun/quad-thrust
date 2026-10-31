@@ -1,5 +1,5 @@
 import type {} from "./types";
-/* global window */
+/* global window, getComputedStyle */
 const assert: typeof import("node:assert/strict") = require("node:assert/strict");
 module.exports = async function verify({
   chromium,
@@ -25,28 +25,55 @@ module.exports = async function verify({
       () => window.hoverDiagnostics?.().demoFrames > 5,
     );
     const snapshot = () => page.evaluate(() => window.hoverDiagnostics());
-    const first = await snapshot();
-    await page.screenshot({ path: "/tmp/hover-startup-demo.png" });
-    assert.equal(first.state, "demo");
-    assert.deepEqual(first.opponentTypes, [0, 1, 2]);
-    assert.deepEqual(first.cpuLevels, [8, 8, 8]);
-    assert.ok([1, 17, 33].includes(first.replayCameraMode!));
-    assert.equal(await page.locator("#hud").isVisible(), false);
-    assert.equal(await page.locator("#menu-controls").count(), 0);
-    await page.waitForTimeout(500);
-    assert.notEqual((await snapshot()).opponents[0].z, first.opponents[0].z);
-    // Any key exits the demo, but cannot also navigate the title.
-    await page.keyboard.press("a");
-    assert.equal((await snapshot()).state, "menu");
-    assert.ok((await snapshot()).titleIntroFrames > 60);
-    await page.keyboard.press("ArrowDown");
-    assert.equal((await snapshot()).menuSelection, 0);
-    await page.keyboard.press("Enter");
-    assert.equal((await snapshot()).menuScreen, "title");
-    assert.equal((await snapshot()).titleIntroFrames, 0);
     const click = (name: string) =>
       page.getByRole("button", { name, exact: true }).click();
-    await click("START");
+    const assertTitle = async () => {
+      assert.equal((await snapshot()).state, "menu");
+      assert.equal((await snapshot()).menuScreen, "title");
+      assert.deepEqual(
+        await page.locator("#menu nav button").allTextContents(),
+        ["GRANDPRIX", "TIME ATTACK", "OPTION"],
+      );
+      await page.getByRole("heading", { name: "QUAD THRUST" }).waitFor();
+    };
+    await assertTitle();
+    const first = await snapshot();
+    assert.deepEqual(first.demo.opponentTypes, [0, 1, 2]);
+    assert.deepEqual(first.demo.cpuLevels, [8, 8, 8, 8]);
+    assert.equal(await page.locator("#hud").isVisible(), false);
+    assert.equal(
+      await page.getByRole("button", { name: "START", exact: true }).count(),
+      0,
+    );
+    assert.equal(
+      await page.getByRole("button", { name: "PRESS ANY BUTTON" }).count(),
+      0,
+    );
+    await page.waitForFunction(
+      (frames) => window.hoverDiagnostics().demoFrames > frames + 10,
+      first.demoFrames,
+    );
+    const next = await snapshot();
+    assert.notDeepEqual(next.demo.positions, first.demo.positions);
+    // Unrelated input leaves the menu and the ongoing demo intact.
+    await page.keyboard.press("a");
+    await assertTitle();
+    // The first navigation and confirmation work immediately.
+    await page.keyboard.press("ArrowDown");
+    assert.equal((await snapshot()).menuSelection, 1);
+    await page.keyboard.press("Enter");
+    assert.equal((await snapshot()).menuScreen, "car");
+    await page.keyboard.press("ArrowRight");
+    const selectedMachine = await page.locator("#machine").inputValue();
+    await page.keyboard.press("Escape");
+    await assertTitle();
+    assert.equal((await snapshot()).menuSelection, 1);
+    const resumed = await snapshot();
+    await page.waitForFunction(
+      (frames) => window.hoverDiagnostics().demoFrames > frames + 5,
+      resumed.demoFrames,
+    );
+    assert.equal(await page.locator("#machine").inputValue(), selectedMachine);
     await click("GRANDPRIX");
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
       "Blue GP",
@@ -56,31 +83,106 @@ module.exports = async function verify({
     assert.equal(await page.locator("#machine option").count(), 4);
     await page.keyboard.press("Escape");
     assert.equal((await snapshot()).menuSelection, 1);
-    // Exercise the real fixed-step loop quickly, without drawing 1800 frames.
-    await page.evaluate(async () => {
-      const { HoverRenderer } = (await import(
-        "./renderer.js" as string
-      )) as typeof import("../src/renderer");
-      const { OriginalMenu } = (await import(
-        "./menu.js" as string
-      )) as typeof import("../src/menu");
-      HoverRenderer.prototype.drawMenu = () => {};
-      OriginalMenu.prototype.draw = () => {};
-      const raf = window.requestAnimationFrame;
-      let virtualTime = performance.now();
-      window.requestAnimationFrame = (callback) =>
-        raf(() => {
-          virtualTime += 100;
-          callback(virtualTime);
-        });
+    await page.keyboard.press("Escape");
+    await assertTitle();
+    // A held gamepad confirmation must open only one level of the tree.
+    await page.evaluate(() => {
+      window.menuTestPad = {
+        axes: [0, 0],
+        buttons: Array.from({ length: 16 }, (_, i) => ({ pressed: i === 0 })),
+      };
+      navigator.getGamepads = () => [window.menuTestPad as unknown as Gamepad];
     });
     await page.waitForFunction(
-      () => window.hoverDiagnostics().state === "demo",
+      () => window.hoverDiagnostics().menuScreen === "gp",
     );
-    // Touch/mouse has the same one-action transition as the keyboard.
-    await click("PRESS ANY BUTTON");
+    await page.waitForTimeout(200);
+    assert.equal((await snapshot()).menuScreen, "gp");
+    await page.evaluate(() => {
+      window.menuTestPad.buttons[0].pressed = false;
+    });
+    await page.keyboard.press("Escape");
+    // The title remains usable on narrow, normal, and ultrawide screens.
+    for (const viewport of [
+      { width: 375, height: 780 },
+      { width: 960, height: 720 },
+      { width: 1600, height: 900 },
+      { width: 2560, height: 720 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const buttons = page.locator("#menu nav button");
+      for (let i = 0; i < 3; i++) {
+        const box = await buttons.nth(i).boundingBox();
+        assert.ok(
+          box &&
+            box.x >= 0 &&
+            box.y >= 0 &&
+            box.x + box.width <= viewport.width &&
+            box.y + box.height <= viewport.height,
+        );
+      }
+      await click("OPTION");
+      const lastOption = await page
+        .locator("#menu nav button")
+        .last()
+        .boundingBox();
+      const guide = await page.locator("#menu .title-guide").boundingBox();
+      assert.ok(
+        lastOption && guide && lastOption.y + lastOption.height <= guide.y,
+      );
+      await page.keyboard.press("Escape");
+      await assertTitle();
+    }
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.screenshot({ path: "/tmp/quad-thrust-title-c1.png" });
+    // Every list and record page shares the same uninterrupted CPU race.
+    let previous = await snapshot();
+    const assertContinuingDemo = async (screen: string, list = true) => {
+      await page.waitForFunction(
+        (frames) => window.hoverDiagnostics().demoFrames > frames + 4,
+        previous.demoFrames,
+      );
+      const current = await snapshot();
+      assert.equal(current.menuScreen, screen);
+      assert.equal(current.demo.course, previous.demo.course);
+      assert.equal(current.music, previous.music);
+      assert.notDeepEqual(current.demo.positions, previous.demo.positions);
+      if (list) {
+        assert.equal(await page.locator("#original-menu").isVisible(), false);
+        const selected = page.locator('#menu button[aria-current="true"]');
+        assert.equal(
+          await selected.evaluate((b) => getComputedStyle(b).color),
+          "rgb(32, 229, 236)",
+        );
+        assert.equal(
+          await selected.evaluate(
+            (b) => getComputedStyle(b, "::before").opacity,
+          ),
+          "1",
+        );
+      }
+      previous = current;
+    };
+    await click("GRANDPRIX");
+    await assertContinuingDemo("gp");
+    await page.screenshot({ path: "/tmp/quad-thrust-gp-c1.png" });
+    await page.keyboard.press("Escape");
+    await assertContinuingDemo("title");
+    await click("OPTION");
+    await assertContinuingDemo("option");
+    await page.screenshot({ path: "/tmp/quad-thrust-option-c1.png" });
+    await click("GAME LEVEL");
+    await assertContinuingDemo("difficulty");
+    await click("NORMAL");
+    await assertContinuingDemo("option");
+    await click("VIEW RECORDS");
+    await assertContinuingDemo("record-kind");
+    await click("TIME ATTACK'S");
+    await assertContinuingDemo("records", false);
     await page.keyboard.press("Enter");
-    assert.equal((await snapshot()).menuScreen, "title");
+    await assertContinuingDemo("record-detail", false);
+    for (let i = 0; i < 4; i++) await page.keyboard.press("Escape");
+    await assertContinuingDemo("title");
     const progress = await page.evaluate(() => {
       const r = window.HoverRules;
       r.completeCup(0);
@@ -91,45 +193,11 @@ module.exports = async function verify({
       const red = [r.availableCups(), r.machineCount()];
       return { blue, yellow, red };
     });
-    assert.deepEqual(progress, {
-      blue: [2, 4],
-      yellow: [3, 4],
-      red: [3, 5],
-    });
+    assert.deepEqual(progress, { blue: [2, 4], yellow: [3, 4], red: [3, 5] });
     await page.reload();
     await page.waitForFunction(
-      () => window.hoverDiagnostics?.().state === "demo",
+      () => window.hoverDiagnostics?.().demoFrames > 5,
     );
-    await page.evaluate(() => {
-      Object.defineProperty(navigator, "getGamepads", {
-        configurable: true,
-        value: () => [
-          {
-            axes: [0, 0],
-            buttons: Array.from({ length: 16 }, (_, i) => ({
-              pressed: i === 0,
-            })),
-          },
-        ],
-      });
-    });
-    await page.waitForFunction(
-      () => window.hoverDiagnostics().state === "menu",
-    );
-    await page.waitForTimeout(250);
-    assert.equal(
-      (await snapshot()).menuScreen,
-      "title",
-      "held gamepad button cannot also select START",
-    );
-    await page.evaluate(() =>
-      Object.defineProperty(navigator, "getGamepads", {
-        configurable: true,
-        value: () => [],
-      }),
-    );
-    await page.keyboard.press("Enter");
-    await click("START");
     await click("GRANDPRIX");
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
       "Blue GP",
@@ -141,7 +209,7 @@ module.exports = async function verify({
     assert.equal(await page.locator("#machine option").count(), 5);
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: live startup demo, four CPU racers, replay camera, any-button dismissal, title intro, submenu idle demo, pointer dismissal, fresh/save unlock progression",
+      "PASS: immediate C1 title, live independent demo, direct modes, keyboard/gamepad/pointer, responsive layout and unlock progression",
     );
   } finally {
     await browser.close();

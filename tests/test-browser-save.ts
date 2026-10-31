@@ -24,10 +24,8 @@ module.exports = async function verify({
       page.getByRole("button", { name, exact: true }).click();
     const title = async () => {
       await page.waitForFunction(
-        () => window.hoverDiagnostics?.().state === "demo",
+        () => window.hoverDiagnostics?.().state === "menu",
       );
-      await page.keyboard.press("Enter");
-      await page.keyboard.press("Enter");
       await page.waitForFunction(
         () => window.hoverDiagnostics().menuScreen === "title",
       );

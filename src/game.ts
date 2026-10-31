@@ -86,52 +86,13 @@ let track = tracks[0],
   sound = true,
   padPause = false;
 let finishRank = 1;
-let recordPreview: {
-  course: number;
-  entered: number;
-  track: Track;
-  cars: Car[];
-} | null = null;
-function updateRecordPreview(dt: number) {
-  if (originalMenu.screen !== "record-detail") {
-    recordPreview = null;
-    return;
-  }
-  if (
-    !recordPreview ||
-    recordPreview.course !== originalMenu.recordCourse ||
-    recordPreview.entered !== originalMenu.entered
-  ) {
-    const track = tracks[originalMenu.recordCourse];
-    recordPreview = {
-      course: originalMenu.recordCourse,
-      entered: originalMenu.entered,
-      track,
-      cars: Array.from({ length: 4 }, (_, slot) => {
-        const racer = E.placeOnGrid(E.create(track, slot), track, slot);
-        racer.cpuLevel = 8;
-        racer.cpuSlot = slot;
-        return racer;
-      }),
-    };
-    view.yaw = null;
-    view.replayDirector.reset();
-  }
-  const { track, cars } = recordPreview;
-  for (const racer of cars) {
-    if (racer.finished) E.recover(racer, track);
-    E.step(racer, track, E.driveCPU(racer, track, cars[0]), dt, true, false);
-    racer.damage = 0;
-    racer.events.length = 0;
-  }
-  E.collideAll(cars);
-  view.replayView = true;
-  view.holdCamera = view.finishCamera = false;
-  view.countdown = null;
-  view.updateCamera(cars[0]);
+let demoFrames = 0;
+// The title's CPU race never changes the player's selected course or machine.
+let titleDemo: { track: Track; car: Car; bots: Car[]; music: string };
+let titleDemoVisible = false;
+function showingMenuDemo() {
+  return state === "menu" && originalMenu.usesDemoBackdrop;
 }
-let demoFrames = 0,
-  menuIdleFrames = 0;
 const format = (t: number) => {
   if (!Number.isFinite(t)) return "—";
   const ms = Math.round(t * 1000);
@@ -429,41 +390,24 @@ function start(nextRound = false) {
     );
 }
 function menu() {
-  ghostReplay = null;
-  postraceReplay = null;
   if (state === "finished") rememberReplay();
-  originalSound.cancel();
-  originalSound.pause(false);
-  state = "menu";
-  menuIdleFrames = 0;
-  keys = {};
-  $("hud").hidden = true;
-  $("pause-panel").hidden = true;
-  $("result").hidden = true;
-  $("menu").hidden = false;
-  originalMenu.show("title");
-  $("touch").hidden = true;
-  $("message").textContent = "";
-  document.querySelector(".game-wrap")!.classList.remove("playing");
-  refreshMachines();
-  select();
+  beginDemo();
 }
 // GP1_MAIN.C main / GAME.C gamedemo: live CPU race, not a recording.
 function beginDemo() {
   ghostReplay = null;
   postrace.close();
-  state = "demo";
+  state = "menu";
   demoFrames = 0;
-  menuIdleFrames = 0;
   keys = {};
   originalSound.cancel();
   originalSound.pause(false);
-  track = tracks[Math.floor(Math.random() * tracks.length)];
-  car = E.placeOnGrid(E.create(track, 3), track);
-  bots = R.opponents(3).map((type, i) =>
-    E.placeOnGrid(E.create(track, type), track, i + 1),
+  const demoTrack = tracks[Math.floor(Math.random() * tracks.length)];
+  const demoCar = E.placeOnGrid(E.create(demoTrack, 3), demoTrack);
+  const demoBots = R.opponents(3).map((type, i) =>
+    E.placeOnGrid(E.create(demoTrack, type), demoTrack, i + 1),
   );
-  [car, ...bots].forEach((racer, i) => {
+  [demoCar, ...demoBots].forEach((racer, i) => {
     racer.cpuSlot = i;
     racer.cpuLevel = 8;
   });
@@ -480,11 +424,19 @@ function beginDemo() {
     "CANION",
     "SAMPLE21",
   ];
-  originalSound.playCourse(music[Math.floor(Math.random() * music.length)]);
+  titleDemo = {
+    track: demoTrack,
+    car: demoCar,
+    bots: demoBots,
+    music: music[Math.floor(Math.random() * music.length)],
+  };
+  titleDemoVisible = false;
+  postraceReplay = null;
   if (sound) initAudio();
   view.yaw = null;
   view.countdown = null;
   view.result = null;
+  view.gpRecords = false;
   view.holdCamera = false;
   view.nameEntry = null;
   view.continuePrompt = null;
@@ -493,18 +445,20 @@ function beginDemo() {
   document.getElementById("continue-panel")!.hidden = true;
   $("message").textContent = "";
   $("menu").hidden = false;
-  originalMenu.buttons.replaceChildren();
-  $("menu").dataset.screen = "demo";
-  $("menu").setAttribute("aria-label", "PRESS ANY BUTTON");
-  originalMenu.button("PRESS ANY BUTTON", 0, 0, 320, 240, endDemo);
-  document.querySelector(".game-wrap")!.classList.add("playing");
-}
-function endDemo() {
-  if (state !== "demo") return;
-  menu();
-  originalMenu.beginIntro();
+  originalMenu.show("title");
+  document.querySelector(".game-wrap")!.classList.remove("playing");
+  refreshMachines();
+  select();
 }
 function updateDemo(dt: number) {
+  const { track, car, bots } = titleDemo;
+  if (!titleDemoVisible) {
+    view.setTrack(track);
+    view.yaw = null;
+    view.replayDirector.reset();
+    originalSound.playCourse(titleDemo.music);
+    titleDemoVisible = true;
+  }
   for (const racer of [car, ...bots]) {
     if (racer.finished) {
       E.recover(racer, track);
@@ -516,6 +470,10 @@ function updateDemo(dt: number) {
     racer.events.length = 0;
   }
   E.collideAll([car, ...bots]);
+  view.replayView = true;
+  view.holdCamera = view.finishCamera = false;
+  view.countdown = null;
+  view.updateCamera(car);
   ++demoFrames;
 }
 let pauseSelection = 0;
@@ -602,7 +560,6 @@ function syncFullscreen() {
     fullscreenHost.focus({ preventScroll: true });
   } else if (!gameFullscreen && active) {
     keys = {};
-    menuIdleFrames = 0;
     fullscreenHost.focus({ preventScroll: true });
   }
   gameFullscreen = active;
@@ -718,12 +675,6 @@ window.addEventListener("keydown", (e) => {
   if (/SELECT|INPUT|TEXTAREA/.test((e.target as HTMLElement).tagName)) return;
   if (handled.includes(e.code)) e.preventDefault();
   keys[e.code] = true;
-  menuIdleFrames = 0;
-  if (state === "demo") {
-    e.preventDefault();
-    endDemo();
-    return;
-  }
   if (e.repeat) return;
   if (state === "menu") {
     if (
@@ -828,16 +779,7 @@ function input() {
   const p = Array.from(navigator.getGamepads?.() || []).find(Boolean),
     b = (i: number) => p?.buttons[i]?.pressed || false,
     axis = p && Math.abs(p.axes[0]) > 0.15 ? p.axes[0] : 0;
-  if (state === "demo" && p?.buttons.some((button) => button.pressed)) {
-    endDemo();
-    // Consume the button until release; it must not also select START.
-    originalMenu.gamepad(false);
-  } else if (state === "menu") originalMenu.gamepad();
-  if (
-    p?.buttons.some((button) => button.pressed) ||
-    Object.values(keys).some(Boolean)
-  )
-    menuIdleFrames = 0;
+  if (state === "menu") originalMenu.gamepad();
   if (state !== "menu" && b(9) && !padPause) pause();
   padPause = b(9);
   const pauseButtons = new Set<string>();
@@ -908,33 +850,21 @@ function beep() {
 }
 let currentInput: Input = {};
 function render() {
-  if (state === "demo") {
-    view.draw(track, car, bots, state, worldTime, car.active || {});
-    originalMenu.g.clearRect(0, 0, 320, 240);
-    if ((demoFrames & 63) > 31)
-      originalMenu.text("PRESS ANY BUTTON", 32, 112, 16);
+  if (showingMenuDemo()) {
+    const { track, car, bots } = titleDemo;
+    view.draw(track, car, bots, "demo", worldTime, car.active || {});
+    originalMenu.draw();
     return;
   }
+  titleDemoVisible = false;
   if (state === "menu") {
-    if (originalMenu.screen === "record-detail" && recordPreview) {
-      view.result = view.continuePrompt = view.nameEntry = null;
-      view.gpRecords = false;
-      view.draw(
-        recordPreview.track,
-        recordPreview.cars[0],
-        recordPreview.cars.slice(1),
-        "records",
-        worldTime,
-        {},
-      );
-    } else
-      view.drawMenu(
-        originalMenu.screen,
-        track,
-        car.type,
-        worldTime,
-        (performance.now() - originalMenu.entered) / 1000,
-      );
+    view.drawMenu(
+      originalMenu.screen,
+      track,
+      car.type,
+      worldTime,
+      (performance.now() - originalMenu.entered) / 1000,
+    );
     originalMenu.draw();
     return;
   }
@@ -1125,20 +1055,9 @@ function update(dt: number) {
 
     return;
   }
-  if (state === "demo") {
-    updateDemo(dt);
-    return;
-  }
   if (state === "menu") {
     originalMenu.tick();
-    updateRecordPreview(dt);
-    if (
-      ["title", "modes", "option", "gp", "difficulty", "record-kind"].includes(
-        originalMenu.screen,
-      ) &&
-      ++menuIdleFrames > 30 * 60
-    )
-      beginDemo();
+    if (showingMenuDemo()) updateDemo(dt);
     return;
   }
   if (state === "countdown") {
@@ -1221,7 +1140,7 @@ function frame(ts: number) {
   if (state !== "paused") worldTime += dt;
   if (postrace.phase && !postraceReplay) replayClock += dt;
   view.replayView =
-    (!!postrace.phase && !postrace.batch.length) || state === "demo";
+    (!!postrace.phase && !postrace.batch.length) || showingMenuDemo();
   // GAME.C view_set(17): front chase except a winning GP.
   view.finishCamera =
     state === "finished" &&
@@ -1248,18 +1167,23 @@ function frame(ts: number) {
   );
   requestAnimationFrame(frame);
 }
-// Pointer interactions count as activity in title submenus too.
-$("menu").addEventListener("pointerdown", () => {
-  menuIdleFrames = 0;
-});
 beginDemo();
 requestAnimationFrame(frame);
 // Read-only snapshots for diagnostics; no controls or simulation bypasses exposed.
 export const getHoverDiagnostics = () => ({
   state,
   demoFrames,
-  menuIdleFrames,
-  titleIntroFrames: originalMenu.introFrames,
+  demo: {
+    course: titleDemo.track.name,
+    opponentTypes: titleDemo.bots.map((bot) => bot.type),
+    cpuLevels: [titleDemo.car, ...titleDemo.bots].map(
+      (racer) => racer.cpuLevel,
+    ),
+    positions: [titleDemo.car, ...titleDemo.bots].map((racer) => ({
+      x: racer.x,
+      z: racer.z,
+    })),
+  },
   mode,
   gpRound,
   finishRank,

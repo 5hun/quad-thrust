@@ -1,7 +1,6 @@
 // MENU_ETC.C / GP1_MAIN.C: original title tree and selection order.
 export type MenuScreen =
   | "title"
-  | "modes"
   | "gp"
   | "option"
   | "difficulty"
@@ -24,17 +23,21 @@ interface MenuHooks {
   music(name: string | null): void;
 }
 const lists: Partial<Record<MenuScreen, string[]>> = {
-  title: ["START", "OPTION"],
-  modes: ["GRANDPRIX", "TIME ATTACK"],
+  title: ["GRANDPRIX", "TIME ATTACK", "OPTION"],
   gp: ["Blue GP", "Yellow GP", "Red GP", "PRACTICE"],
   option: [],
   difficulty: ["EASY", "NORMAL", "HARD", "EXPART"],
   "record-kind": ["GRANDPRIX'S", "TIME ATTACK'S"],
 };
+const captions: Partial<Record<MenuScreen, string>> = {
+  gp: "GRANDPRIX",
+  option: "OPTION",
+  difficulty: "GAME LEVEL",
+  "record-kind": "VIEW RECORDS",
+};
 const parent: Partial<Record<MenuScreen, [MenuScreen, number]>> = {
-  modes: ["title", 0],
-  gp: ["modes", 0],
-  option: ["title", 1],
+  gp: ["title", 0],
+  option: ["title", 2],
   difficulty: ["option", 0],
   "record-kind": ["option", 1],
   records: ["record-kind", 0],
@@ -43,7 +46,6 @@ const field = (id: string) => document.getElementById(id) as HTMLSelectElement;
 export class OriginalMenu {
   screen: MenuScreen = "title";
   selected = 0;
-  introFrames = 0;
   entered = performance.now();
   mode = "time";
   recordClass = "gp";
@@ -53,12 +55,22 @@ export class OriginalMenu {
   canvas: HTMLCanvasElement;
   g: CanvasRenderingContext2D;
   buttons: HTMLElement;
+  caption: HTMLElement;
   font = new Image();
-  logo = new Image();
   portraits = new Image();
   palettes = new Map<string, HTMLCanvasElement>();
   curves: number[][][] = [];
   padHeld = new Set<string>();
+  get usesListLayout() {
+    return lists[this.screen] !== undefined;
+  }
+  get usesDemoBackdrop() {
+    return (
+      this.usesListLayout ||
+      this.screen === "records" ||
+      this.screen === "record-detail"
+    );
+  }
   constructor(public hooks: MenuHooks) {
     this.panel = document.getElementById("menu")!;
     this.panel.replaceChildren();
@@ -70,9 +82,23 @@ export class OriginalMenu {
     this.g = this.canvas.getContext("2d")!;
     this.buttons = document.createElement("nav");
     this.buttons.setAttribute("aria-label", "ゲームメニュー");
-    this.panel.append(this.canvas, this.buttons);
+    const titleLayout = document.createElement("div");
+    titleLayout.className = "title-layout";
+    const title = document.createElement("h1");
+    title.className = "title-brand";
+    const wordmark = document.createElement("img");
+    wordmark.src = "quad-thrust.svg";
+    wordmark.alt = "QUAD THRUST";
+    title.append(wordmark);
+    this.caption = document.createElement("h2");
+    this.caption.className = "menu-caption";
+    const guide = document.createElement("div");
+    guide.className = "title-guide";
+    guide.innerHTML =
+      '<span><span class="guide-arrows">↑ ↓</span> SELECT</span><span><kbd>ENTER</kbd> CONFIRM</span><span class="back-guide"><kbd>ESC</kbd> BACK</span>';
+    titleLayout.append(title, this.caption, this.buttons, guide);
+    this.panel.append(this.canvas, titleLayout);
     this.font.src = "assets/font.png";
-    this.logo.src = "assets/title.png";
     this.portraits.src = "assets/minicars.png";
     // car_select_init: 136 samples, three simulation ticks per graph pixel.
     this.curves = HoverEngine.MACHINES.map((m) =>
@@ -100,24 +126,15 @@ export class OriginalMenu {
     );
     this.show("title");
   }
-  beginIntro() {
-    this.introFrames = 120;
-    this.buttons.inert = true;
-  }
   tick() {
     if (this.screen === "record-detail")
       this.recordFrames = (this.recordFrames + 1) % 1320;
-    if (this.introFrames > 0 && --this.introFrames === 0) {
-      this.buttons.inert = false;
-    }
   }
   show(screen: MenuScreen, selected = 0) {
     const restoreFocus =
       this.screen === screen && this.buttons.contains(document.activeElement);
     document.getElementById("fullscreen-status")!.hidden = true;
     this.recordFrames = 0;
-    this.introFrames = 0;
-    this.buttons.inert = false;
     const fullscreen = this.hooks.fullscreen();
     lists.option = [
       "GAME LEVEL",
@@ -134,6 +151,13 @@ export class OriginalMenu {
     this.selected = selected;
     this.entered = performance.now();
     this.panel.dataset.screen = screen;
+    this.panel.dataset.presentation = this.usesListLayout
+      ? "list"
+      : this.usesDemoBackdrop
+        ? "records"
+        : "original";
+    this.panel.dataset.count = String(lists[screen]?.length || 0);
+    this.caption.textContent = captions[screen] || "";
     this.buttons.replaceChildren();
     if (lists[screen])
       lists[screen]!.forEach((label, i) => {
@@ -175,7 +199,8 @@ export class OriginalMenu {
     const b = document.createElement("button");
     b.textContent = label;
     b.setAttribute("aria-label", label);
-    b.style.cssText = `left:${x / 3.2}%;top:${y / 2.4}%;width:${w / 3.2}%;height:${h / 2.4}%`;
+    if (!this.usesListLayout)
+      b.style.cssText = `left:${x / 3.2}%;top:${y / 2.4}%;width:${w / 3.2}%;height:${h / 2.4}%`;
     b.onclick = click;
     if (index !== undefined) {
       b.dataset.index = String(index);
@@ -202,7 +227,6 @@ export class OriginalMenu {
       ?.focus({ preventScroll: true });
   }
   move(delta: number) {
-    if (this.introFrames) return;
     this.hooks.sound("move");
     if (lists[this.screen])
       this.selected = Math.max(
@@ -223,16 +247,13 @@ export class OriginalMenu {
     this.show("car");
   }
   confirm() {
-    if (this.introFrames) return;
     this.hooks.sound("ok");
     const i = this.selected;
     switch (this.screen) {
       case "title":
-        this.show(i === 0 ? "modes" : "option");
-        break;
-      case "modes":
         if (i === 0) this.show("gp");
         if (i === 1) this.choose("time");
+        if (i === 2) this.show("option");
         break;
       case "gp":
         this.choose(i === HoverRules.availableCups() ? "practice" : "gp" + i);
@@ -271,13 +292,12 @@ export class OriginalMenu {
     }
   }
   back() {
-    if (this.introFrames) return;
     this.hooks.sound("cancel");
     if (this.screen === "course") this.show("car");
     else if (this.screen === "car") {
       this.hooks.music(null);
       this.show(
-        this.mode.startsWith("gp") || this.mode === "practice" ? "gp" : "modes",
+        this.mode.startsWith("gp") || this.mode === "practice" ? "gp" : "title",
         this.mode.startsWith("gp")
           ? +this.mode.slice(2)
           : this.mode === "practice"
@@ -295,13 +315,6 @@ export class OriginalMenu {
     }
   }
   key(code: string) {
-    if (this.introFrames) {
-      if (code === "Enter") {
-        this.introFrames = 1;
-        this.tick();
-      }
-      return;
-    }
     if (["ArrowUp", "ArrowLeft"].includes(code)) this.move(-1);
     else if (["ArrowDown", "ArrowRight"].includes(code)) this.move(1);
     else if (["Enter", "Space", "KeyZ"].includes(code)) this.confirm();
@@ -371,56 +384,7 @@ export class OriginalMenu {
     g.clearRect(0, 0, 320, 240);
     g.imageSmoothingEnabled = false;
     const list = lists[this.screen];
-    if (list) {
-      if (this.logo.complete && this.logo.naturalWidth) {
-        const offset = Math.max(0, this.introFrames - 60) * 8;
-        g.drawImage(
-          this.logo,
-          0,
-          0,
-          256,
-          51,
-          40 - offset,
-          8 + (offset * 50) / 116,
-          256,
-          51,
-        );
-        g.drawImage(
-          this.logo,
-          0,
-          78,
-          256,
-          50,
-          40 + offset,
-          58 - (offset * 50) / 116,
-          256,
-          50,
-        );
-      }
-      if (this.introFrames <= 60)
-        list.forEach((label, i) =>
-          this.text(
-            label,
-            160 - label.length * 8,
-            list.length > 4
-              ? 116 + i * 20
-              : list.length === 2
-                ? 140 + i * 32
-                : list.length === 3
-                  ? 124 + i * 32
-                  : 124 + i * 24,
-            16,
-            i === this.selected ? "#00ff00" : "white",
-          ),
-        );
-      if (this.introFrames <= 60) {
-        this.text("Copyright (C) 1997 Sato Tomokazu", 40, 224);
-        if (this.introFrames > 0) {
-          g.fillStyle = `rgba(0,0,0,${this.introFrames / 60})`;
-          g.fillRect(0, 0, 320, 240);
-        }
-      }
-    } else if (this.screen === "car") {
+    if (this.screen === "car") {
       const type = +field("machine").value,
         m = HoverEngine.MACHINES[type];
       this.text(m.name[0] + m.name.slice(1).toLowerCase(), 16, 56, 16);

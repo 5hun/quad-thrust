@@ -44,7 +44,7 @@ module.exports = async function verify({
           "suspended",
         );
         // A normal browser setting interaction must unlock audio without
-        // dismissing the demo or toggling SOUND OFF and ON.
+        // navigating the menu or toggling SOUND OFF and ON.
         await page.locator("body").click({ position: { x: 5, y: 5 } });
       }
       await page.waitForFunction(
@@ -59,7 +59,7 @@ module.exports = async function verify({
       );
       assert.equal(
         (await page.evaluate(() => window.hoverDiagnostics())).state,
-        "demo",
+        "menu",
       );
       const audioMatches = (expected: boolean) => {
         const analyser = window.demoAudioAnalyser;
@@ -68,8 +68,6 @@ module.exports = async function verify({
         return samples.some((value) => Math.abs(value) > 0.00001) === expected;
       };
       await page.waitForFunction(audioMatches, true);
-      await page.keyboard.press("Enter");
-      await page.keyboard.press("Enter");
       await page.getByRole("button", { name: "OPTION", exact: true }).click();
       await page
         .getByRole("button", { name: "SOUND: ON", exact: true })
@@ -94,7 +92,7 @@ module.exports = async function verify({
         .click();
       // SELECT BGM resumes only after sound is enabled again.
       await page.keyboard.press("Escape");
-      await page.getByRole("button", { name: "START", exact: true }).click();
+
       await page
         .getByRole("button", { name: "TIME ATTACK", exact: true })
         .click();

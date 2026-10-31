@@ -1062,3 +1062,177 @@ main > details {
     height: auto;
   }
 }
+
+/* C1 list menus share a live demo and a centered 16:9 safe area. */
+.title-layout {
+  display: contents;
+}
+.title-brand,
+.title-guide,
+.menu-caption {
+  display: none;
+}
+#menu[data-presentation="list"] {
+  inset: 0;
+  width: 100%;
+  transform: none;
+  background: linear-gradient(
+    90deg,
+    rgb(0 5 13 / 76%) 0%,
+    rgb(0 5 13 / 48%) 30%,
+    rgb(0 5 13 / 12%) 58%,
+    transparent 78%
+  );
+}
+#menu[data-presentation="list"] #original-menu {
+  display: none;
+}
+#menu[data-presentation="list"] .title-layout {
+  display: block;
+  position: absolute;
+  inset: 0 auto 0 50%;
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  height: 100%;
+  transform: translateX(-50%);
+  container-type: size;
+  --title-cyan: #20e5ec;
+}
+#menu[data-presentation="list"] .title-brand {
+  display: block;
+  position: absolute;
+  left: 5.8%;
+  top: 12.5%;
+  width: 37%;
+  margin: 0;
+  line-height: 0;
+  filter: drop-shadow(0 0 5px rgb(179 236 255 / 24%));
+}
+.title-brand img {
+  width: 100%;
+  height: auto;
+}
+#menu[data-presentation="list"] nav {
+  inset: 45% auto auto 4.4%;
+  width: 43%;
+  display: flex;
+  flex-direction: column;
+  gap: 1cqh;
+}
+#menu[data-presentation="list"] nav button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 8.8cqh;
+  padding: 1cqh 0 1cqh 3cqw;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #f3faff;
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 2.15cqw;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.32em;
+  text-align: left;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 40%);
+  touch-action: manipulation;
+}
+#menu[data-presentation="list"] nav button::before {
+  content: "";
+  position: absolute;
+  left: 0.55cqw;
+  width: max(2px, 0.18cqw);
+  height: 5.5cqh;
+  background: var(--title-cyan);
+  opacity: 0;
+}
+#menu[data-presentation="list"] nav button[aria-current="true"] {
+  color: var(--title-cyan);
+  text-shadow: 0 0 12px rgb(32 229 236 / 20%);
+}
+#menu[data-presentation="list"] nav button[aria-current="true"]::before {
+  opacity: 1;
+}
+#menu[data-presentation="list"] nav button:focus-visible {
+  outline: none;
+}
+#menu[data-presentation="list"] .title-guide {
+  display: flex;
+  position: absolute;
+  left: 5%;
+  bottom: 6%;
+  align-items: center;
+  gap: 3cqw;
+  color: #c2c8ce;
+  font-size: 0.8cqw;
+  letter-spacing: 0.24em;
+}
+.title-guide > span {
+  display: flex;
+  align-items: center;
+  gap: 1cqw;
+}
+.guide-arrows {
+  font-size: 1.6cqw;
+  letter-spacing: 0.1em;
+}
+.title-guide kbd {
+  padding: 0.25em 0.6em;
+  border: 1px solid #a5adb5;
+  border-radius: 3px;
+  font: inherit;
+  letter-spacing: 0.06em;
+}
+@container (max-width: 600px) {
+  #menu[data-presentation="list"] .title-brand {
+    width: 50%;
+  }
+  #menu[data-presentation="list"] nav {
+    top: 38%;
+    width: 75%;
+    gap: 0;
+  }
+  #menu[data-presentation="list"] nav button {
+    min-height: 14cqh;
+    font-size: 3cqw;
+  }
+  #menu[data-presentation="list"] nav button::before {
+    height: 6.5cqh;
+  }
+  #menu[data-presentation="list"] .title-guide {
+    font-size: 2cqw;
+  }
+  .guide-arrows {
+    font-size: 3cqw;
+  }
+}
+
+#menu[data-presentation="list"] .menu-caption {
+  display: block;
+  position: absolute;
+  top: 39.5%;
+  left: 7.4%;
+  margin: 0;
+  color: #f3faff;
+  font-size: 1.65cqw;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: 0.25em;
+}
+#menu[data-screen="title"] .menu-caption,
+#menu[data-screen="title"] .back-guide {
+  display: none;
+}
+#menu[data-presentation="records"] {
+  background: rgb(0 5 13 / 70%);
+}
+@container (max-width: 600px) {
+  #menu[data-presentation="list"] .menu-caption {
+    top: 34%;
+    font-size: 2.5cqw;
+  }
+  #menu[data-presentation="list"][data-count="4"] nav button {
+    min-height: 11.5cqh;
+  }
+}

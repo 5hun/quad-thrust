@@ -58,12 +58,10 @@ module.exports = async function verify({
     });
     await page.goto(baseURL);
     await page.waitForFunction(
-      () => window.hoverDiagnostics?.().state === "demo",
+      () => window.hoverDiagnostics?.().state === "menu",
     );
-    await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter");
     await wait("menu");
-    for (const code of ["Enter", "Enter", "Enter", "Enter"]) await key(code);
+    for (const code of ["Enter", "Enter", "Enter"]) await key(code);
     await wait("running");
     await key("Escape");
     await key("ArrowDown");
@@ -119,7 +117,7 @@ module.exports = async function verify({
     await key("Enter");
     await wait("menu");
     // GP defeat uses the three-second rank presentation before CONTINUE?.
-    for (const code of ["Enter", "Enter", "Enter", "Enter"]) await key(code);
+    for (const code of ["Enter", "Enter", "Enter"]) await key(code);
     await wait("running");
     await force("finish");
     await wait("finished");
@@ -146,12 +144,10 @@ module.exports = async function verify({
     await wait("menu");
     await page.reload();
     await page.waitForFunction(
-      () => window.hoverDiagnostics?.().state === "demo",
+      () => window.hoverDiagnostics?.().state === "menu",
     );
-    await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter");
     await wait("menu");
-    for (const code of ["Enter", "ArrowDown", "Enter", "Enter", "Enter"])
+    for (const code of ["ArrowDown", "Enter", "Enter", "Enter"])
       await key(code);
     await wait("running");
     await force("finish");
@@ -192,12 +188,10 @@ module.exports = async function verify({
     // Complete a full GP: automatic rounds, source credits, one name for all courses.
     await page.reload();
     await page.waitForFunction(
-      () => window.hoverDiagnostics?.().state === "demo",
+      () => window.hoverDiagnostics?.().state === "menu",
     );
-    await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter");
     await wait("menu");
-    for (const code of ["Enter", "Enter", "Enter", "Enter"]) await key(code);
+    for (const code of ["Enter", "Enter", "Enter"]) await key(code);
     for (let round = 0; round < 3; round++) {
       await wait("running");
       if (round === 2) {
@@ -272,9 +266,6 @@ module.exports = async function verify({
           () => window.hoverDiagnostics().postrace === "lap",
         );
     }
-    await wait("demo");
-    await key("Enter");
-    await key("Enter");
     await wait("menu");
     assert.deepEqual(errors, []);
     assert.deepEqual(

@@ -40,10 +40,8 @@ module.exports = async function verify({
     });
     await page.goto(baseURL);
     await page.waitForFunction(
-      () => window.hoverDiagnostics?.().state === "demo",
+      () => window.hoverDiagnostics?.().state === "menu",
     );
-    await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter");
     await page.waitForFunction(
       () => window.hoverDiagnostics?.().menuScreen === "title",
     );

@@ -39,10 +39,8 @@ module.exports = async function verify({
     async function start(mode: string) {
       await page.goto(baseURL);
       await page.waitForFunction(
-        () => window.hoverDiagnostics?.().state === "demo",
+        () => window.hoverDiagnostics?.().state === "menu",
       );
-      await page.keyboard.press("Enter");
-      await page.keyboard.press("Enter");
       await wait("menu");
       await page.evaluate(async () => {
         const { HoverRenderer } = (await import(
@@ -60,7 +58,7 @@ module.exports = async function verify({
       });
       const click = (name: string) =>
         page.getByRole("button", { name, exact: true }).click();
-      await click("START");
+
       if (mode === "time") await click("TIME ATTACK");
       else {
         await click("GRANDPRIX");
