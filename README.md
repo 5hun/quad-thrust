@@ -4,13 +4,15 @@ PS1版Hover Racingの提供ソース `HOVER_SOURCE` とデータ `HOVER120/HOVER
 
 ## 起動
 
-オンライン版は既存の本人限定Sites URLを使用します。ローカル版はリポジトリのルートで次を実行し、ブラウザで `http://127.0.0.1:8765` を開きます。
+オンライン版は既存の本人限定Sites URLを使用します。ローカル版はNode.js 22.18以降・npm・Python 3を準備し、リポジトリのルートで次を実行してから、ブラウザで `http://127.0.0.1:8765` を開きます。
 
 ```sh
-python3 start-server.py
+npm ci
+npm run build
+npm start
 ```
 
-Windowsでは `py start-server.py` も使用できます。終了はCtrl+C。遊ぶだけならPython 3とWebGL 2対応ブラウザで起動でき、Three.jsを含む必要なファイルはすべて同梱しています。実行時にnpmやCDNへの接続は不要です。
+終了はCtrl+C。ビルドにはPython 3も使用します（Windowsでは `py`、その他では `python3`。環境変数 `PYTHON` で実行ファイルを指定できます）。ビルド後は `python3 start-server.py`（Windowsでは `py start-server.py`）だけで起動でき、実行時にnpmやCDNへの接続は不要です。WebGL 2対応ブラウザが必要です。
 
 ES modulesと音声読み込みを使うため、`index.html` の直接ダブルクリックでは動きません。HTTP経由で開いてください。
 
@@ -93,19 +95,20 @@ E+Aで左急旋回、Q+Dで右急旋回。E+Dで左へ、Q+Aで右へ平行移�
 
 以下のコマンドはリポジトリのルートで実行します。開発にはNode.js 22以降とnpmを使用します。
 
-| ディレクトリ                  | 内容                                                     |
-| ----------------------------- | -------------------------------------------------------- |
-| `HOVER_SOURCE/` / `HOVER120/` | 原作ソース / データ                                      |
-| `src/`                        | TypeScriptソース。共通の型は `src/types.d.ts`            |
-| `dist/`                       | 配信用HTML/CSS・ビルド済みJavaScript・アセット・Three.js |
-| `tools/`                      | 原作データの抽出・変換ツール                             |
-| `tests/`                      | ゲームロジック・アセット・コース・ブラウザの検証         |
-| `extracted/`                  | 原作データの展開先（Git管理対象外）                      |
+| ディレクトリ                  | 内容                                              |
+| ----------------------------- | ------------------------------------------------- |
+| `HOVER_SOURCE/` / `HOVER120/` | 原作ソース / データ                               |
+| `src/`                        | TypeScriptソース。共通の型は `src/types.d.ts`     |
+| `public/`                     | 配信用HTML/CSS・同梱Three.jsの原本                |
+| `dist/`                       | ビルドで生成する配信ファイル一式（Git管理対象外） |
+| `tools/`                      | 原作データの抽出・変換ツール                      |
+| `tests/`                      | ゲームロジック・アセット・コース・ブラウザの検証  |
+| `extracted/`                  | 原作データの展開先（Git管理対象外）               |
 
 ```sh
 npm ci
 npm run typecheck     # strictモードで型チェック
-npm run build         # src/*.ts → dist/*.js
+npm run build         # 原作データの抽出・変換、public/のコピー、TypeScriptのコンパイル
 npm test              # ビルドとロジック・アセット・完走テスト
 npm start             # Python 3でローカルサーバーを起動
 npm run lint
@@ -118,7 +121,7 @@ npm run test:source-resistance # 減速・ブレーキ・32bit符号判定の原
 npm run test:source-attitude # 機体・影の姿勢と推力の原作C比較（行列を明示入力）
 ```
 
-ゲーム本体の編集対象は `src/` です。変更後は `npm run build` を実行し、生成された `dist/*.js` も更新してください。ビルドは配信用HTML/CSS・変換済みアセット・同梱Three.jsを削除・再生成しません。
+ゲーム本体は `src/`、配信用HTML/CSSは `public/` を編集します。変更後は `npm run build` を実行してください。ビルドは `dist/` を削除してから、原作データの抽出・アセット変換・`public/` のコピー・TypeScriptのコンパイルを実行します。`dist/` の手編集やコミットは不要です。配信時は生成された `dist/` の内容を使用します。Three.jsとライセンスの原本は `public/vendor/` に同梱しています。
 
 物理・ルール・記録・トレーニングはブラウザとNode.jsテストで共有するため、TypeScriptのnamespaceからグローバルAPIとCommonJS APIを生成します。描画・音声・HUD・ゲーム画面はES modulesです。
 
@@ -126,18 +129,13 @@ npm run test:source-attitude # 機体・影の姿勢と推力の原作C比較（
 
 ### 原作データの再生成
 
+配信用の変換済みデータは `npm run build` ですべて再生成します。HELP・スタッフ本文のTypeScriptデータは `src/help-data.ts` と `src/staff.ts` に保持しており、通常のビルドでは変更しません。本文の変換処理を変更した場合は、次の手順で更新してコミットしてください。
+
 ```sh
-python3 tools/extract.py
-python3 tools/convert_tracks.py
-python3 tools/convert_tim.py
-python3 tools/convert_models.py
-python3 tools/convert_audio.py
-python3 tools/convert_music.py
-python3 tools/convert_hud.py
-python3 tools/convert_background.py
+npm run build
 python3 tools/convert_help.py
 python3 tools/convert_staff.py
-python3 tools/convert_card.py
+npx prettier --write src/help-data.ts src/staff.ts
 npm run build
 ```
 
@@ -163,6 +161,6 @@ npm run test:browser -- <Playwrightのモジュールパス> <Chromiumの実行�
 
 ## 出典・ライセンス
 
-原作: Sato Tomokazu, Hover Racing (1997)。Three.jsのライセンスは `dist/vendor/THREE-LICENSE.txt`。
+原作: Sato Tomokazu, Hover Racing (1997)。Three.jsのライセンスは `public/vendor/THREE-LICENSE.txt`（ビルド時に `dist/vendor/` へコピー）。
 
 実装時の参照資料: [Sony Net Yaroze Library Reference（RotMatrix / RotMatrixY / GsVIEW2）](https://psx.arthus.net/sdk/NetYaroze/Net%20Yaroze%20-%20Library%20Reference.pdf)、 [Sony Run-Time Library Reference（GsDOBJ2 / GsSetLightMode）](https://psx.arthus.net/sdk/Psy-Q/DOCS/LibRef47.pdf)、[PSX-SPX GTE仕様](https://psx-spx.consoledev.net/geometrytransformationenginegte/)、[PSX-SPX SPU仕様](https://psx-spx.consoledev.net/soundprocessingunitspu/)。

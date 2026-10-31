@@ -7,3 +7,5 @@
 /extracted/
 *.zip
 *.tar.gz
+
+/dist/

@@ -4,6 +4,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from functools import partial
 import webbrowser,threading
 root=Path(__file__).resolve().parent
+if not (root/'dist/index.html').is_file():
+ raise SystemExit('Build files are missing. Run npm ci and npm run build first.')
 handler=partial(SimpleHTTPRequestHandler,directory=str(root/'dist'))
 with ThreadingHTTPServer(('127.0.0.1',8765),handler) as server:
  print('HOVER RACING: http://127.0.0.1:8765 — Ctrl+C to stop')
