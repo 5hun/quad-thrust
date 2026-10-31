@@ -38,23 +38,12 @@ module.exports = async function verify({
     );
     await click("OPTION");
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
-      "GAME LEVEL",
       "VIEW RECORDS",
       "SOUND: ON",
       "FULLSCREEN: OFF",
     ]);
-    await click("GAME LEVEL");
-    assert.equal((await snap()).menuSelection, 1);
-    await click("HARD");
-    assert.equal((await snap()).cpuDifficulty, 1);
-    // Reload directly from OPTION; no manual save or menu exit.
-    await page.reload();
-    await title();
-    assert.equal((await snap()).cpuDifficulty, 1);
-    await click("OPTION");
-    await click("GAME LEVEL");
-    assert.equal((await snap()).menuSelection, 2);
-    await click("EXPART");
+    // GAME LEVEL is gone; CPU difficulty is always NORMAL.
+    assert.equal((await snap()).cpuDifficulty, 0);
     await page.evaluate(() => {
       window.HoverRules.completeCup(0);
       window.HoverRules.completeCup(1);
@@ -63,7 +52,7 @@ module.exports = async function verify({
     });
     await page.reload();
     await title();
-    assert.equal((await snap()).cpuDifficulty, 2);
+    assert.equal((await snap()).cpuDifficulty, 0);
     const progress = await page.evaluate(() => ({
       cups: window.HoverRules.availableCups(),
       lap: window.HoverRecords.read("time", 2, "lap")[0],
@@ -110,17 +99,16 @@ module.exports = async function verify({
     });
     await page.reload();
     await title();
-    await click("OPTION");
-    await click("GAME LEVEL");
-    await click("EASY");
-    assert.equal((await snap()).cpuDifficulty, -1);
+    await page.evaluate(() => window.HoverRules.completeCup(0));
     assert.equal((await snap()).saveError, true);
-    await click("GAME LEVEL");
-    await click("NORMAL");
+    assert.equal(
+      await page.evaluate(() => window.HoverRules.availableCups()),
+      2,
+    );
     assert.equal((await snap()).cpuDifficulty, 0);
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: autosave/autoload without menu exit, progress/records/difficulty, removed card UI, no migration, corrupt/blocked storage fallback",
+      "PASS: autosave/autoload without menu exit, progress/records, fixed NORMAL difficulty, removed card UI, no migration, corrupt/blocked storage fallback",
     );
   } finally {
     await browser.close();

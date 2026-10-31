@@ -5,7 +5,6 @@ function defaults() {
   const values = new Map<string, string>([
     ["hover-unlocks", "0"],
     ["hover-player-name", "AAA"],
-    ["hover-cpu-difficulty", "1"],
   ]);
   for (const category of ["gp", "time"])
     for (let course = 0; course < 9; course++) {
@@ -28,7 +27,6 @@ function defaults() {
 function validValue(key: string, value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (key === "hover-unlocks") return /^[0-7]$/.test(value);
-  if (key === "hover-cpu-difficulty") return /^[0-3]$/.test(value);
   if (key === "hover-player-name") return /^[A-Z,.^_0-9%*?&!]{3}$/.test(value);
   if (/^hover-v3-record-(gp|time)-[0-8]$/.test(key))
     return Number.isFinite(Number(value)) && Number(value) > 0;
@@ -70,7 +68,10 @@ export class SaveStore implements Storage {
         Array.isArray(saved.values)
       )
         return;
-      const entries = Object.entries(saved.values);
+      // Older saves carry the removed GAME LEVEL setting; drop it.
+      const entries = Object.entries(saved.values).filter(
+        ([key]) => key !== "hover-cpu-difficulty",
+      );
       if (!entries.every(([key, value]) => validValue(key, value))) return;
       for (const [key, value] of entries)
         if (typeof value === "string") this.data.set(key, value);

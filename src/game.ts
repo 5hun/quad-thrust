@@ -264,12 +264,6 @@ const originalMenu = new OriginalMenu({
     sound = !sound;
     initAudio();
   },
-  difficulty() {
-    return Number(session.getItem("hover-cpu-difficulty")) - 1;
-  },
-  setDifficulty(level) {
-    session.setItem("hover-cpu-difficulty", String(level + 1));
-  },
   sound(kind) {
     initAudio();
     originalSound.ready?.then(() =>
@@ -299,7 +293,8 @@ let fallFrames = 0,
   gpCup = 0,
   replayClock = 0;
 let inputRecording: ReplayRecorder | null = null;
-let recordingLevel = -1;
+// CPU difficulty is fixed to the original NORMAL row (GAME.C level 0).
+const recordingLevel = 0;
 const replayMemory = new ReplayMemory();
 let ghostReplay: GhostReplay | null = null;
 let postraceReplay: InputReplay | null = null;
@@ -352,7 +347,6 @@ function start(nextRound = false) {
   }
   track = selectedTrack();
   car = E.placeOnGrid(E.create(track, +$("machine").value), track);
-  recordingLevel = Number(session.getItem("hover-cpu-difficulty")) - 1;
   bots = R.profile(mode).opponents
     ? R.opponents(car.type).map((type, i) => {
         const b = E.placeOnGrid(E.create(track, type), track, i + 1);
@@ -1209,7 +1203,7 @@ export const getHoverDiagnostics = () => ({
   menuScreen: originalMenu.screen,
   menuSelection: originalMenu.selected,
   saveError: session.saveError,
-  cpuDifficulty: Number(session.getItem("hover-cpu-difficulty")) - 1,
+  cpuDifficulty: recordingLevel,
   lastReplay: replayMemory.saved
     ? {
         course: replayMemory.saved.course,

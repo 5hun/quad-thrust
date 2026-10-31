@@ -3,7 +3,6 @@ export type MenuScreen =
   | "title"
   | "gp"
   | "option"
-  | "difficulty"
   | "record-kind"
   | "car"
   | "course"
@@ -17,8 +16,6 @@ interface MenuHooks {
   toggleFullscreen(): void;
   soundEnabled(): boolean;
   toggleSound(): void;
-  difficulty(): number;
-  setDifficulty(level: number): void;
   sound(kind: "move" | "ok" | "cancel"): void;
   music(name: string | null): void;
 }
@@ -26,20 +23,17 @@ const lists: Partial<Record<MenuScreen, string[]>> = {
   title: ["GRANDPRIX", "TIME ATTACK", "OPTION"],
   gp: ["Blue GP", "Yellow GP", "Red GP", "PRACTICE"],
   option: [],
-  difficulty: ["EASY", "NORMAL", "HARD", "EXPART"],
   "record-kind": ["GRANDPRIX'S", "TIME ATTACK'S"],
 };
 const captions: Partial<Record<MenuScreen, string>> = {
   gp: "GRANDPRIX",
   option: "OPTION",
-  difficulty: "GAME LEVEL",
   "record-kind": "VIEW RECORDS",
 };
 const parent: Partial<Record<MenuScreen, [MenuScreen, number]>> = {
   gp: ["title", 0],
   option: ["title", 2],
-  difficulty: ["option", 0],
-  "record-kind": ["option", 1],
+  "record-kind": ["option", 0],
   records: ["record-kind", 0],
 };
 const field = (id: string) => document.getElementById(id) as HTMLSelectElement;
@@ -137,7 +131,6 @@ export class OriginalMenu {
     this.recordFrames = 0;
     const fullscreen = this.hooks.fullscreen();
     lists.option = [
-      "GAME LEVEL",
       "VIEW RECORDS",
       `SOUND: ${this.hooks.soundEnabled() ? "ON" : "OFF"}`,
       ...(fullscreen === null
@@ -259,17 +252,12 @@ export class OriginalMenu {
         this.choose(i === HoverRules.availableCups() ? "practice" : "gp" + i);
         break;
       case "option":
-        if (i === 0) this.show("difficulty", this.hooks.difficulty() + 1);
-        if (i === 1) this.show("record-kind");
-        if (i === 2) {
+        if (i === 0) this.show("record-kind");
+        if (i === 1) {
           this.hooks.toggleSound();
           this.show("option", i);
         }
-        if (i === 3) this.hooks.toggleFullscreen();
-        break;
-      case "difficulty":
-        this.hooks.setDifficulty(i - 1);
-        this.show("option");
+        if (i === 2) this.hooks.toggleFullscreen();
         break;
       case "record-kind":
         this.recordClass = i === 0 ? "gp" : "time";

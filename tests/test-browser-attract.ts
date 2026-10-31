@@ -174,10 +174,6 @@ module.exports = async function verify({
     await click("OPTION");
     await assertContinuingDemo("option");
     await page.screenshot({ path: "/tmp/quad-thrust-option-c1.png" });
-    await click("GAME LEVEL");
-    await assertContinuingDemo("difficulty");
-    await click("NORMAL");
-    await assertContinuingDemo("option");
     await click("VIEW RECORDS");
     await assertContinuingDemo("record-kind");
     await click("TIME ATTACK'S");

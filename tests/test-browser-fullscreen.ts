@@ -148,7 +148,7 @@ module.exports = async function verify({
     }
     await click("FULLSCREEN: ON");
     await fullscreen(false);
-    assert.equal((await snapshot()).menuSelection, 3);
+    assert.equal((await snapshot()).menuSelection, 2);
     await enter();
     await page.keyboard.press("Escape");
     await fullscreen(false);
@@ -228,7 +228,7 @@ module.exports = async function verify({
       .click();
     assert.deepEqual(
       await unsupported.locator("#menu nav button").allTextContents(),
-      ["GAME LEVEL", "VIEW RECORDS", "SOUND: ON"],
+      ["VIEW RECORDS", "SOUND: ON"],
     );
     await unsupported.close();
     assert.deepEqual(errors, []);

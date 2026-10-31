@@ -264,7 +264,6 @@ module.exports = async function verify({
     await title();
     await click("OPTION");
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
-      "GAME LEVEL",
       "VIEW RECORDS",
       "SOUND: ON",
       "FULLSCREEN: OFF",
