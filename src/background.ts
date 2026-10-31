@@ -125,6 +125,28 @@ export class OriginalBackground {
     time: number,
   ) {
     this.setTheme(theme);
+    // Keep the original center projection; tile scenery into the added sides.
+    const aspect =
+      camera instanceof THREE.PerspectiveCamera ? camera.aspect : 4 / 3;
+    const viewWidth = 240 * aspect,
+      left = 160 - viewWidth / 2,
+      right = 160 + viewWidth / 2;
+    this.camera.left = left;
+    this.camera.right = right;
+    this.camera.updateProjectionMatrix();
+    const skyCount = Math.ceil(viewWidth / 128) + 2;
+    while (this.sky.length < skyCount) this.sky.push(this.quad(null));
+    const extraColumns = Math.ceil(Math.max(0, viewWidth - 320) / 256);
+    const columns = 6 + 2 * extraColumns;
+    for (let row = 0; row < 3; row++) {
+      while (this.ground[row].length < columns)
+        this.ground[row].push(
+          this.quad(this.texture(this.bank.ground[row] + ".png")),
+        );
+      this.ground[row].forEach((mesh, col) => {
+        mesh.visible = col < columns;
+      });
+    }
     camera.getWorldDirection(this.direction);
     const yaw = Math.atan2(this.direction.x, -this.direction.z),
       pitch = Math.atan2(
@@ -136,24 +158,28 @@ export class OriginalBackground {
       yp = theme === 0 ? 24 : 0,
       top = -20 + yp + offset;
     this.points(this.cap, [
+      left,
       0,
       0,
-      0,
-      320,
-      0,
+      right,
       0,
       0,
+      left,
       Math.max(0, top),
       0,
-      320,
+      right,
       Math.max(0, top),
       0,
     ]);
     this.cap.renderOrder = -2;
-    for (let i = 0; i < 4; i++) {
-      const strip = (Math.floor(k / 128) + i) % 15,
+    this.sky.forEach((mesh, i) => {
+      mesh.visible = i < skyCount;
+    });
+    for (let i = 0; i < skyCount; i++) {
+      const column = i + Math.floor(left / 128);
+      const strip = (((Math.floor(k / 128) + column) % 15) + 15) % 15,
         m = this.sky[i],
-        x = -(k % 128) - 20 + i * 128;
+        x = -(k % 128) - 20 + column * 128;
       const tex = this.texture(this.bank.sky[Math.floor(strip / 5)] + ".png");
       m.material.map = tex;
       const u = (strip % 5) / 5,
@@ -177,7 +203,7 @@ export class OriginalBackground {
       m.renderOrder = -1;
     }
     for (let row = 0; row < 3; row++)
-      for (let col = 0; col < 6; col++) {
+      for (let col = 0; col < columns; col++) {
         const p = [];
         for (const [x, y] of [
           [col, row],
@@ -188,7 +214,9 @@ export class OriginalBackground {
           p.push(
             160 +
               Math.trunc(
-                (((x - 3) * 128 + 64 - Math.floor(k % 128)) * (y + 2)) / 2,
+                (((x - extraColumns - 3) * 128 + 64 - Math.floor(k % 128)) *
+                  (y + 2)) /
+                  2,
               ),
             120 + (y * 128 - 18) * 1.2 + (offset - 1 + yp),
             0,

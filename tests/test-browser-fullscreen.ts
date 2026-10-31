@@ -52,28 +52,74 @@ module.exports = async function verify({
     await page.keyboard.press("Enter");
     await page.keyboard.press("Enter");
     await click("OPTION");
+    const viewports = [
+      { width: 960, height: 720 },
+      { width: 1280, height: 720 },
+      { width: 1680, height: 720 },
+      { width: 2560, height: 720 },
+      { width: 1440, height: 900 },
+      { width: 800, height: 1000 },
+      { width: 1280, height: 600 },
+    ];
+    const verifyLayout = async (
+      viewport: { width: number; height: number },
+      resize = true,
+    ) => {
+      if (resize) await page.setViewportSize(viewport);
+      await page.waitForFunction(() => {
+        const rect = document
+          .querySelector(".game-wrap")!
+          .getBoundingClientRect();
+        const canvas = document.getElementById("game") as HTMLCanvasElement;
+        return (
+          Math.abs(rect.width - innerWidth) < 1 &&
+          Math.abs(rect.height - Math.min(innerHeight, (innerWidth * 3) / 4)) <
+            1 &&
+          Math.abs(canvas.width / canvas.height - rect.width / rect.height) <
+            0.01
+        );
+      });
+      const layout = await page.evaluate(() => {
+        const rect = document
+          .querySelector(".game-wrap")!
+          .getBoundingClientRect();
+        const menu = document.getElementById("menu")!.getBoundingClientRect();
+        return {
+          width: rect.width,
+          height: rect.height,
+          y: rect.y,
+          menuWidth: menu.width,
+          menuHeight: menu.height,
+          menuX: menu.x,
+          scrollWidth: document.documentElement.scrollWidth,
+          scrollHeight: document.documentElement.scrollHeight,
+        };
+      });
+      assert.ok(Math.abs(layout.width - viewport.width) < 1);
+      assert.ok(Math.abs(layout.y * 2 + layout.height - viewport.height) < 1);
+      assert.ok(Math.abs(layout.menuWidth / layout.menuHeight - 4 / 3) < 0.01);
+      assert.ok(
+        Math.abs(layout.menuX * 2 + layout.menuWidth - viewport.width) < 1,
+      );
+      assert.ok(layout.scrollWidth <= viewport.width);
+      assert.ok(layout.scrollHeight <= viewport.height);
+      // Exercise real pointer targets after each resize, not just their boxes.
+      await click("SOUND: ON");
+      await click("SOUND: OFF");
+    };
+    for (const viewport of viewports) await verifyLayout(viewport);
     await page
       .getByRole("button", { name: "FULLSCREEN: OFF", exact: true })
       .focus();
     await page.keyboard.press("Enter");
     await fullscreen(true);
     assert.equal((await snapshot()).menuScreen, "option");
-    for (const viewport of [
-      { width: 1440, height: 900 },
-      { width: 800, height: 1000 },
-      { width: 1280, height: 600 },
-    ]) {
-      await page.setViewportSize(viewport);
-      await page.waitForFunction(() => {
-        const rect = document
-          .querySelector(".game-wrap")!
-          .getBoundingClientRect();
-        const width = Math.min(innerWidth, (innerHeight * 4) / 3);
-        return (
-          Math.abs(rect.width - width) < 1 &&
-          Math.abs(rect.height - (width * 3) / 4) < 1
-        );
-      });
+    for (const viewport of viewports) {
+      // Chromium forbids changing native window bounds while fullscreen.
+      await exit();
+      await verifyLayout(viewport);
+      await enter();
+      await verifyLayout(viewport, false);
       const layout = await page.evaluate(() => {
         const host = document.fullscreenElement!;
         const rect = host.querySelector(".game-wrap")!.getBoundingClientRect();
@@ -120,11 +166,31 @@ module.exports = async function verify({
     await fullscreen(true);
     await exit();
     await wait("paused");
+    for (const viewport of viewports.slice(0, 4)) {
+      await page.setViewportSize(viewport);
+      await page.waitForFunction(() => {
+        const canvas = document.getElementById(
+          "original-hud",
+        ) as HTMLCanvasElement;
+        return (
+          canvas.width ===
+          Math.round(240 * Math.min(16 / 9, innerWidth / innerHeight))
+        );
+      });
+      const hud = await page.locator("#original-hud").boundingBox();
+      assert.ok(
+        Math.abs(
+          hud!.width - Math.min(viewport.width, (viewport.height * 16) / 9),
+        ) < 1,
+      );
+      assert.ok(Math.abs(hud!.x * 2 + hud!.width - viewport.width) < 1);
+    }
     const paused = await snapshot();
     await page.waitForTimeout(200);
     assert.equal((await snapshot()).ticks, paused.ticks);
     await page.getByRole("button", { name: "CONTINUE", exact: true }).click();
     await wait("running");
+    await page.screenshot({ path: "/tmp/hover-widescreen-race.png" });
     // Re-enter from OPTION and verify native exit pauses an active race.
     await page.keyboard.press("Escape");
     await page.locator("#back").click();
@@ -172,7 +238,7 @@ module.exports = async function verify({
     await unsupported.close();
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: game-only fullscreen; centered 4:3 sizing; keyboard activation; menu/result continuity; native and Esc exits pause races; manual resume; denied/unsupported fullscreen",
+      "PASS: responsive 4:3/16:9/21:9/32:9 windowed and fullscreen; centered menu pointer targets and HUD safe area; keyboard activation; menu/result continuity; native and Esc exits pause races; manual resume; denied/unsupported fullscreen",
     );
   } finally {
     await browser.close();

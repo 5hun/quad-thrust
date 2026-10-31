@@ -327,6 +327,8 @@ const originalMenu = new OriginalMenu({
 const postrace = new OriginalPostrace(originalMenu, session);
 function resize() {
   view.resize();
+  const rect = canvas.getBoundingClientRect();
+  if (rect.height > 0) originalHUD.resize(rect.width / rect.height);
 }
 new ResizeObserver(resize).observe(canvas);
 const gpRecords: GPRecord[] = [];

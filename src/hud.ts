@@ -22,6 +22,10 @@ export class OriginalHUD {
     this.map = document.createElement("canvas");
     this.map.width = this.map.height = 64;
   }
+  resize(aspect: number) {
+    const width = Math.round(240 * Math.min(16 / 9, Math.max(4 / 3, aspect)));
+    if (this.canvas.width !== width) this.canvas.width = width;
+  }
   sprite(
     u: number,
     v: number,
@@ -102,9 +106,12 @@ export class OriginalHUD {
     ghost: Pose | null = null,
   ) {
     const g = this.g;
-    g.clearRect(0, 0, 320, 240);
+    g.clearRect(0, 0, this.canvas.width, 240);
     g.imageSmoothingEnabled = false;
     if (state === "menu") return;
+    const extra = this.canvas.width - 320;
+    g.save();
+    g.translate(extra, 0);
     const speed = Math.max(0, car.sourceSpeed >> 1);
     String(speed)
       .padStart(3, "0")
@@ -121,8 +128,11 @@ export class OriginalHUD {
         ),
       );
     this.sprite(32, 144, 32, 16, 280, 216);
+    g.restore();
     this.sprite(64, 144, 40, 8, 8, 8, "red");
     this.time(car.time, 16, 18);
+    g.save();
+    g.translate(extra, 0);
     this.sprite(64, 152, 64, 8, 232, 8, "red");
     for (let i = 0; i < 3; i++) {
       const t =
@@ -131,7 +141,10 @@ export class OriginalHUD {
     }
     this.sprite(64, 168, 64, 8, 232, 58, "red");
     this.time(Number.isFinite(best) ? best : 0, 240, 68);
+    g.restore();
 
+    g.save();
+    g.translate(extra / 2, 0);
     if (bots.length) {
       this.sprite(0, 168, 64, 24, 128, 8);
       this.text(
@@ -142,6 +155,7 @@ export class OriginalHUD {
       );
       this.text("4", 176, 16, 16);
     }
+    g.restore();
     this.sprite(0, 224, 16, 32, 8, 204, 497);
     const power = Math.max(0, Math.floor((29 * car.energy) / 100));
     this.sprite(16, 254 - power, 8, power, 16, 234 - power, 497);
@@ -164,6 +178,8 @@ export class OriginalHUD {
       }
       g.restore();
     }
+    g.save();
+    g.translate(extra / 2, 0);
     if ((car.lapDraw ?? 0) > 0) {
       if (car.laps.length === 2) {
         this.sprite(32, 224, 80, 16, 64, 56);
@@ -176,5 +192,6 @@ export class OriginalHUD {
     }
     if ((car.wrongFrames ?? 0) > 5 && (car.ticks & 31) < 16)
       this.sprite(0, 208, 128, 16, 16, 64);
+    g.restore();
   }
 }

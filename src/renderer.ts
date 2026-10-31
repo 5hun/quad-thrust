@@ -255,10 +255,19 @@ export class HoverRenderer {
   }
   resize() {
     const r = this.canvas.getBoundingClientRect();
-    const h = Math.min(1080, Math.round(r.height));
+    if (r.width <= 0 || r.height <= 0) return;
+    // Bound both height and total pixels, including very wide displays.
+    const h = Math.max(
+      1,
+      Math.floor(
+        Math.min(1080, r.height, Math.sqrt((3840 * 1080 * r.height) / r.width)),
+      ),
+    );
     this.renderer.setSize(Math.round((h * r.width) / r.height), h, false);
-    this.camera.aspect = r.width / r.height;
-    this.camera.updateProjectionMatrix();
+    for (const camera of [this.camera, this.countCamera, this.menuCamera]) {
+      camera.aspect = r.width / r.height;
+      camera.updateProjectionMatrix();
+    }
   }
   clear(group: THREE.Group) {
     group.traverse((o) => {

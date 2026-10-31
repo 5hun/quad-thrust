@@ -326,6 +326,14 @@ export class OriginalPostrace {
   draw() {
     const g = this.canvas.getContext("2d")!;
     g.clearRect(0, 0, 320, 240);
+    // Full black credit cards also cover the added sides of a wide race view.
+    this.panel.dataset.backdrop =
+      this.phase === "credits" &&
+      this.creditMode >= 6 &&
+      this.creditMode < 22 &&
+      this.creditMode % 2 === 0
+        ? "black"
+        : "transparent";
     if (!this.phase) return;
     const old = this.font.g;
     this.font.g = g;

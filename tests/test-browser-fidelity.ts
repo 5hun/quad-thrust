@@ -168,6 +168,113 @@ module.exports = async function verify({
     assert.equal(result.width, 640);
     assert.equal(result.height, 480);
     assert.deepEqual(result.errors, []);
+    const widescreen = await page.evaluate(() => {
+      const { r, t, c, canvas } = window.fidelity;
+      const gl = r.renderer.getContext();
+      const samples = [];
+      let original: Uint8Array | null = null;
+      const originalFov = r.camera.fov;
+      r.holdCamera = true;
+      for (const width of [960, 1280, 1680, 2560]) {
+        canvas.style.width = `${width}px`;
+        canvas.style.height = "720px";
+        r.resize();
+        r.draw(t, c, [], "destroyed", 0, {});
+        const pixels = new Uint8Array(960 * 720 * 4);
+        gl.readPixels(
+          (width - 960) / 2,
+          0,
+          960,
+          720,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          pixels,
+        );
+        let changed = 0;
+        if (original) {
+          for (let i = 0; i < pixels.length; i += 4)
+            if (
+              [0, 1, 2].some(
+                (channel) =>
+                  Math.abs(pixels[i + channel] - original![i + channel]) > 4,
+              )
+            )
+              changed++;
+        } else original = pixels;
+        samples.push({
+          width,
+          changed,
+          fov: r.camera.fov,
+          countAspect: r.countCamera.aspect,
+          menuAspect: r.menuCamera.aspect,
+        });
+      }
+      const coverage = [];
+      for (let theme = 0; theme < 5; theme++) {
+        for (const yaw of [-2.8, 0, 2.8]) {
+          r.camera.rotation.set(0, yaw, 0);
+          r.background.draw(r.renderer, r.camera, theme, 0);
+          const b = r.background;
+          const sky = b.sky.filter((mesh) => mesh.visible);
+          const ground = b.ground[0].filter((mesh) => mesh.visible);
+          coverage.push({
+            skyLeft: Math.min(
+              ...sky.map((mesh) => mesh.geometry.attributes.position.getX(0)),
+            ),
+            skyRight: Math.max(
+              ...sky.map((mesh) => mesh.geometry.attributes.position.getX(1)),
+            ),
+            groundLeft: Math.min(
+              ...ground.map((mesh) =>
+                mesh.geometry.attributes.position.getX(0),
+              ),
+            ),
+            groundRight: Math.max(
+              ...ground.map((mesh) =>
+                mesh.geometry.attributes.position.getX(1),
+              ),
+            ),
+            left: b.camera.left,
+            right: b.camera.right,
+          });
+        }
+      }
+      canvas.style.width = "7680px";
+      canvas.style.height = "2160px";
+      r.resize();
+      const capped = { width: canvas.width, height: canvas.height };
+      canvas.style.width = "640px";
+      canvas.style.height = "480px";
+      r.resize();
+      r.holdCamera = false;
+      r.draw(t, c, [], "destroyed", 0, {});
+      return { samples, coverage, originalFov, capped };
+    });
+    for (const sample of widescreen.samples) {
+      assert.equal(sample.fov, widescreen.originalFov);
+      assert.equal(sample.countAspect, sample.width / 720);
+      assert.equal(sample.menuAspect, sample.width / 720);
+      assert.ok(
+        sample.changed < 960 * 720 * 0.005,
+        `center crop preserved at ${sample.width}px: ${sample.changed} changed pixels`,
+      );
+    }
+    for (const coverage of widescreen.coverage) {
+      assert.ok(
+        coverage.skyLeft <= coverage.left &&
+          coverage.skyRight >= coverage.right,
+        "sky covers wide viewport for every theme and yaw",
+      );
+      assert.ok(
+        coverage.groundLeft <= coverage.left &&
+          coverage.groundRight >= coverage.right,
+        "ground covers wide viewport for every theme and yaw",
+      );
+    }
+    assert.ok(
+      widescreen.capped.width * widescreen.capped.height <= 3840 * 1080,
+    );
+    assert.ok(widescreen.capped.height <= 1080);
     // Put an opaque plane in front of every world object. Original OT=0
     // explosions must still change the rendered pixels over that plane.
     const overlayPixels = await page.evaluate(async () => {

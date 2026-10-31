@@ -708,9 +708,8 @@ footer b {
   }
 }
 
-/* Match the original 4:3 viewport and 320x240 overlay. */
+/* Race overlays retain the original pixel artwork. */
 .game-wrap.playing {
-  aspect-ratio: 4/3;
   width: 100%;
   height: auto;
   min-height: 0;
@@ -718,8 +717,7 @@ footer b {
   background: #000;
 }
 .playing #game {
-  aspect-ratio: 4/3;
-  height: auto;
+  height: 100%;
   width: 100%;
 }
 #original-hud {
@@ -789,7 +787,7 @@ select:disabled {
   }
 }
 
-/* Original 320x240 menu presentation; browser controls stay below the screen. */
+/* Responsive world viewport with centered, undistorted original UI. */
 :root {
   --bg: #000;
   --accent: #00ff00;
@@ -805,18 +803,25 @@ footer[hidden],
   display: none !important;
 }
 main {
-  max-width: 1040px;
-  /* Leave room for the always-visible browser settings below the 4:3 screen. */
-  max-width: min(1040px, calc((100svh - 260px) * 4 / 3 + 32px));
-  padding: 0 16px 24px;
+  max-width: none;
+  padding: 0;
+}
+#fullscreen-host {
+  height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .game-wrap:not(.playing),
 .game-wrap.playing {
   width: 100%;
-  height: auto;
+  height: min(100svh, 75vw);
   min-height: 0;
   max-height: none;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: auto;
+  container-type: size;
+  margin: 0;
+  overflow: hidden;
   border: 0;
   background: #000;
 }
@@ -868,8 +873,8 @@ main {
   background: #000;
 }
 #fullscreen-host:fullscreen > .game-wrap {
-  width: min(100vw, calc(100vh * 4 / 3));
-  height: auto;
+  width: 100%;
+  height: min(100dvh, 75vw);
   flex: none;
 }
 #fullscreen-status {
@@ -911,13 +916,12 @@ main > details {
 }
 @media (max-width: 600px) {
   main {
-    padding: 0 0 20px;
+    padding: 0;
   }
   .game-wrap:not(.playing),
   .game-wrap.playing {
-    height: auto;
+    height: min(100svh, 75vw);
     min-height: 0;
-    aspect-ratio: 4 / 3;
   }
 }
 
@@ -1031,4 +1035,30 @@ main > details {
 }
 #postrace button:focus-visible {
   outline: 1px solid #00ff00;
+}
+
+/* The same 4:3 box positions both artwork and its pointer targets. */
+.menu,
+#pause-panel,
+#continue-panel,
+#postrace {
+  inset: 0 auto 0 50%;
+  transform: translateX(-50%);
+  width: min(100cqw, calc(100cqh * 4 / 3));
+  height: 100%;
+}
+#original-hud {
+  inset: 0 auto 0 50%;
+  transform: translateX(-50%);
+  width: min(100cqw, calc(100cqh * 16 / 9));
+}
+#postrace[data-backdrop="black"] {
+  background: #000;
+  box-shadow: 0 0 0 100vmax #000;
+}
+@media (max-width: 600px) {
+  .playing #touch {
+    bottom: 8px;
+    height: auto;
+  }
 }
