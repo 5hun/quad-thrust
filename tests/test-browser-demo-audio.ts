@@ -45,7 +45,7 @@ module.exports = async function verify({
         );
         // A normal browser setting interaction must unlock audio without
         // dismissing the demo or toggling SOUND OFF and ON.
-        await page.locator("label[for=quality]").click();
+        await page.locator(".display-settings").click();
       }
       await page.waitForFunction(
         () => {
@@ -74,7 +74,7 @@ module.exports = async function verify({
         (await page.locator("#sound").textContent())?.trim(),
         "SOUND OFF",
       );
-      await page.locator("label[for=quality]").click();
+      await page.locator(".display-settings").click();
       assert.equal(await page.evaluate(audioMatches, false), true);
       assert.equal(
         (await page.locator("#sound").textContent())?.trim(),

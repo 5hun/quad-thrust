@@ -708,7 +708,7 @@ footer b {
   }
 }
 
-/* Match the original 4:3 viewport and 320x240 overlay in either quality mode. */
+/* Match the original 4:3 viewport and 320x240 overlay. */
 .game-wrap.playing {
   aspect-ratio: 4/3;
   width: 100%;

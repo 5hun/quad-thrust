@@ -82,7 +82,8 @@ module.exports = async function verify({
         ),
         sourceFov: r.camera.fov,
         bombs: r.ships[0].explosions.filter((s) => s.visible).length,
-        retro: r.retroUniform.value,
+        width: r.canvas.width,
+        height: r.canvas.height,
         errors: r.errors,
       };
     });
@@ -162,7 +163,8 @@ module.exports = async function verify({
         1e-10,
     );
     assert.equal(result.bombs, 4);
-    assert.equal(result.retro, 1);
+    assert.equal(result.width, 640);
+    assert.equal(result.height, 480);
     assert.deepEqual(result.errors, []);
     // Put an opaque plane in front of every world object. Original OT=0
     // explosions must still change the rendered pixels over that plane.
@@ -213,7 +215,7 @@ module.exports = async function verify({
       `explosion hidden behind opaque geometry: ${overlayPixels}`,
     );
     // Test actual GPU output: the source reciprocal depth curve starts at
-    // 76.8 units in CITY and reaches full depth cue at 384, in RETRO and HD.
+    // 76.8 units in CITY and reaches full depth cue at 384, in HD.
     const depthPixels = await page.evaluate(async () => {
       const THREE = await import("./vendor/three.module.js");
       const { r } = window.fidelity;
@@ -236,23 +238,20 @@ module.exports = async function verify({
       r.renderer.setRenderTarget(null);
       r.renderer.setSize(16, 16, false);
       const gl = r.renderer.getContext();
-      for (const retro of [0, 1]) {
-        r.retroUniform.value = retro;
-        for (const depth of [50, 96, 192, 384]) {
-          plane.position.z = -depth;
-          r.renderer.render(scene, camera);
-          const white = new Uint8Array(4),
-            black = new Uint8Array(4);
-          gl.readPixels(2, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, white);
-          gl.readPixels(13, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, black);
-          values.push({ retro, depth, white: white[0], black: black[0] });
-        }
+      for (const depth of [50, 96, 192, 384]) {
+        plane.position.z = -depth;
+        r.renderer.render(scene, camera);
+        const white = new Uint8Array(4),
+          black = new Uint8Array(4);
+        gl.readPixels(2, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, white);
+        gl.readPixels(13, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, black);
+        values.push({ depth, white: white[0], black: black[0] });
       }
       mat.userData.sourceUnlit.value = 1;
       r.renderer.render(scene, camera);
       const unlit = new Uint8Array(4);
       gl.readPixels(2, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, unlit);
-      values.push({ retro: 2, depth: 384, white: unlit[0], black: 0 });
+      values.push({ depth: 384, white: unlit[0], black: 0 });
       r.resize();
       plane.geometry.dispose();
       mat.dispose();
@@ -264,8 +263,8 @@ module.exports = async function verify({
       255,
       "unlit damage attribute bypasses depth cueing",
     );
-    for (const retro of [0, 1]) {
-      const pixels = depthPixels.filter((p) => p.retro === retro);
+    {
+      const pixels = depthPixels.slice(0, -1);
       assert.ok(pixels[0].white > 245, JSON.stringify(pixels));
       assert.ok(
         pixels[1].white > pixels[2].white && pixels[2].white > pixels[3].white,
@@ -438,8 +437,6 @@ module.exports = async function verify({
       const target = new THREE.WebGLRenderTarget(256, 256);
       const pixels = new Uint8Array(256 * 256 * 4);
       const results: { type: number; turbo: boolean; bands: number[] }[] = [];
-      const retro = r.retroUniform.value;
-      r.retroUniform.value = 0;
       r.renderer.setRenderTarget(target);
       for (let type = 0; type < 5; type++) {
         const ship = r.makeShip(type);
@@ -467,7 +464,6 @@ module.exports = async function verify({
         r.clear(ship.root);
       }
       r.renderer.setRenderTarget(null);
-      r.retroUniform.value = retro;
       target.dispose();
       return results;
     });
@@ -607,21 +603,15 @@ module.exports = async function verify({
         "camera translation rotates with bank",
       ),
     );
-    await page.screenshot({ path: "/tmp/hover-source-retro.png" });
     await page.evaluate(() => {
       const { r, t, c } = window.fidelity;
       c.explosionFrames = 200;
-      r.retro = false;
       r.resize();
       r.draw(t, c, [], "destroyed", 1, {});
     });
     assert.equal(
       await page.evaluate(() => window.fidelity.r.ships[0].body.visible),
       false,
-    );
-    assert.equal(
-      await page.evaluate(() => window.fidelity.r.retroUniform.value),
-      0,
     );
     await page.evaluate(() => {
       const { r, t, c } = window.fidelity;
@@ -876,7 +866,7 @@ module.exports = async function verify({
     assert.equal(await page.locator("#result").isVisible(), false);
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: real Chromium RETRO/HD depth pixels, five source lighting themes, damage/ghost materials, exhaust phases, 64 debris particles, bomb lifetime/overlay, articulated Suzuki, AudioWorklet stereo levels, warning/damage key-on/off, audio pause; no console/page errors",
+      "PASS: real Chromium HD depth pixels, five source lighting themes, damage/ghost materials, exhaust phases, 64 debris particles, bomb lifetime/overlay, articulated Suzuki, AudioWorklet stereo levels, warning/damage key-on/off, audio pause; no console/page errors",
     );
   } finally {
     await browser.close();

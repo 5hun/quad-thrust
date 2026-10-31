@@ -73,7 +73,7 @@ module.exports = async function verify({
       await page.locator("#difficulty, #ghost-enabled, #pause").count(),
       0,
     );
-    assert.equal(await page.locator("#quality").isVisible(), true);
+    assert.equal(await page.locator("#quality, label[for=quality]").count(), 0);
     assert.equal(await page.locator("#sound").isVisible(), true);
     assert.equal(
       await page.locator("#browser-settings, input[type=file]").count(),

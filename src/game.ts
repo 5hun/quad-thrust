@@ -31,7 +31,6 @@ interface Elements {
   machine: HTMLSelectElement;
   "machine-description": HTMLElement;
   stats: HTMLElement;
-  quality: HTMLSelectElement;
   start: HTMLButtonElement;
   "pause-panel": HTMLElement;
   resume: HTMLButtonElement;
@@ -383,10 +382,6 @@ const originalMenu = new OriginalMenu({
   },
 });
 const postrace = new OriginalPostrace(originalMenu, session);
-$("quality").onchange = () => {
-  view.retro = $("quality").value === "retro";
-  view.resize();
-};
 function resize() {
   view.resize();
   if (state === "exited") view.drawBlank();

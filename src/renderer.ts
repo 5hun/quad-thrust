@@ -106,7 +106,6 @@ export class HoverRenderer {
   track: Track | null;
   yaw: number | null;
   follow = { yaw: 0, pitch: 0, roll: 0, distance: 0 };
-  retro: boolean;
   frames: number;
   holdCamera = false;
   replayView = false;
@@ -120,7 +119,6 @@ export class HoverRenderer {
   skyGroup: THREE.Group;
   countdown: number | null = null;
   finishCamera = false;
-  retroUniform = { value: 1 };
   // COURCE.C DQA * H * 65536 / 4096^2, with PS1 units / 100.
   sourceDepth = { value: 96 };
   result: {
@@ -171,7 +169,6 @@ export class HoverRenderer {
     this.ships = [];
     this.track = null;
     this.yaw = null;
-    this.retro = true;
     this.frames = 0;
     this.errors = [];
     this.loader.manager.onError = (u) => this.errors.push(u);
@@ -212,11 +209,8 @@ export class HoverRenderer {
     }
     return this.cache.get(path)!;
   }
-  // WebGL perspective interpolation is cancelled by carrying clip W with UV.
-  // The 320x240 snap is applied only in RETRO, independent of canvas CSS size.
   sourceMaterial(material: THREE.Material) {
     material.onBeforeCompile = (shader) => {
-      shader.uniforms.sourceRetro = this.retroUniform;
       shader.uniforms.sourceDepth = this.sourceDepth;
       shader.uniforms.sourceAmbient = { value: this.ambient.color };
       shader.uniforms.sourceCameraLight =
@@ -225,33 +219,10 @@ export class HoverRenderer {
         value: 0,
       };
       const header =
-        "uniform float sourceRetro;\nuniform float sourceDepth;\nuniform float sourceUnlit;\nuniform float sourceCameraLight;\nuniform vec3 sourceAmbient;\nvarying float sourceW;\n";
-      shader.vertexShader =
-        header +
-        shader.vertexShader.replace(
-          "#include <project_vertex>",
-          `
-        #include <project_vertex>
-        sourceW = mix(1.0, gl_Position.w, sourceRetro);
-        #ifdef USE_MAP
-          vMapUv *= sourceW;
-        #endif
-        if (sourceRetro > 0.5 && gl_Position.w > 0.0) {
-          vec2 pixel = gl_Position.xy / gl_Position.w * vec2(160.0, 120.0);
-          gl_Position.xy = floor(pixel + 0.5) / vec2(160.0, 120.0) * gl_Position.w;
-        }
-      `,
-        );
+        "uniform float sourceDepth;\nuniform float sourceUnlit;\nuniform float sourceCameraLight;\nuniform vec3 sourceAmbient;\n";
       shader.fragmentShader =
         header +
         shader.fragmentShader
-          .replace(
-            "#include <map_fragment>",
-            THREE.ShaderChunk.map_fragment.replace(
-              "vMapUv",
-              "(vMapUv / sourceW)",
-            ),
-          )
           .replace(
             "#include <opaque_fragment>",
             `
@@ -278,21 +249,14 @@ export class HoverRenderer {
               #endif
             #endif
           `,
-          )
-          .replace(
-            "#include <dithering_fragment>",
-            `
-          #include <dithering_fragment>
-          if (sourceRetro > 0.5) gl_FragColor.rgb = floor(clamp(gl_FragColor.rgb, 0.0, 1.0) * 31.0 + 0.5) / 31.0;
-        `,
           );
     };
-    material.customProgramCacheKey = () => "hover-source-raster-v3";
+    material.customProgramCacheKey = () => "hover-source-raster-v4";
     return material;
   }
   resize() {
     const r = this.canvas.getBoundingClientRect();
-    const h = this.retro ? 240 : Math.min(1080, Math.round(r.height));
+    const h = Math.min(1080, Math.round(r.height));
     this.renderer.setSize(Math.round((h * r.width) / r.height), h, false);
     this.camera.aspect = r.width / r.height;
     this.camera.updateProjectionMatrix();
@@ -809,7 +773,6 @@ export class HoverRenderer {
     ghost: Pose | null = null,
   ) {
     this.setTrack(track);
-    this.retroUniform.value = this.retro ? 1 : 0;
     const racers = [car, ...bots, ...(ghost ? [ghost] : [])];
     while (this.ships.length > racers.length) {
       const s = this.ships.pop()!;
@@ -1056,7 +1019,6 @@ export class HoverRenderer {
   helpScene = new THREE.Scene();
   helpTexture: THREE.CanvasTexture | null = null;
   drawHelp(help: OriginalHelp) {
-    this.retroUniform.value = this.retro ? 1 : 0;
     if (!this.helpTexture) {
       this.helpTexture = new THREE.CanvasTexture(help.background);
       this.helpTexture.colorSpace = THREE.SRGBColorSpace;
@@ -1150,7 +1112,6 @@ export class HoverRenderer {
     ++this.frames;
   }
   drawMenu(screen: string, track: Track, type: number, time: number, age = 1) {
-    this.retroUniform.value = this.retro ? 1 : 0;
     if (this.menuScene.children.length === 0) {
       this.menuScene.background = new THREE.Color(0);
       this.menuScene.add(new THREE.AmbientLight(0xffffff, 1.6));
