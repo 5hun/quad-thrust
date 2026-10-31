@@ -153,10 +153,13 @@ module.exports = async function verify({
     assert.equal((await snap()).menuScreen, "option");
     assert.equal((await snap()).menuSelection, 2);
     await page.evaluate(() => window.HoverRules.completeCup(0));
-    await click("MEMORY CARD");
+    await press("Escape");
+    await click("OPTION");
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
-      "SLOT 1",
-      "SLOT 2",
+      "GAME LEVEL",
+      "VIEW RECORDS",
+      "VIEW REPLAY",
+      "MUSIC MODE",
       "ENDING",
     ]);
     await click("ENDING");
@@ -193,12 +196,12 @@ module.exports = async function verify({
     );
     await press("Enter");
     await wait("menu");
-    assert.equal((await snap()).menuScreen, "slots");
-    assert.equal((await snap()).menuSelection, 2);
+    assert.equal((await snap()).menuScreen, "option");
+    assert.equal((await snap()).menuSelection, 4);
     await click("ENDING");
     await wait("replay");
     await wait("menu"); // Source ending also stops at the recording's end.
-    assert.equal((await snap()).menuScreen, "slots");
+    assert.equal((await snap()).menuScreen, "option");
     assert.deepEqual(errors, []);
     console.log(
       "PASS: missing replay notice, native input recording/playback, exact live physics prefix, live input isolation, no record writes, replay camera/exit, unlocked ENDING, Start-only skip and recording-end return",

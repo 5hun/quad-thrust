@@ -911,41 +911,6 @@ main {
 .browser-options label {
   margin: 0;
 }
-#browser-settings {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 12px;
-}
-#browser-settings fieldset {
-  min-width: 0;
-  margin: 0;
-  padding: 10px;
-  border: 1px solid #333;
-}
-#browser-settings legend {
-  padding: 0 6px;
-  font: 11px monospace;
-}
-#browser-settings fieldset > label {
-  display: block;
-  margin-top: 10px;
-  letter-spacing: normal;
-  font-size: 11px;
-}
-#browser-settings input {
-  display: block;
-  width: 100%;
-  margin-top: 6px;
-  font-size: 11px;
-}
-#browser-settings > p {
-  grid-column: 1 / -1;
-  margin: 0;
-}
-#browser-settings > p:empty {
-  display: none;
-}
 .controls,
 main > details {
   display: none;
@@ -984,9 +949,6 @@ main > details {
   }
   .browser-options {
     margin: 12px;
-  }
-  #browser-settings {
-    grid-template-columns: 1fr;
   }
 }
 

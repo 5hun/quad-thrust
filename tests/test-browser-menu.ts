@@ -44,19 +44,6 @@ module.exports = async function verify({
       );
       await page.keyboard.press("Enter");
       await page.keyboard.press("Enter");
-      // Legacy test progress is migrated to SLOT 1, then explicitly loaded.
-      await click("OPTION");
-      await click("MEMORY CARD");
-      await click("SLOT 1");
-      await click("LOAD SYSTEM DATA");
-      await page.waitForFunction(() => {
-        const c = window.hoverDiagnostics().card;
-        return c && !c.busy && !c.errorFrames;
-      });
-      await press("Escape");
-      await press("Escape");
-      await press("Escape");
-      await press("ArrowUp");
     };
     const title = async () => {
       await page.reload();
@@ -67,7 +54,16 @@ module.exports = async function verify({
       await click("START");
       await click(mode);
     };
-    await page.addInitScript(() => localStorage.setItem("hover-unlocks", "15"));
+    await page.addInitScript(() => {
+      if (!localStorage.getItem("hover-autosave-v1"))
+        localStorage.setItem(
+          "hover-autosave-v1",
+          JSON.stringify({
+            version: 1,
+            values: { "hover-unlocks": "15" },
+          }),
+        );
+    });
     await page.goto(baseURL);
     await enterTitle();
     await screen("title");
@@ -80,8 +76,8 @@ module.exports = async function verify({
     assert.equal(await page.locator("#quality").isVisible(), true);
     assert.equal(await page.locator("#sound").isVisible(), true);
     assert.equal(
-      await page.locator("#browser-settings input[type=file]").count(),
-      2,
+      await page.locator("#browser-settings, input[type=file]").count(),
+      0,
     );
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
       "START",

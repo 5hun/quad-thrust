@@ -26,7 +26,16 @@ module.exports = async function verify({
     page.on("console", (m) => {
       if (m.type() === "error") errors.push(m.text());
     });
-    await page.addInitScript(() => localStorage.setItem("hover-unlocks", "15"));
+    await page.addInitScript(() => {
+      if (!localStorage.getItem("hover-autosave-v1"))
+        localStorage.setItem(
+          "hover-autosave-v1",
+          JSON.stringify({
+            version: 1,
+            values: { "hover-unlocks": "15" },
+          }),
+        );
+    });
     await page.goto(baseURL);
     await page.waitForFunction(
       () => window.hoverDiagnostics?.().state === "demo",

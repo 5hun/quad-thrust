@@ -105,15 +105,6 @@ module.exports = async function verify({
       incomplete: 5,
       complete: 6,
     });
-    await click("OPTION");
-    await click("MEMORY CARD");
-    await click("SLOT 1");
-    await click("AUTO LOAD");
-    await click("SAVE SYSTEM DATA");
-    await page.waitForFunction(() => {
-      const c = window.hoverDiagnostics().card;
-      return c && !c.busy && !c.errorFrames;
-    });
     await page.reload();
     await page.waitForFunction(
       () => window.hoverDiagnostics?.().state === "demo",

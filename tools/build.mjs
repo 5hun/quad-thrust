@@ -36,7 +36,6 @@ for (const name of [
   "hud",
   "background",
   "help",
-  "card",
 ]) {
   // Help text and staff text are checked-in TypeScript data. Only regenerate
   // runtime assets here, so building never rewrites the source tree.

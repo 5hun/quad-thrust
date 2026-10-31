@@ -68,12 +68,27 @@ module.exports = async function verify({
         ).HELP_BOOKS,
     );
     assert.equal(Object.keys(data).length, 18);
+    assert.ok(data.replay.some((line) => line.includes("自動で保存")));
+    assert.ok(!JSON.stringify(data).includes("メモリカード"));
+    assert.ok(!JSON.stringify(data).includes("メモリーカード"));
     for (const [book, lines] of Object.entries(data)) {
+      if (book === "replay") continue;
       const bytes = fs.readFileSync(
         path.join(__dirname, "../extracted", book.toUpperCase() + ".TXT"),
       );
       const source = new TextDecoder("shift_jis").decode(bytes).split(/\r?\n/);
       const expected = source.slice(0, source.indexOf("END"));
+      if (book === "modes") {
+        const start = expected.findIndex((line) =>
+          line.includes("メモリカード"),
+        );
+        expected.splice(
+          start,
+          3,
+          "　リプレイとゴーストは、ページを",
+          "閉じるか再読み込みすると消えます。",
+        );
+      }
       if (book === "about") expected[30] = "　　　Ｖｅｒ　１．２００";
       assert.deepEqual(lines, expected, book + " original book, line-for-line");
     }

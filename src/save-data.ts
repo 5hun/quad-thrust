@@ -1,0 +1,122 @@
+// One browser save for progress, records and settings. Replays stay in memory.
+export const SAVE_KEY = "hover-autosave-v1";
+
+function defaults() {
+  const values = new Map<string, string>([
+    ["hover-unlocks", "0"],
+    ["hover-training-marks", JSON.stringify(Array(15).fill(0))],
+    ["hover-player-name", "AAA"],
+    ["hover-cpu-difficulty", "1"],
+  ]);
+  for (const category of ["gp", "time"])
+    for (let course = 0; course < 9; course++) {
+      values.set(`hover-v3-record-${category}-${course}`, "600");
+      for (const kind of ["lap", "total"])
+        values.set(
+          `hover-records-${category}-${course}-${kind}`,
+          JSON.stringify(
+            ["SAT", "UME", "BEE", "UZU", "MAS", "ZZZ"].map((name, i) => ({
+              time: 600,
+              machine: i % 4,
+              name,
+            })),
+          ),
+        );
+    }
+  return values;
+}
+
+function validValue(key: string, value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (key === "hover-unlocks") return /^(?:[0-9]|1[0-5])$/.test(value);
+  if (key === "hover-cpu-difficulty") return /^[0-3]$/.test(value);
+  if (key === "hover-player-name") return /^[A-Z,.^_0-9%*?&!]{3}$/.test(value);
+  if (/^hover-v3-record-(gp|time)-[0-8]$/.test(key))
+    return Number.isFinite(Number(value)) && Number(value) > 0;
+  try {
+    const data = JSON.parse(value);
+    if (key === "hover-training-marks")
+      return (
+        Array.isArray(data) &&
+        data.length === 15 &&
+        data.every((n) => Number.isInteger(n) && n >= 0 && n <= 63)
+      );
+    if (/^hover-records-(gp|time)-[0-8]-(lap|total)$/.test(key))
+      return (
+        Array.isArray(data) &&
+        data.length <= 6 &&
+        data.every(
+          (row) =>
+            row &&
+            Number.isFinite(row.time) &&
+            row.time > 0 &&
+            Number.isInteger(row.machine) &&
+            row.machine >= 0 &&
+            row.machine <= 5 &&
+            (row.name === undefined ||
+              (typeof row.name === "string" && row.name.length <= 3)),
+        )
+      );
+  } catch {}
+  return false;
+}
+
+export class SaveStore implements Storage {
+  private data = defaults();
+  saveError = false;
+
+  constructor(private storage: Pick<Storage, "getItem" | "setItem">) {
+    try {
+      const raw = storage.getItem(SAVE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (
+        saved?.version !== 1 ||
+        !saved.values ||
+        typeof saved.values !== "object" ||
+        Array.isArray(saved.values)
+      )
+        return;
+      const entries = Object.entries(saved.values);
+      if (!entries.every(([key, value]) => validValue(key, value))) return;
+      for (const [key, value] of entries)
+        if (typeof value === "string") this.data.set(key, value);
+    } catch {
+      // Storage may be disabled or corrupt. The game still works in memory.
+    }
+  }
+  get length() {
+    return this.data.size;
+  }
+  getItem(key: string) {
+    return this.data.get(key) ?? null;
+  }
+  key(index: number) {
+    return [...this.data.keys()][index] ?? null;
+  }
+  setItem(key: string, value: string) {
+    const text = String(value);
+    if (!validValue(key, text)) return;
+    if (this.data.get(key) === text && !this.saveError) return;
+    this.data.set(key, text);
+    this.persist();
+  }
+  removeItem(key: string) {
+    if (this.data.delete(key)) this.persist();
+  }
+  clear() {
+    this.data = defaults();
+    this.persist();
+  }
+  private persist() {
+    try {
+      this.storage.setItem(
+        SAVE_KEY,
+        JSON.stringify({ version: 1, values: Object.fromEntries(this.data) }),
+      );
+      this.saveError = false;
+    } catch {
+      this.saveError = true;
+    }
+  }
+}

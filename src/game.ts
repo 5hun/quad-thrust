@@ -52,22 +52,9 @@ import { OriginalSound } from "./sound.js";
 import { OriginalHUD } from "./hud.js";
 import { OriginalMenu } from "./menu.js";
 import { ReplayMemory } from "./replay-memory.js";
-import { CardMenu } from "./card-menu.js";
-import {
-  MemoryCards,
-  SessionStore,
-  defaultSystem,
-  decodeReplayPack,
-  encodeCard,
-  decodeCard,
-  type SystemSave,
-} from "./card-data.js";
+import { SaveStore } from "./save-data.js";
 import { ReplayRecorder, InputReplay, GhostReplay } from "./input-replay.js";
-import {
-  OriginalPostrace,
-  ENTRY_CHARACTERS,
-  type GPRecord,
-} from "./postrace.js";
+import { OriginalPostrace, type GPRecord } from "./postrace.js";
 const originalSound = new OriginalSound();
 const E = HoverEngine,
   R = HoverRules,
@@ -76,41 +63,10 @@ const E = HoverEngine,
   canvas = $("game"),
   tracks = HOVER_TRACKS.map(E.prepare);
 const trainingTracks = HOVER_TRAINING_TRACKS.map(E.prepare);
-const session = new SessionStore();
-session.apply(defaultSystem());
-const persistent = {
-  getItem(key: string) {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  setItem(key: string, value: string) {
-    localStorage.setItem(key, value);
-  },
-};
-const [cardTemplate, specialReplayPack] = await Promise.all(
-  ["assets/card-template.bin", "assets/special-replays.bin"].map(
-    async (path) => new Uint8Array(await (await fetch(path)).arrayBuffer()),
-  ),
-);
-const memoryCards = new MemoryCards(persistent, Array.from(cardTemplate));
-let autoSaveSlot: number | null = null;
-let savePending = false;
-let autoSaveFrames = 0,
-  autoSaveError = "";
-try {
-  memoryCards.migrateLegacy();
-  for (const slot of [0, 1]) {
-    const card = memoryCards.read(slot);
-    if (card && card.system.auto & 1) {
-      session.apply(card.system);
-      autoSaveSlot = card.system.auto & 2 ? slot : null;
-      break;
-    }
-  }
-} catch {}
+const session = new SaveStore({
+  getItem: (key) => localStorage.getItem(key),
+  setItem: (key, value) => localStorage.setItem(key, value),
+});
 R.useStorage(session);
 T.useStorage(session);
 B.useStorage(session);
@@ -376,7 +332,6 @@ $("machine").onchange = () => {
   select();
 };
 select();
-const browserSettings = document.getElementById("browser-settings")!;
 const originalMenu = new OriginalMenu({
   mode(value) {
     $("mode").value = value;
@@ -402,16 +357,15 @@ const originalMenu = new OriginalMenu({
   exit() {
     quit();
   },
-  card(slot) {
-    cardMenu.open(slot);
+  difficulty() {
+    return Number(session.getItem("hover-cpu-difficulty")) - 1;
   },
-  save() {
-    autoSave();
+  setDifficulty(level) {
+    session.setItem("hover-cpu-difficulty", String(level + 1));
   },
   trainingDone() {
     R.completeTraining();
     refreshMachines();
-    autoSave();
   },
   sound(kind) {
     initAudio();
@@ -429,122 +383,6 @@ const originalMenu = new OriginalMenu({
   },
 });
 const postrace = new OriginalPostrace(originalMenu, session);
-function captureSystem() {
-  const data = session.snapshot();
-  data.unlocks = R.unlocks();
-  data.userName = postrace.name.map((i) => ENTRY_CHARACTERS[i]).join("");
-  return data;
-}
-function settingsChanged(slot: number) {
-  const data = session.snapshot();
-  autoSaveSlot = data.auto & 2 ? slot : null;
-}
-function applySystem(data: SystemSave, slot: number) {
-  session.apply(data);
-  R.useStorage(session);
-  postrace.name = [...data.userName].map((ch) =>
-    Math.max(0, ENTRY_CHARACTERS.indexOf(ch)),
-  );
-  settingsChanged(slot);
-  const course = $("course").value;
-  refreshMachines();
-  setCourseOptions();
-  if ([...$("course").options].some((option) => option.value === course))
-    $("course").value = course;
-  select();
-}
-function autoSave() {
-  if (!savePending) return;
-  savePending = false;
-  if (autoSaveSlot === null) return;
-  try {
-    memoryCards.saveSystem(autoSaveSlot, captureSystem());
-    autoSaveFrames = 2;
-    autoSaveError = "";
-  } catch {
-    autoSaveSlot = null;
-    session.setItem(
-      "hover-auto-load-save",
-      String(session.snapshot().auto & ~2),
-    );
-    autoSaveFrames = 120;
-    autoSaveError = "カードに保存できません";
-  }
-}
-const cardMenu = new CardMenu(originalMenu, memoryCards, session, {
-  capture: captureSystem,
-  apply: applySystem,
-  replay: () => replayMemory.saved,
-  loadReplay(tape) {
-    const loaded = structuredClone(tape);
-    replayMemory.saved = loaded;
-    replayMemory.recent = loaded;
-    replayMemory.raceGhost = null;
-    ghostReplay = null;
-  },
-  settings: settingsChanged,
-});
-cardMenu.special = decodeReplayPack(specialReplayPack);
-originalMenu.card = cardMenu;
-// Native game-data file exchange is a browser control; card loading in-game
-// still happens through LOAD SYSTEM DATA / LOAD REPLAY DATA.
-for (const slot of [0, 1]) {
-  const exportButton = document.createElement("button");
-  exportButton.textContent = `SLOT ${slot + 1} ゲームデータを書き出す`;
-  exportButton.title = "PS1形式ではスティックの中間値を方向入力に変換します";
-  exportButton.onclick = () => {
-    try {
-      const card = memoryCards.read(slot);
-      if (!card) {
-        cardStatus.textContent = "データがありません";
-        return;
-      }
-      const blob = new Blob([encodeCard(card).buffer as ArrayBuffer], {
-        type: "application/octet-stream",
-      });
-      const url = URL.createObjectURL(blob),
-        a = document.createElement("a");
-      a.href = url;
-      a.download = `BNYedg01299HoverVer1-slot${slot + 1}.bin`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      cardStatus.textContent = "読み込めません";
-    }
-  };
-  const importLabel = document.createElement("label"),
-    input = document.createElement("input");
-  importLabel.textContent = `SLOT ${slot + 1} ゲームデータを取り込む`;
-  input.type = "file";
-  input.accept = ".bin";
-  input.onchange = async () => {
-    try {
-      const file = input.files?.[0];
-      if (!file) return;
-      if (file.size !== 8192)
-        throw Error("8KBのゲームデータファイルを選んでください");
-      memoryCards.write(
-        slot,
-        decodeCard(new Uint8Array(await file.arrayBuffer())),
-      );
-      cardStatus.textContent =
-        "取り込みました。カードメニューから読み込めます。";
-    } catch (error) {
-      cardStatus.textContent =
-        error instanceof Error ? error.message : "読み込めません";
-    }
-    input.value = "";
-  };
-  importLabel.append(input);
-  const slotGroup = document.createElement("fieldset");
-  const legend = document.createElement("legend");
-  legend.textContent = `SLOT ${slot + 1}`;
-  slotGroup.append(legend, exportButton, importLabel);
-  browserSettings.append(slotGroup);
-}
-const cardStatus = document.createElement("p");
-cardStatus.setAttribute("role", "status");
-browserSettings.append(cardStatus);
 $("quality").onchange = () => {
   view.retro = $("quality").value === "retro";
   view.resize();
@@ -598,11 +436,8 @@ function rememberReplay() {
   replayMemory.complete(tape);
 }
 function playReplay(kind: "view" | "ending") {
-  if (!replayMemory.saved) {
-    originalMenu.message(
-      "リプレイデータがありません",
-      kind === "view" ? "option" : "slots",
-    );
+  if (kind === "view" && !replayMemory.saved) {
+    originalMenu.message("リプレイデータがありません", "option");
     return;
   }
   postrace.close();
@@ -614,13 +449,14 @@ function playReplay(kind: "view" | "ending") {
   );
   ghostReplay = null;
   replayKind = kind;
-  replayRun = new InputReplay(
-    replayMemory.saved,
-    tracks[replayMemory.saved.course],
-  );
-  track = replayRun.track;
-  car = replayRun.car;
-  bots = replayRun.bots;
+  replayRun = replayMemory.saved
+    ? new InputReplay(replayMemory.saved, tracks[replayMemory.saved.course])
+    : null;
+  if (replayRun) {
+    track = replayRun.track;
+    car = replayRun.car;
+    bots = replayRun.bots;
+  }
   state = "replay";
   trainingSession = null;
   keys = {};
@@ -647,12 +483,12 @@ function playReplay(kind: "view" | "ending") {
 }
 function exitReplay() {
   if (state !== "replay") return;
-  const screen = replayKind === "ending" ? "slots" : "option";
+  const selection = replayKind === "ending" ? 4 : 2;
   replayRun = null;
   replayKind = null;
   postrace.close();
   menu();
-  originalMenu.show(screen, 2);
+  originalMenu.show("option", selection);
   originalMenu.padHeld.add("Enter");
   originalMenu.padHeld.add("Escape");
 }
@@ -666,7 +502,6 @@ function start(nextRound = false) {
   originalSound.cancel();
   originalSound.pause(false);
   mode = $("mode").value;
-  savePending = true;
   if (mode.startsWith("gp")) {
     gpCup = +mode.slice(2);
     if (nextRound !== true) {
@@ -677,7 +512,7 @@ function start(nextRound = false) {
   }
   track = selectedTrack();
   car = E.placeOnGrid(E.create(track, +$("machine").value), track);
-  recordingLevel = session.snapshot().level;
+  recordingLevel = Number(session.getItem("hover-cpu-difficulty")) - 1;
   bots = R.profile(mode).opponents
     ? R.opponents(car.type).map((type, i) => {
         const b = E.placeOnGrid(E.create(track, type), track, i + 1);
@@ -752,9 +587,7 @@ function quit() {
   originalMenu.g.clearRect(0, 0, 320, 240);
   view.drawBlank();
 }
-function menu(save = true) {
-  if (save && !trainingSession && !["menu", "demo", "replay"].includes(state))
-    autoSave();
+function menu() {
   ghostReplay = null;
   postraceReplay = null;
   if (state === "finished") rememberReplay();
@@ -777,7 +610,6 @@ function menu(save = true) {
 }
 // GP1_MAIN.C main / GAME.C gamedemo: live CPU race, not a recording.
 function beginDemo() {
-  if (state === "finished") autoSave();
   ghostReplay = null;
   postrace.close();
   trainingSession = null;
@@ -975,7 +807,7 @@ function showGPRecords(completed = false) {
 }
 function returnToSelection(training = false) {
   const value = mode;
-  menu(false);
+  menu();
   originalMenu.mode = value;
   originalMenu.show(training ? "training" : "car");
   originalSound.playCourse("SELECT");
@@ -1056,7 +888,7 @@ window.addEventListener("keydown", (e) => {
     void document.exitFullscreen().catch(fullscreenError);
     return;
   }
-  if (state === "exited" || autoSaveFrames > 0) return;
+  if (state === "exited") return;
   if (/SELECT|INPUT|TEXTAREA/.test((e.target as HTMLElement).tagName)) return;
   if (handled.includes(e.code)) e.preventDefault();
   keys[e.code] = true;
@@ -1287,25 +1119,13 @@ function render() {
     view.drawBlank();
     return;
   }
-  if (autoSaveFrames > 0) {
-    view.drawBlank();
-    originalMenu.g.clearRect(0, 0, 320, 240);
-    if (autoSaveError) {
-      if (((120 - autoSaveFrames) & 15) > 4)
-        originalMenu.help.glyphs.draw(
-          originalMenu.g,
-          autoSaveError,
-          160 - autoSaveError.length * 8,
-          112,
-        );
-    } else originalMenu.text("AUTO SAVE", 160, 216);
-    return;
-  }
-  if (state === "replay" && replayRun) {
-    view.draw(track, car, bots, state, worldTime, car.active || {});
+  if (state === "replay") {
+    if (replayRun)
+      view.draw(track, car, bots, state, worldTime, car.active || {});
+    else view.drawBlank();
     originalMenu.g.clearRect(0, 0, 320, 240);
     if (replayKind === "ending") postrace.draw();
-    else if ((replayRun.frame & 63) >= 32) {
+    else if (replayRun && (replayRun.frame & 63) >= 32) {
       const image = originalHUD.images["hud-487"];
       if (image.complete && image.naturalWidth)
         originalMenu.g.drawImage(image, 32, 240, 64, 16, 240, 208, 64, 16);
@@ -1464,12 +1284,12 @@ function updateGoalDrive(dt: number) {
   E.collideAll([car, ...bots]);
 }
 function update(dt: number) {
-  if (autoSaveFrames > 0) {
-    --autoSaveFrames;
-    return;
-  }
   currentInput = input();
-  if (state === "replay" && replayRun) {
+  if (state === "replay") {
+    if (!replayRun) {
+      postrace.tick(false);
+      return;
+    }
     if (!replayRun.step()) {
       if (replayKind === "ending") {
         exitReplay();
@@ -1566,7 +1386,7 @@ function update(dt: number) {
         car.laps,
         () => {
           originalMenu.padHeld.add("Enter");
-          menu(false);
+          menu();
           originalMenu.mode = mode;
           originalMenu.show("car");
           originalSound.playCourse("SELECT");
@@ -1591,7 +1411,7 @@ function update(dt: number) {
         "option",
         "gp",
         "levels",
-        "slots",
+        "difficulty",
         "record-kind",
       ].includes(originalMenu.screen) &&
       ++menuIdleFrames > 30 * 60
@@ -1782,22 +1602,8 @@ export const getHoverDiagnostics = () => ({
     : continueChoice,
   menuScreen: originalMenu.screen,
   menuSelection: originalMenu.selected,
-  card:
-    originalMenu.screen === "card"
-      ? {
-          slot: cardMenu.slot,
-          page: cardMenu.page,
-          selection: cardMenu.selected,
-          cursor: cardMenu.cursor,
-          action: cardMenu.action,
-          errorFrames: cardMenu.errorFrames,
-          error: cardMenu.error,
-          busy: cardMenu.busy,
-        }
-      : null,
-  autoSaveSlot,
-  autoLoadSave: session.snapshot().auto,
-  cpuDifficulty: session.snapshot().level,
+  saveError: session.saveError,
+  cpuDifficulty: Number(session.getItem("hover-cpu-difficulty")) - 1,
   replay: replayRun
     ? {
         kind: replayKind,

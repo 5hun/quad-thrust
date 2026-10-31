@@ -26,42 +26,6 @@ module.exports = async function verify({
         state,
       );
     const key = (code: string) => page.keyboard.press(code);
-    async function saveBeforeReload() {
-      while (
-        (await page.evaluate(() => window.hoverDiagnostics())).menuScreen !==
-        "title"
-      )
-        await key("Escape");
-      for (const name of [
-        "OPTION",
-        "MEMORY CARD",
-        "SLOT 1",
-        "SAVE SYSTEM DATA",
-      ])
-        await page.getByRole("button", { name, exact: true }).click();
-      await page.waitForFunction(() => {
-        const c = window.hoverDiagnostics().card;
-        return c && !c.busy && !c.errorFrames;
-      });
-    }
-    async function loadAfterReload() {
-      for (const name of [
-        "OPTION",
-        "MEMORY CARD",
-        "SLOT 1",
-        "LOAD SYSTEM DATA",
-      ])
-        await page.getByRole("button", { name, exact: true }).click();
-      await page.waitForFunction(() => {
-        const c = window.hoverDiagnostics().card;
-        return c && !c.busy && !c.errorFrames;
-      });
-      await key("Escape");
-      await key("Escape");
-      await key("Escape");
-      await key("ArrowUp");
-    }
-
     async function force(reason: Car["reason"], winner = false) {
       await page.evaluate(
         ({ reason, winner }) => {
@@ -82,7 +46,16 @@ module.exports = async function verify({
         { reason, winner },
       );
     }
-    await page.addInitScript(() => localStorage.setItem("hover-unlocks", "15"));
+    await page.addInitScript(() => {
+      if (!localStorage.getItem("hover-autosave-v1"))
+        localStorage.setItem(
+          "hover-autosave-v1",
+          JSON.stringify({
+            version: 1,
+            values: { "hover-unlocks": "15" },
+          }),
+        );
+    });
     await page.goto(baseURL);
     await page.waitForFunction(
       () => window.hoverDiagnostics?.().state === "demo",
@@ -171,14 +144,12 @@ module.exports = async function verify({
     await page.waitForTimeout(50);
     await key("KeyP");
     await wait("menu");
-    await saveBeforeReload();
     await page.reload();
     await page.waitForFunction(
       () => window.hoverDiagnostics?.().state === "demo",
     );
     await page.keyboard.press("Enter");
     await page.keyboard.press("Enter");
-    await loadAfterReload();
     await wait("menu");
     for (const code of ["Enter", "ArrowDown", "Enter", "Enter", "Enter"])
       await key(code);
@@ -219,14 +190,12 @@ module.exports = async function verify({
     await wait("menu");
     await page.setViewportSize({ width: 1100, height: 900 });
     // Complete a full GP: automatic rounds, source credits, one name for all courses.
-    await saveBeforeReload();
     await page.reload();
     await page.waitForFunction(
       () => window.hoverDiagnostics?.().state === "demo",
     );
     await page.keyboard.press("Enter");
     await page.keyboard.press("Enter");
-    await loadAfterReload();
     await wait("menu");
     for (const code of ["Enter", "Enter", "Enter", "Enter"]) await key(code);
     for (let round = 0; round < 3; round++) {

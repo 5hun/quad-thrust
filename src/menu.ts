@@ -1,14 +1,12 @@
 // MENU_ETC.C / GP1_MAIN.C: original title tree and selection order.
 import { OriginalHelp } from "./help.js";
-import type { CardMenu } from "./card-menu.js";
 export type MenuScreen =
   | "title"
   | "modes"
   | "gp"
   | "levels"
   | "option"
-  | "card"
-  | "slots"
+  | "difficulty"
   | "record-kind"
   | "car"
   | "course"
@@ -24,8 +22,8 @@ interface MenuHooks {
   start(): void;
   replay(): void;
   ending(): void;
-  card(slot: number): void;
-  save?(): void;
+  difficulty(): number;
+  setDifficulty(level: number): void;
   trainingDone?(): void;
   exit(): void;
   sound(kind: "move" | "ok" | "cancel"): void;
@@ -36,8 +34,8 @@ const lists: Partial<Record<MenuScreen, string[]>> = {
   modes: ["GRANDPRIX", "TIME ATTACK", "TRAINING", "2P BATTLE"],
   gp: ["Blue GP", "Yellow GP", "Red GP", "PRACTICE"],
   levels: ["LEVEL 1", "LEVEL 2", "LEVEL 3", "FREE RUN"],
-  option: ["MEMORY CARD", "VIEW RECORDS", "VIEW REPLAY", "MUSIC MODE"],
-  slots: ["SLOT 1", "SLOT 2"],
+  option: ["GAME LEVEL", "VIEW RECORDS", "VIEW REPLAY", "MUSIC MODE"],
+  difficulty: ["EASY", "NORMAL", "HARD", "EXPART"],
   "record-kind": ["GRANDPRIX'S", "TIME ATTACK'S"],
 };
 const parent: Partial<Record<MenuScreen, [MenuScreen, number]>> = {
@@ -45,7 +43,7 @@ const parent: Partial<Record<MenuScreen, [MenuScreen, number]>> = {
   gp: ["modes", 0],
   levels: ["modes", 2],
   option: ["title", 1],
-  slots: ["option", 0],
+  difficulty: ["option", 0],
   "record-kind": ["option", 1],
   training: ["levels", 0],
   records: ["record-kind", 0],
@@ -56,7 +54,6 @@ const field = (id: string) => document.getElementById(id) as HTMLSelectElement;
 export class OriginalMenu {
   screen: MenuScreen = "title";
   selected = 0;
-  card: CardMenu | null = null;
   introFrames = 0;
   entered = performance.now();
   mode = "time";
@@ -131,7 +128,6 @@ export class OriginalMenu {
   tick(keys: Record<string, boolean> = {}) {
     if (this.screen === "record-detail")
       this.recordFrames = (this.recordFrames + 1) % 1320;
-    if (this.screen === "card") this.card?.tick(keys, this.padHeld);
     if (this.screen === "help") {
       const held = (code: string) => !!keys[code] || this.padHeld.has(code);
       this.help.tick(
@@ -147,10 +143,8 @@ export class OriginalMenu {
     this.recordFrames = 0;
     this.introFrames = 0;
     this.buttons.inert = false;
-    lists.slots =
-      HoverRules.unlocks() & 1
-        ? ["SLOT 1", "SLOT 2", "ENDING"]
-        : ["SLOT 1", "SLOT 2"];
+    lists.option = ["GAME LEVEL", "VIEW RECORDS", "VIEW REPLAY", "MUSIC MODE"];
+    if (HoverRules.unlocks() & 1) lists.option.push("ENDING");
     lists.gp = ["Blue GP", "Yellow GP", "Red GP"]
       .slice(0, HoverRules.availableCups())
       .concat("PRACTICE");
@@ -159,8 +153,7 @@ export class OriginalMenu {
     this.entered = performance.now();
     this.panel.dataset.screen = screen;
     this.buttons.replaceChildren();
-    if (screen === "card") this.card?.buttons();
-    else if (screen === "help") {
+    if (screen === "help") {
       if (this.help.page === "book") {
         this.button("上へスクロール", 296, 0, 24, 100, () =>
           this.help.move(-1),
@@ -187,11 +180,13 @@ export class OriginalMenu {
       lists[screen]!.forEach((label, i) => {
         const count = lists[screen]!.length;
         const y =
-          count === 2
-            ? 140 + i * 32
-            : count === 3
-              ? 124 + i * 32
-              : 124 + i * 24;
+          count > 4
+            ? 116 + i * 20
+            : count === 2
+              ? 140 + i * 32
+              : count === 3
+                ? 124 + i * 32
+                : 124 + i * 24;
         this.button(
           label,
           160 - label.length * 8,
@@ -236,11 +231,6 @@ export class OriginalMenu {
       );
   }
   move(delta: number) {
-    if (this.screen === "card") {
-      if (this.card?.cursor !== null) this.card?.horizontal(delta);
-      else this.card?.move(delta);
-      return;
-    }
     if (this.introFrames) return;
     if (this.screen === "help") {
       this.help.move(delta);
@@ -312,10 +302,6 @@ export class OriginalMenu {
     this.show("notice");
   }
   confirm() {
-    if (this.screen === "card") {
-      this.card?.confirm();
-      return;
-    }
     if (
       this.introFrames ||
       (this.screen === "help" && this.help.page === "book")
@@ -348,17 +334,15 @@ export class OriginalMenu {
         this.choose(i === 3 ? "free" : "train" + i);
         break;
       case "option":
-        if (i === 0) this.show("slots");
+        if (i === 0) this.show("difficulty", this.hooks.difficulty() + 1);
         if (i === 1) this.show("record-kind");
         if (i === 2) this.hooks.replay();
         if (i === 3) this.show("music");
+        if (i === 4) this.hooks.ending();
         break;
-      case "slots":
-        if (i === 2) {
-          this.hooks.ending();
-          break;
-        }
-        this.hooks.card(i);
+      case "difficulty":
+        this.hooks.setDifficulty(i - 1);
+        this.show("option");
         break;
       case "record-kind":
         this.recordClass = i === 0 ? "gp" : "time";
@@ -394,10 +378,6 @@ export class OriginalMenu {
     }
   }
   back() {
-    if (this.screen === "card") {
-      this.card?.back();
-      return;
-    }
     if (this.introFrames) return;
     this.hooks.sound("cancel");
     if (this.screen === "help") {
@@ -408,7 +388,6 @@ export class OriginalMenu {
     else if (this.screen === "car") {
       if (this.mode.startsWith("train")) this.show("training");
       else {
-        this.hooks.save?.();
         this.hooks.music(null);
         this.show(
           this.mode.startsWith("gp") || this.mode === "practice"
@@ -445,10 +424,6 @@ export class OriginalMenu {
     }
   }
   key(code: string) {
-    if (this.screen === "card") {
-      this.card?.key(code);
-      return;
-    }
     if (this.introFrames) {
       if (code === "Enter") {
         this.introFrames = 1;
@@ -485,8 +460,7 @@ export class OriginalMenu {
       if (p.buttons[14]?.pressed || p.axes[0] < -0.5) active.add("ArrowLeft");
       if (p.buttons[15]?.pressed || p.axes[0] > 0.5) active.add("ArrowRight");
       if (p.buttons[0]?.pressed) active.add("Enter");
-      if (p.buttons[9]?.pressed)
-        active.add(this.screen === "card" ? "KeyP" : "Enter");
+      if (p.buttons[9]?.pressed) active.add("Enter");
       if (p.buttons[1]?.pressed) active.add("Escape");
       if (
         p.buttons[2]?.pressed &&
@@ -547,8 +521,7 @@ export class OriginalMenu {
     g.clearRect(0, 0, 320, 240);
     g.imageSmoothingEnabled = false;
     const list = lists[this.screen];
-    if (this.screen === "card") this.card?.draw();
-    else if (list) {
+    if (list) {
       if (this.logo.complete && this.logo.naturalWidth) {
         const offset = Math.max(0, this.introFrames - 60) * 8;
         g.drawImage(
@@ -579,11 +552,13 @@ export class OriginalMenu {
           this.text(
             label,
             160 - label.length * 8,
-            list.length === 2
-              ? 140 + i * 32
-              : list.length === 3
-                ? 124 + i * 32
-                : 124 + i * 24,
+            list.length > 4
+              ? 116 + i * 20
+              : list.length === 2
+                ? 140 + i * 32
+                : list.length === 3
+                  ? 124 + i * 32
+                  : 124 + i * 24,
             16,
             i === this.selected ? "#00ff00" : "white",
           ),
@@ -777,7 +752,7 @@ export class OriginalMenu {
     } else if (this.screen === "notice") this.jp(this.notice, 16, 32);
     this.panel.setAttribute(
       "aria-label",
-      `${this.screen}: ${this.screen === "card" ? this.card?.label : list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : this.screen === "training" ? HoverTraining.tasks[+field("course").value].description : this.screen === "notice" ? this.notice : this.screen === "help" ? (this.help.page === "book" ? `${this.help.book} ${this.help.scroll}/${this.help.maxScroll}\n${this.help.description}` : this.help.items[this.help.selected]) : "選択画面")}`,
+      `${this.screen}: ${list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : this.screen === "training" ? HoverTraining.tasks[+field("course").value].description : this.screen === "notice" ? this.notice : this.screen === "help" ? (this.help.page === "book" ? `${this.help.book} ${this.help.scroll}/${this.help.maxScroll}\n${this.help.description}` : this.help.items[this.help.selected]) : "選択画面")}`,
     );
   }
   jp(text: string, x: number, y: number, size = 12) {
