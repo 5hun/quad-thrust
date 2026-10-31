@@ -83,22 +83,6 @@ namespace HoverEngine {
       color: "#e3be6f",
       desc: "高速試作機。ラダー・ターボなし。耐久性が低い。",
     },
-    {
-      name: "SUZUKI",
-      model: "YAKA_MAN",
-      weight: 120,
-      accel: 620,
-      falloff: 21,
-      turbo: 350,
-      turboFall: 8,
-      side: 0,
-      drag: 32000,
-      rotation: 22,
-      rudder: 20,
-      tank: 40000,
-      color: "#e16d5e",
-      desc: "原作の隠しキャラクター。スラスターは使えません。",
-    },
   ];
   export const clamp = (v: number, a: number, b: number) =>
       Math.max(a, Math.min(b, v)),
@@ -143,9 +127,7 @@ namespace HoverEngine {
     return { ...raw, nodes, length, sourceParts };
   }
   export function at(track: Track, d: number) {
-    d = track.training
-      ? clamp(d, 0, track.length - 0.001)
-      : ((d % track.length) + track.length) % track.length;
+    d = ((d % track.length) + track.length) % track.length;
     let i = track.nodes.findIndex((p) => p.distance + p.len > d);
     if (i < 0) i = 0;
     const p = track.nodes[i],
@@ -1016,10 +998,8 @@ namespace HoverEngine {
     const near = nearest(track, car.x, car.z, car.index);
     car.index = near.index;
     let lines = near.index - car.lastLine;
-    if (!track.training) {
-      if (lines < -track.nodes.length / 2) lines += track.nodes.length;
-      if (lines > track.nodes.length / 2) lines -= track.nodes.length;
-    }
+    if (lines < -track.nodes.length / 2) lines += track.nodes.length;
+    if (lines > track.nodes.length / 2) lines -= track.nodes.length;
     car.linePosition += lines;
     car.lastLine = near.index;
     const inside = near.supported;
@@ -1054,7 +1034,6 @@ namespace HoverEngine {
     if (
       racing &&
       !car.ghost &&
-      !track.training &&
       ch === "g" &&
       car.previousTile !== "g" &&
       car.linePosition > car.lastGoal + 32
@@ -1068,14 +1047,11 @@ namespace HoverEngine {
       }
     }
     if (ch !== car.previousTile) {
-      if (track.training && ch === "g") car.events.push("goal");
-      if (track.training && ch === "s") car.events.push("stop");
       if (ch === "P" && car.grip) {
         car.damage = Math.max(0, car.damage - 6000);
         if (!car.ghost) car.events.push("repair");
       }
       if (ch === "J" && car.grip) {
-        if (track.training) f[1] = b[1] = 0;
         f[1] -= 1500;
         b[1] -= 1500;
         car.events.push("jump");
@@ -1209,29 +1185,28 @@ namespace HoverEngine {
         );
     }
     car.active = { ...input, accel: !!(input.accel || car.turbo) };
-    if (car.type !== 5)
-      for (const [key, side, yaw, vector] of [
-        ["r1", -1, -1, f],
-        ["l1", 1, 1, f],
-        ["r2", -1, 1, b],
-        ["l2", 1, -1, b],
-      ] as ["l1" | "l2" | "r1" | "r2", number, number, Vec3][])
-        if (input[key]) {
-          car.active[key] = true;
-          if (source) {
-            sourceAcceleration(
-              car,
-              key === "r1" ? 1 : key === "l1" ? 2 : key === "r2" ? 3 : 4,
-            );
-          } else {
-            car.heading += yaw * m.rotation * UNIT;
-            const thrust = Math.trunc(
-              (((side * (m.side - (speed >> 4))) >> 2) * 128) / m.weight,
-            );
-            vector[0] += Math.round(sz * thrust);
-            vector[2] -= Math.round(sx * thrust);
-          }
+    for (const [key, side, yaw, vector] of [
+      ["r1", -1, -1, f],
+      ["l1", 1, 1, f],
+      ["r2", -1, 1, b],
+      ["l2", 1, -1, b],
+    ] as ["l1" | "l2" | "r1" | "r2", number, number, Vec3][])
+      if (input[key]) {
+        car.active[key] = true;
+        if (source) {
+          sourceAcceleration(
+            car,
+            key === "r1" ? 1 : key === "l1" ? 2 : key === "r2" ? 3 : 4,
+          );
+        } else {
+          car.heading += yaw * m.rotation * UNIT;
+          const thrust = Math.trunc(
+            (((side * (m.side - (speed >> 4))) >> 2) * 128) / m.weight,
+          );
+          vector[0] += Math.round(sz * thrust);
+          vector[2] -= Math.round(sx * thrust);
         }
+      }
     if (source) {
       sourceRotation(car, car.sourceContact!.normal);
       rebuildSourceMatrices(car);
@@ -1510,7 +1485,7 @@ namespace HoverEngine {
     // use original source units rather than the old 80/87/94 world-unit caps.
     const input = drive(car, track, Infinity);
     // CAR_CTR.C car_control: lev==0 clears thrust/side boosters and brakes.
-    // Only a GP winner (or successful training) changes to lev=10.
+    // Only a GP winner changes to lev=10.
     if (car.cpuLevel === 0) return { steer: input.steer, brake: true };
     input.accel =
       input.accel &&

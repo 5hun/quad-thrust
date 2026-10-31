@@ -35,13 +35,7 @@ for (const name of [
   "music",
   "hud",
   "background",
-  "help",
 ]) {
-  // Help text and staff text are checked-in TypeScript data. Only regenerate
-  // runtime assets here, so building never rewrites the source tree.
-  run(python, [
-    `tools/convert_${name}.py`,
-    ...(name === "help" ? ["--assets-only"] : []),
-  ]);
+  run(python, [`tools/convert_${name}.py`]);
 }
 run(process.execPath, ["node_modules/typescript/bin/tsc"]);

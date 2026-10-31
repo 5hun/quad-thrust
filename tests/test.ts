@@ -11,6 +11,7 @@ vm.runInNewContext(
 const tracks = box.window.HOVER_TRACKS.map(E.prepare);
 assert.equal(tracks.length, 9);
 const t = tracks[0];
+assert.equal(E.MACHINES.length, 5);
 const near = (a: number, b: number, e = 0.000001) =>
   assert.ok(Math.abs(a - b) < e, `${a} != ${b}`);
 for (const tr of tracks) {
@@ -45,10 +46,6 @@ assert.equal(c.rear[0], 37);
 c = E.create(t, 2);
 for (let i = 0; i < 60; i++) E.step(c, t, { accel: true, steer: 1 }, 1 / 60);
 near(c.heading, 0);
-c = E.create(t, 5);
-E.step(c, t, { l1: true, l2: true, r2: true }, 1 / 60);
-near(c.heading, 0);
-assert.equal(c.front[0], 0);
 c = E.create(t);
 E.step(c, t, { turbo: true }, 1 / 60);
 assert.equal(c.damage, 48);
@@ -192,7 +189,7 @@ assert.ok(
   "finish tick suppresses wall effects immediately",
 );
 console.log(
-  "PASS: source thrust/drag/yaw formulas, independent inertias, frame-rate invariance, no-rudder/no-thruster machines, one-shot repair/jump, lethal floor, falling, aerial wall clearance, collisions, forward/reverse lap checks.",
+  "PASS: source thrust/drag/yaw formulas, independent inertias, frame-rate invariance, no-rudder machines, one-shot repair/jump, lethal floor, falling, aerial wall clearance, collisions, forward/reverse lap checks.",
 );
 
 // A completed distance alone must not count: the source requires a g tile.

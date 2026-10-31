@@ -25,7 +25,6 @@ declare global {
   interface Window {
     demoAudioAnalyser: AnalyserNode;
     HOVER_TRACKS: RawTrack[];
-    HOVER_TRAINING_TRACKS: RawTrack[];
     fidelity: {
       r: Renderer;
       t: Track;
@@ -58,7 +57,6 @@ declare global {
     };
     bombSounds: number;
     bombEvents: { note?: number; volume?: number }[];
-    helpScrollSteps: { fast: boolean; delta: number }[];
     recordPortraitRows: number[];
     recordListPortraits: Record<number, number[]>;
     recordListDrawImage: CanvasRenderingContext2D["drawImage"];

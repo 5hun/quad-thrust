@@ -6,7 +6,6 @@ const flat = (width = 20, rise = 0, bank = 0) =>
   E.prepare({
     name: "fixture",
     theme: 0,
-    training: true,
     samples: [
       {
         l: [-width / 2, 0, 0],
@@ -25,15 +24,13 @@ const tileTrack = (symbol: string) => {
 };
 // CAR_CTR.C car_chipeffect stores P/> on airborne entry, but defers J
 // until grip returns. Adjacent equal letters must still be one trigger.
-for (const symbol of ["J", "P", ">", "g", "s"]) {
+for (const symbol of ["J", "P", ">"]) {
   const track = tileTrack(symbol),
     car = E.create(track);
   car.previousTile = ".";
   car.y = 10;
   E.step(car, track, {}, 1 / 60);
   assert.equal(car.previousTile === symbol, symbol !== "J");
-  assert.equal(car.events.includes("goal"), symbol === "g");
-  assert.equal(car.events.includes("stop"), symbol === "s");
   car.y = 2;
   car.front.fill(0);
   car.rear.fill(0);
@@ -358,7 +355,6 @@ console.log(
 }
 {
   const track = tileTrack("g");
-  track.training = false;
   const car = E.create(track);
   car.previousTile = ".";
   car.linePosition = 100;

@@ -24,15 +24,17 @@ module.exports = async function verify({
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("console", (m) => {
-      if (m.type() === "error") errors.push(m.text());
+      // The local HTTP fixture has no favicon; keep game resource errors strict.
+      if (m.type() === "error" && !m.location().url.endsWith("/favicon.ico"))
+        errors.push(m.text());
     });
     await page.addInitScript(() => {
-      if (!localStorage.getItem("hover-autosave-v1"))
+      if (!localStorage.getItem("hover-autosave-v2"))
         localStorage.setItem(
-          "hover-autosave-v1",
+          "hover-autosave-v2",
           JSON.stringify({
-            version: 1,
-            values: { "hover-unlocks": "15" },
+            version: 2,
+            values: { "hover-unlocks": "7" },
           }),
         );
     });
@@ -613,51 +615,8 @@ module.exports = async function verify({
       await page.evaluate(() => window.fidelity.r.ships[0].body.visible),
       false,
     );
-    await page.evaluate(() => {
-      const { r, t, c } = window.fidelity;
-      delete c.explosionFrames;
-      c.type = 5;
-      c.sourceSpeed = 200;
-      c.ticks = 30;
-      r.draw(t, c, [], "running", 1, {});
-      c.ticks = 40;
-      r.draw(t, c, [], "running", 1, {});
-    });
-    assert.equal(
-      await page.evaluate(
-        () =>
-          window.fidelity.r.ships[0].limbs[0].fore.parent ===
-          window.fidelity.r.ships[0].limbs[0].arm,
-      ),
-      true,
-    );
-    assert.notEqual(
-      await page.evaluate(
-        () => window.fidelity.r.ships[0].limbs[0].knee.rotation.x,
-      ),
-      0,
-    );
-    await page.screenshot({ path: "/tmp/hover-source-suzuki.png" });
-    for (const text of ["COMPLETE", "MISS"] as const) {
-      await page.evaluate((text) => {
-        const { r, t, c } = window.fidelity;
-        r.result = { text, frame: 80 };
-        r.draw(t, c, [], "finished", 1, {});
-      }, text);
-      assert.equal(
-        await page.evaluate(
-          () =>
-            window.fidelity.r.resultLetters.children.filter((x) => x.visible)
-              .length,
-        ),
-        text.length,
-      );
-      await page.screenshot({
-        path: "/tmp/hover-source-" + text.toLowerCase() + ".png",
-      });
-    }
     // A real browser AudioWorklet must produce signal, release voices, and pause.
-    await page.locator("body").click({ position: { x: 1000, y: 850 } });
+    await page.mouse.click(5, 5);
     await page.evaluate(async () => {
       const f = window.fidelity;
       await f.sound.enable(true);
@@ -835,38 +794,9 @@ module.exports = async function verify({
       await f.sound.context!.close();
     });
     await page.evaluate(() => window.fidelity.canvas.remove());
-    // The audio stress runs longer than the original 30-second title timeout.
-    // Return from its attract demo before exercising the training menu.
-    await page.waitForFunction(
-      () => window.hoverDiagnostics().state === "demo",
-    );
-    await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter");
-    await page.getByRole("button", { name: "START", exact: true }).click();
-    await page.getByRole("button", { name: "TRAINING", exact: true }).click();
-    await page.getByRole("button", { name: "LEVEL 1", exact: true }).click();
-    await page.keyboard.press("Enter");
-    await page.evaluate(() => {
-      window.HoverTraining.step = (session) => {
-        session.status = "complete";
-        session.reason = "test";
-        return session.status;
-      };
-    });
-    await page.keyboard.press("Enter");
-    await page.waitForFunction(
-      () => window.hoverDiagnostics().state === "finished",
-    );
-    assert.equal(await page.locator("#result").isVisible(), false);
-    await page.waitForFunction(
-      () =>
-        window.hoverDiagnostics().state === "menu" &&
-        window.hoverDiagnostics().menuScreen === "training",
-    );
-    assert.equal(await page.locator("#result").isVisible(), false);
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: real Chromium HD depth pixels, five source lighting themes, damage/ghost materials, exhaust phases, 64 debris particles, bomb lifetime/overlay, articulated Suzuki, AudioWorklet stereo levels, warning/damage key-on/off, audio pause; no console/page errors",
+      "PASS: real Chromium HD depth pixels, five source lighting themes, damage/ghost materials, exhaust phases, 64 debris particles, bomb lifetime/overlay, AudioWorklet stereo levels, warning/damage key-on/off, audio pause; no console/page errors",
     );
   } finally {
     await browser.close();

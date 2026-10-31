@@ -17,7 +17,7 @@ namespace HoverRules {
   export function unlocks() {
     try {
       sessionUnlocks |=
-        Number((stateStorage || localStorage).getItem("hover-unlocks")) & 15;
+        Number((stateStorage || localStorage).getItem("hover-unlocks")) & 7;
     } catch {}
     return sessionUnlocks;
   }
@@ -30,20 +30,8 @@ namespace HoverRules {
       );
     } catch {}
   }
-  // TRAINIG.C awards SUZUKI only after leaving the training-selection loop.
-  export function completeTraining() {
-    if (!HoverTraining.loadMarks().every((mark) => (mark & 31) === 31)) return;
-    sessionUnlocks = unlocks() | 8;
-    try {
-      (stateStorage || localStorage).setItem(
-        "hover-unlocks",
-        String(sessionUnlocks),
-      );
-    } catch {}
-  }
   export function machineCount() {
-    const flags = unlocks();
-    return flags & 8 ? 6 : flags & 4 ? 5 : 4;
+    return unlocks() & 4 ? 5 : 4;
   }
   export function availableCups() {
     const flags = unlocks();
@@ -51,27 +39,17 @@ namespace HoverRules {
   }
   export function profile(mode: string) {
     const gp = /^gp[0-2]$/.test(mode),
-      practice = mode === "practice" || mode === "race",
-      free = mode === "free",
-      training = /^train[0-2]$/.test(mode);
+      practice = mode === "practice" || mode === "race";
     return {
-      training,
-      level: training ? Number(mode.slice(-1)) : null,
-      sourceMode: training ? 0 : gp ? 0 : practice ? 1 : free ? 2 : 4,
+      sourceMode: gp ? 0 : practice ? 1 : 4,
       cup: gp ? Number(mode.slice(2)) : null,
       opponents: gp || practice,
-      laps: free ? null : 3,
-      invulnerable: free,
-      recordClass: free || training ? null : gp || practice ? "gp" : "time",
-      description: training
-        ? "専用コースの課題を制限時間内に達成します。クリア状況は機体別に保存されます。"
-        : gp
-          ? "3コースのGP。各レース1位で次のコースへ進みます。"
-          : practice
-            ? "好きなコースでCPU3台と3周レース。ダメージあり。順位に関係なく、同じコースを何度でも練習できます。"
-            : free
-              ? "CPUなし・ダメージなし・周回数無制限。Rキーでコースに復帰できます。"
-              : "CPUなしの3周タイムアタック。保持中のゴーストと競えます。",
+      recordClass: gp || practice ? "gp" : "time",
+      description: gp
+        ? "3コースのGP。各レース1位で次のコースへ進みます。"
+        : practice
+          ? "好きなコースでCPU3台と3周レース。ダメージあり。順位に関係なく、同じコースを何度でも練習できます。"
+          : "CPUなしの3周タイムアタック。保持中のゴーストと競えます。",
     };
   }
   export function opponents(type: number) {
@@ -79,7 +57,7 @@ namespace HoverRules {
   }
   export function recordKey(mode: string, course: string | number) {
     const category = profile(mode).recordClass;
-    return category === null ? null : `hover-v3-record-${category}-${course}`;
+    return `hover-v3-record-${category}-${course}`;
   }
   export function nextCourse(
     mode: string,

@@ -34,21 +34,30 @@ module.exports = async function verify({
           (document.fullscreenElement?.id === "fullscreen-host") === active,
         active,
       );
+    const click = (name: string) =>
+      page.getByRole("button", { name, exact: true }).click();
     const enter = async () => {
-      await page.getByRole("button", { name: "全画面", exact: true }).click();
+      await click("FULLSCREEN: OFF");
       await fullscreen(true);
+      await page
+        .getByRole("button", { name: "FULLSCREEN: ON", exact: true })
+        .waitFor();
     };
     const exit = async () => {
-      // Also exercise the native fullscreenchange path without a game keydown.
       await page.evaluate(() => document.exitFullscreen());
       await fullscreen(false);
     };
     await page.goto(baseURL);
     await wait("demo");
-    await page.locator("#fullscreen").focus();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await click("OPTION");
+    await page
+      .getByRole("button", { name: "FULLSCREEN: OFF", exact: true })
+      .focus();
     await page.keyboard.press("Enter");
     await fullscreen(true);
-    assert.equal((await snapshot()).state, "demo");
+    assert.equal((await snapshot()).menuScreen, "option");
     for (const viewport of [
       { width: 1440, height: 900 },
       { width: 800, height: 1000 },
@@ -92,14 +101,15 @@ module.exports = async function verify({
       assert.equal(layout.controls, false);
       assert.equal(layout.settings, false);
     }
+    await click("FULLSCREEN: ON");
+    await fullscreen(false);
+    assert.equal((await snapshot()).menuSelection, 3);
+    await enter();
     await page.keyboard.press("Escape");
     await fullscreen(false);
-    assert.equal((await snapshot()).state, "demo");
-    await page.locator("#fullscreen-host").focus();
-    await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter");
-    await wait("menu");
+    assert.equal((await snapshot()).menuScreen, "option");
     await enter();
+    await page.keyboard.press("KeyX");
     await page.getByRole("button", { name: "START", exact: true }).click();
     await page
       .getByRole("button", { name: "TIME ATTACK", exact: true })
@@ -115,7 +125,17 @@ module.exports = async function verify({
     assert.equal((await snapshot()).ticks, paused.ticks);
     await page.getByRole("button", { name: "CONTINUE", exact: true }).click();
     await wait("running");
+    // Re-enter from OPTION and verify native exit pauses an active race.
+    await page.keyboard.press("Escape");
+    await page.locator("#back").click();
+    await click("OPTION");
     await enter();
+    await page.keyboard.press("KeyX");
+    await click("START");
+    await click("TIME ATTACK");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await wait("running");
     await page.keyboard.down("Space");
     await page.keyboard.press("Escape");
     await fullscreen(false);
@@ -124,39 +144,14 @@ module.exports = async function verify({
     const stopped = await snapshot();
     await page.waitForTimeout(200);
     assert.equal((await snapshot()).ticks, stopped.ticks);
-    assert.equal((await snapshot()).time, stopped.time);
-    // Leaving fullscreen while already paused must never toggle into a race.
-    await enter();
-    assert.equal((await snapshot()).state, "paused");
-    await page.keyboard.press("Escape");
-    await fullscreen(false);
-    assert.equal((await snapshot()).state, "paused");
-    await enter();
-    await page.getByRole("button", { name: "CONTINUE", exact: true }).click();
-    await wait("running");
-    await page.evaluate(() => {
-      const step = window.HoverEngine.step;
-      window.HoverEngine.step = (car, ...args) => {
-        step(car, ...args);
-        car.finished = true;
-        car.reason = "finish";
-        car.laps = [10, 11, 12];
-        car.time = 33;
-      };
-    });
-    await wait("finished");
-    await page.waitForFunction(() => !!window.hoverDiagnostics().postrace);
-    await fullscreen(true);
-    const postrace = (await snapshot()).postrace;
-    await page.keyboard.press("Escape");
-    await fullscreen(false);
-    assert.equal((await snapshot()).postrace, postrace);
+    await page.locator("#back").click();
+    await click("OPTION");
     // A refused fullscreen request leaves the regular game available.
     await page.evaluate(() => {
       document.getElementById("fullscreen-host")!.requestFullscreen = () =>
         Promise.reject(new Error("Fullscreen denied"));
     });
-    await page.locator("#fullscreen").click();
+    await click("FULLSCREEN: OFF");
     await page.locator("#fullscreen-status").waitFor({ state: "visible" });
     assert.equal(await page.evaluate(() => document.fullscreenElement), null);
     const unsupported = await browser.newPage();
@@ -165,7 +160,15 @@ module.exports = async function verify({
     });
     await unsupported.goto(baseURL);
     await unsupported.waitForFunction(() => !!window.hoverDiagnostics);
-    assert.equal(await unsupported.locator("#fullscreen").isVisible(), false);
+    await unsupported.keyboard.press("Enter");
+    await unsupported.keyboard.press("Enter");
+    await unsupported
+      .getByRole("button", { name: "OPTION", exact: true })
+      .click();
+    assert.deepEqual(
+      await unsupported.locator("#menu nav button").allTextContents(),
+      ["GAME LEVEL", "VIEW RECORDS", "SOUND: ON"],
+    );
     await unsupported.close();
     assert.deepEqual(errors, []);
     console.log(

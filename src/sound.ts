@@ -381,9 +381,7 @@ export class OriginalSound {
           volume = (
             name === "left" ? input.l1 || input.l2 : input.r1 || input.r2
           )
-            ? car.type === 5
-              ? 0
-              : 40 / 127
+            ? 40 / 127
             : 0;
       }
       // SsUtSetVVol supplies independent L/R amplitudes. StereoPanner uses

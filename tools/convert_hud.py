@@ -10,7 +10,7 @@ def alphabet(x,y,text,size):
   for row in range(size):vram[(y+row)*1024+x+i*words:(y+row)*1024+x+(i+1)*words]=vram[(sy+row)*1024+sx:(sy+row)*1024+sx+words]
 for x,y,s,n in [(576,384,'01234567',16),(576,400,'89',16),(584,408,'Km/h',8),(582,432,'/',16),(592,400,'TOTAL',8),(592,408,'LAP TIME',8),(576,416,'0123456789\'"',8),(576,424,'POSITIONBEST LAP',8),(576,448,'LASTLAPS',16),(576,464,'WRONGWAY',16),(584,480,'FINAL',16)]:alphabet(x,y,s,n)
 for palette in [487,497]:png(OUT/f'hud-{palette}.png',128,256,b''.join(rgba(pixel(25,palette<<6,u,v)) for v in range(256) for u in range(128)))
-# Glyph source for countdown and free-run messages, before any recoloring.
+# Glyph source for menu and HUD messages, before any recoloring.
 png(OUT/'font.png',256,128,b''.join(rgba(pixel(22,487<<6,u,v+128)) for v in range(128) for u in range(256)))
 
 # Red modulated label sprites from draw_time.
@@ -23,4 +23,4 @@ png(OUT/"bomb.png",64,128,b"".join(rgba(pixel(0x96,492<<6,u,v)) for v in range(1
 png(OUT/'title.png',256,128,b''.join(rgba(pixel(0x85,482<<6,u,v+128)) for v in range(128) for u in range(256)))
 
 # DRAW_SP.C best_draw / total_draw: original 24x16 machine portraits.
-png(OUT/'minicars.png',24,96,b''.join(rgba(pixel(0x116,0,u+32,v)) for v in range(96) for u in range(24)))
+png(OUT/'minicars.png',24,80,b''.join(rgba(pixel(0x116,0,u+32,v)) for v in range(80) for u in range(24)))

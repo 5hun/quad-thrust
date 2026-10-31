@@ -136,7 +136,7 @@ module.exports = async function verify({
       const drawHUD = OriginalHUD.prototype.draw;
       window.ghostMapMachines = [];
       OriginalHUD.prototype.draw = function (...args) {
-        if (args[8]) window.ghostMapMachines.push(args[8].type);
+        if (args[6]) window.ghostMapMachines.push(args[6].type);
         return drawHUD.apply(this, args);
       };
       window.ghostVisuals = [];

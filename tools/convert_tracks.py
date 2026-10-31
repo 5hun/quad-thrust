@@ -8,11 +8,10 @@ NAMES = ['Gulf City', 'Penta Rock', 'Ice Gate', 'KNight Town', 'Rollin’Stone',
          'Misty Arc', 'White Cutter', 'Highway Star', 'Desert Gora']
 
 
-def convert(idx, name, is_training, tables):
-    key = f'{idx//5+1}_{idx%5+1}' if is_training else f'{idx//3+1}_{idx%3+1}'
-    prefix = 'T' if is_training else ''
-    text = (ROOT/'extracted'/f'{prefix}STG{key}.TXT').read_text('cp932')
-    ptn = (ROOT/'extracted'/f'{prefix}PTN{key}.TXT').read_text('cp932')
+def convert(idx, name, tables):
+    key = f'{idx//3+1}_{idx%3+1}'
+    text = (ROOT/'extracted'/f'STG{key}.TXT').read_text('cp932')
+    ptn = (ROOT/'extracted'/f'PTN{key}.TXT').read_text('cp932')
     patterns = parse_patterns(ptn)
     parts = {}
     for part in parse_parts(text):
@@ -38,20 +37,17 @@ def convert(idx, name, is_training, tables):
         i = parts[i]['next']
     assert len(seen) == len(parts), (name, len(seen), len(parts))
     start = next((i for i, s in enumerate(samples) if 'g' in s['tiles']), 0)
-    if not is_training:
-        samples = samples[start:]+samples[:start]
+    samples = samples[start:]+samples[:start]
     print(name, len(samples))
-    return {'name': name, 'theme': idx % 5 if is_training else [0, 1, 2, 0, 1, 3, 2, 3, 4][idx],
-            'training': is_training, 'samples': samples,
+    return {'name': name, 'theme': [0, 1, 2, 0, 1, 3, 2, 3, 4][idx],
+            'samples': samples,
             'parts': [{k: p[k] for k in ['id', 'next', 'before', 'writeF', 'writeB', 'extraF', 'extraB']} for p in parts.values()]}
 
 
 def main():
     tables = trig_tables()
-    tracks = [convert(i, n, False, tables) for i, n in enumerate(NAMES)]
-    training = [convert(i, f'TRAINING {i//5+1}-{i%5+1}', True, tables) for i in range(15)]
+    tracks = [convert(i, n, tables) for i, n in enumerate(NAMES)]
     (ROOT/'dist/tracks.js').write_text('window.HOVER_TRACKS='+json.dumps(tracks, separators=(',', ':'))+';\n')
-    (ROOT/'dist/training-tracks.js').write_text('window.HOVER_TRAINING_TRACKS='+json.dumps(training, separators=(',', ':'))+';\n')
 
 
 if __name__ == '__main__':

@@ -301,20 +301,19 @@ def main():
     cos = (ctypes.c_int*720)(*tables[0])
     def asset(name):
         return json.loads((ROOT/'dist'/name).read_text().split('=',1)[1].removesuffix('\n').removesuffix(';'))
-    exported = [asset('tracks.js'), asset('training-tracks.js')]
+    exported = asset('tracks.js')
     vertices = normals = parts = contacts = 0
     jobs = []
     with tempfile.TemporaryDirectory(prefix='hover-original-geometry-') as directory:
         oracle = compile_oracle(directory)
-        for script in sorted((ROOT/'extracted').glob('*STG*.TXT')):
+        for script in sorted((ROOT/'extracted').glob('STG*.TXT')):
             patterns = parse_patterns(script.with_name(script.name.replace('STG','PTN')).read_text('cp932'))
             oracle.reset_parts()
             source_parts = parse_parts(script.read_text('cp932'))
             all_geometry = {}
-            match = re.search(r'(T?)STG(\d)_(\d)', script.name)
-            training = bool(match[1])
-            course = (int(match[2])-1)*(5 if training else 3)+int(match[3])-1
-            track = exported[int(training)][course]
+            match = re.search(r'STG(\d)_(\d)', script.name)
+            course = (int(match[1])-1)*3+int(match[2])-1
+            track = exported[course]
             nodes = {(node['part'],node['partColumn']): (index,node) for index,node in enumerate(track['samples'])}
             for part in source_parts:
                 xs, ys, _ = patterns[part['pat']]
@@ -365,13 +364,13 @@ def main():
                         result = (ctypes.c_int*5)()
                         oracle.probe(part['id'],x,px,pz,result)
                         if result[0]<0:
-                            continue  # TRAINING terminal part has no next course.
+                            continue  # Outside the connected course.
                         index,_ = nodes[(part['id'],x)]
                         cases.append([index,px/100,pz/100,*list(result)])
                         contacts += 1
-            jobs.append({'training':training,'course':course,'cases':cases})
+            jobs.append({'course':course,'cases':cases})
     subprocess.run(['node',str(ROOT/'tests/check-source-track-cases.ts')], input=json.dumps(jobs), text=True, check=True, cwd=ROOT)
-    print(f'PASS: original C matches every vertex ({vertices}) and normal ({normals}) in {parts} parts / 24 courses, including {contacts} contact probes')
+    print(f'PASS: original C matches every vertex ({vertices}) and normal ({normals}) in {parts} parts / 9 courses, including {contacts} contact probes')
 
 
 if __name__ == '__main__':

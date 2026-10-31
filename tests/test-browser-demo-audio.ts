@@ -45,7 +45,7 @@ module.exports = async function verify({
         );
         // A normal browser setting interaction must unlock audio without
         // dismissing the demo or toggling SOUND OFF and ON.
-        await page.locator(".display-settings").click();
+        await page.locator("body").click({ position: { x: 5, y: 5 } });
       }
       await page.waitForFunction(
         () => {
@@ -68,23 +68,45 @@ module.exports = async function verify({
         return samples.some((value) => Math.abs(value) > 0.00001) === expected;
       };
       await page.waitForFunction(audioMatches, true);
-      await page.locator("#sound").click();
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("Enter");
+      await page.getByRole("button", { name: "OPTION", exact: true }).click();
+      await page
+        .getByRole("button", { name: "SOUND: ON", exact: true })
+        .click();
       await page.waitForFunction(audioMatches, false);
       assert.equal(
-        (await page.locator("#sound").textContent())?.trim(),
-        "SOUND OFF",
+        (
+          await page.getByRole("button", { name: /^SOUND:/ }).textContent()
+        )?.trim(),
+        "SOUND: OFF",
       );
-      await page.locator(".display-settings").click();
+      await page.locator("body").click({ position: { x: 5, y: 5 } });
       assert.equal(await page.evaluate(audioMatches, false), true);
       assert.equal(
-        (await page.locator("#sound").textContent())?.trim(),
-        "SOUND OFF",
+        (
+          await page.getByRole("button", { name: /^SOUND:/ }).textContent()
+        )?.trim(),
+        "SOUND: OFF",
       );
-      await page.locator("#sound").click();
+      await page
+        .getByRole("button", { name: "SOUND: OFF", exact: true })
+        .click();
+      // SELECT BGM resumes only after sound is enabled again.
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: "START", exact: true }).click();
+      await page
+        .getByRole("button", { name: "TIME ATTACK", exact: true })
+        .click();
       await page.waitForFunction(audioMatches, true);
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: "OPTION", exact: true }).click();
       assert.equal(
-        (await page.locator("#sound").textContent())?.trim(),
-        "SOUND ON",
+        (
+          await page.getByRole("button", { name: /^SOUND:/ }).textContent()
+        )?.trim(),
+        "SOUND: ON",
       );
       assert.deepEqual(errors, []);
       console.log(

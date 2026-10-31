@@ -1,10 +1,9 @@
 // One browser save for progress, records and settings. Replays stay in memory.
-export const SAVE_KEY = "hover-autosave-v1";
+export const SAVE_KEY = "hover-autosave-v2";
 
 function defaults() {
   const values = new Map<string, string>([
     ["hover-unlocks", "0"],
-    ["hover-training-marks", JSON.stringify(Array(15).fill(0))],
     ["hover-player-name", "AAA"],
     ["hover-cpu-difficulty", "1"],
   ]);
@@ -28,19 +27,13 @@ function defaults() {
 
 function validValue(key: string, value: unknown): value is string {
   if (typeof value !== "string") return false;
-  if (key === "hover-unlocks") return /^(?:[0-9]|1[0-5])$/.test(value);
+  if (key === "hover-unlocks") return /^[0-7]$/.test(value);
   if (key === "hover-cpu-difficulty") return /^[0-3]$/.test(value);
   if (key === "hover-player-name") return /^[A-Z,.^_0-9%*?&!]{3}$/.test(value);
   if (/^hover-v3-record-(gp|time)-[0-8]$/.test(key))
     return Number.isFinite(Number(value)) && Number(value) > 0;
   try {
     const data = JSON.parse(value);
-    if (key === "hover-training-marks")
-      return (
-        Array.isArray(data) &&
-        data.length === 15 &&
-        data.every((n) => Number.isInteger(n) && n >= 0 && n <= 63)
-      );
     if (/^hover-records-(gp|time)-[0-8]-(lap|total)$/.test(key))
       return (
         Array.isArray(data) &&
@@ -52,7 +45,7 @@ function validValue(key: string, value: unknown): value is string {
             row.time > 0 &&
             Number.isInteger(row.machine) &&
             row.machine >= 0 &&
-            row.machine <= 5 &&
+            row.machine < 5 &&
             (row.name === undefined ||
               (typeof row.name === "string" && row.name.length <= 3)),
         )
@@ -71,7 +64,7 @@ export class SaveStore implements Storage {
       if (!raw) return;
       const saved = JSON.parse(raw);
       if (
-        saved?.version !== 1 ||
+        saved?.version !== 2 ||
         !saved.values ||
         typeof saved.values !== "object" ||
         Array.isArray(saved.values)
@@ -112,7 +105,7 @@ export class SaveStore implements Storage {
     try {
       this.storage.setItem(
         SAVE_KEY,
-        JSON.stringify({ version: 1, values: Object.fromEntries(this.data) }),
+        JSON.stringify({ version: 2, values: Object.fromEntries(this.data) }),
       );
       this.saveError = false;
     } catch {

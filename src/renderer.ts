@@ -2,7 +2,6 @@
 import * as THREE from "./vendor/three.module.js";
 import { OriginalBackground } from "./background.js";
 import { ReplayDirector } from "./replay.js";
-import type { OriginalHelp } from "./help.js";
 const E = window.HoverEngine;
 const TILE: Record<string, number> = {
   ".": 0,
@@ -122,7 +121,7 @@ export class HoverRenderer {
   // COURCE.C DQA * H * 65536 / 4096^2, with PS1 units / 100.
   sourceDepth = { value: 96 };
   result: {
-    text: "COMPLETE" | "MISS" | "FINISH" | "1ST" | "2ND" | "3RD" | "4TH";
+    text: "FINISH" | "1ST" | "2ND" | "3RD" | "4TH";
     frame: number;
   } | null = null;
   gpRecords = false;
@@ -380,9 +379,7 @@ export class HoverRenderer {
       const [textureName, semi] = material.split("|");
       const fx =
         name === "OTHER" ||
-        (name !== "YAKA_MAN" &&
-          !name.startsWith("ALP_") &&
-          (index === 2 || index === 3));
+        (!name.startsWith("ALP_") && (index === 2 || index === 3));
       const mat = new THREE.MeshLambertMaterial({
         map: textureName === "solid" ? null : this.texture(textureName),
         vertexColors: true,
@@ -405,80 +402,36 @@ export class HoverRenderer {
       root = new THREE.Group(),
       body = new THREE.Group();
     root.add(body);
-    let flames: THREE.Group[] = [],
-      sides: THREE.Group[] = [],
-      rudders: THREE.Group[] = [];
-    const limbs: {
-      arm: THREE.Group;
-      fore: THREE.Group;
-      leg: THREE.Group;
-      knee: THREE.Group;
-      foot: THREE.Group;
-      s: number;
-    }[] = [];
-    if (type === 5) {
-      const torso = this.modelObject(name, 2);
-      body.add(torso);
-      body.add(this.modelObject(name, 6));
-      for (const s of [-1, 1]) {
-        const arm = new THREE.Group();
-        arm.position.set(s * 1.2675, -0.6104, 0);
-        arm.add(this.modelObject(name, 0));
-        const fore = this.modelObject(name, 1);
-        fore.position.y = -1.05;
-        arm.add(fore);
-        const hand = this.modelObject(name, 5);
-        hand.position.y = -1.3056;
-        fore.add(hand);
-        body.add(arm);
-        const leg = new THREE.Group();
-        leg.position.set(s * 0.489, -2.4472, -0.0555);
-        leg.add(this.modelObject(name, 3));
-        const knee = this.modelObject(name, 4);
-        knee.position.y = -2.265;
-        leg.add(knee);
-        const foot = this.modelObject(name, 8);
-        foot.position.y = -1.815;
-        knee.add(foot);
-        body.add(leg);
-        limbs.push({ arm, fore, leg, knee, foot, s });
-      }
-      body.position.y = 4.5;
-    } else {
-      body.add(this.modelObject(name, 0));
-      const mounts = MOUNTS[type],
-        mount = (index: number, p: Vec3) => {
-          const g = this.modelObject(name, index);
-          g.position.set(p[0] / 100, -p[1] / 100, -p[2] / 100);
-          body.add(g);
-          return g;
-        };
-      rudders = mounts.rudder.map((p) => mount(1, p));
-      flames = mounts.rear.map((p) => mount(2, p));
-      sides = mounts.side.map((p, i) => {
-        const g = mount(3, p);
-        g.rotation.y = i < 2 ? -Math.PI / 2 : Math.PI / 2;
+    body.add(this.modelObject(name, 0));
+    const mounts = MOUNTS[type],
+      mount = (index: number, p: Vec3) => {
+        const g = this.modelObject(name, index);
+        g.position.set(p[0] / 100, -p[1] / 100, -p[2] / 100);
+        body.add(g);
         return g;
-      });
-    }
+      };
+    const rudders = mounts.rudder.map((p) => mount(1, p));
+    const flames = mounts.rear.map((p) => mount(2, p));
+    const sides = mounts.side.map((p, i) => {
+      const g = mount(3, p);
+      g.rotation.y = i < 2 ? -Math.PI / 2 : Math.PI / 2;
+      return g;
+    });
     // Original TMD silhouette follows the ground independently from the body.
-    let shadow: THREE.Group | undefined;
-    if (type !== 5) {
-      shadow = this.modelObject(name, 4, false);
-      shadow.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
-          (o.material as THREE.Material).dispose();
-          o.material = new THREE.MeshBasicMaterial({
-            color: 0x050509,
-            transparent: true,
-            opacity: 0.45,
-            side: THREE.DoubleSide,
-            depthWrite: false,
-          });
-        }
-      });
-      this.scene.add(shadow);
-    }
+    const shadow = this.modelObject(name, 4, false);
+    shadow.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        (o.material as THREE.Material).dispose();
+        o.material = new THREE.MeshBasicMaterial({
+          color: 0x050509,
+          transparent: true,
+          opacity: 0.45,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        });
+      }
+    });
+    this.scene.add(shadow);
     const explosions = Array.from({ length: 4 }, () => {
       const texture = this.texture("bomb.png").clone();
       texture.repeat.set(0.5, 0.25);
@@ -540,18 +493,15 @@ export class HoverRenderer {
       type,
       root,
       body,
-      hull: type === 5 ? null : body.children[0],
+      hull: body.children[0],
       flames,
       sides,
       rudders,
-      limbs,
       shadow,
       ghost,
       power,
       explosions,
       debris,
-      motionFrame: 0,
-      motionTick: -1,
     };
   }
   sourceWorldMatrix(source: Vec3) {
@@ -664,39 +614,6 @@ export class HoverRenderer {
         !!input[names[i]] &&
         ((tick + (p.cpuSlot || 0)) & 1) === 1;
       g.rotation.x = (-tick * 165 * Math.PI * 2) / 4096;
-    });
-    if (ship.motionTick !== tick) {
-      const elapsed =
-        ship.motionTick < 0 ? 0 : Math.max(0, tick - ship.motionTick);
-      ship.motionFrame += elapsed * (((p.sourceSpeed || 0) >> 7) + 1);
-      ship.motionTick = tick;
-    }
-    // OMAKE.C DASH tables and cap_work's four-way integer interpolation.
-    const arm0 = [25, 30, 58, 74, 68, 39, 24, -7, -9, -11, -21];
-    const arm1 = [-57, -46, -8, -4, -8, -25, -54, -89, -100, -86, -59];
-    const foot0 = [0, 0, 19, 20, 11, -9, -30, -42, -36, -22, -14];
-    const foot1 = [27, 37, 34, 51, 79, 83, 87, 45, 14, -1, 10];
-    const motion = (a: number[], frame: number, parent?: number[]) => {
-      const f = frame % 44,
-        j = Math.floor(f / 4),
-        k = (j + 1) % 11;
-      const value = Math.trunc(
-        -(
-          (a[j] - (parent?.[j] || 0)) * 4096 * (4 - (f % 4)) +
-          (a[k] - (parent?.[k] || 0)) * 4096 * ((f % 4) + 1)
-        ) /
-          4 /
-          360,
-      );
-      return ((value + Math.trunc((13 * 4096) / 360 / 2)) * Math.PI * 2) / 4096;
-    };
-    ship.limbs.forEach(({ arm, fore, leg, knee, s }) => {
-      const f = ship.motionFrame + (s > 0 ? 0 : 22);
-      const standing = (p.sourceSpeed || 0) < 20;
-      arm.rotation.x = standing ? 0 : motion(arm0, f);
-      fore.rotation.x = standing ? 0 : motion(arm1, f, arm0);
-      leg.rotation.x = standing ? 0 : motion(foot0, f + 22);
-      knee.rotation.x = standing ? 0 : motion(foot1, f + 22, foot0);
     });
     if (ship.shadow) {
       ship.shadow.visible =
@@ -892,17 +809,15 @@ export class HoverRenderer {
       }
       this.countDigits.forEach((m) => (m.visible = false));
       this.resultLetters.visible = true;
-      // TRAINIG.C: one character every 8 ticks, Z 8000 -> 6000 by 200,
-      // Y rotation 4096/5 per tick while approaching the final position.
+      // Goal text approaches its final position one character every 8 ticks.
       this.resultLetters.children.forEach((m, i) => {
         const age = frame - (i + 1) * 8;
-        const training = text === "COMPLETE" || text === "MISS";
-        const steps = Math.min(training ? 10 : 5, Math.max(0, age + 1));
+        const steps = Math.min(5, Math.max(0, age + 1));
         m.visible = age >= 0;
         m.position.set(
           (i - (text.length - 1) / 2) * 6,
-          training || text === "FINISH" ? 0 : 6,
-          -(training ? 80 : 50) + steps * 2,
+          text === "FINISH" ? 0 : 6,
+          -50 + steps * 2,
         );
         m.rotation.y = (-steps * 819 * Math.PI * 2) / 4096;
       });
@@ -1016,101 +931,6 @@ export class HoverRenderer {
     }
     return this.menuShip;
   }
-  helpScene = new THREE.Scene();
-  helpTexture: THREE.CanvasTexture | null = null;
-  drawHelp(help: OriginalHelp) {
-    if (!this.helpTexture) {
-      this.helpTexture = new THREE.CanvasTexture(help.background);
-      this.helpTexture.colorSpace = THREE.SRGBColorSpace;
-      this.helpTexture.magFilter = THREE.NearestFilter;
-      this.helpTexture.minFilter = THREE.NearestFilter;
-      this.helpScene.background = this.helpTexture;
-      this.helpScene.add(new THREE.AmbientLight(0xffffff, 1.6));
-      const light = new THREE.DirectionalLight(0xffffff, 1.5);
-      light.position.set(0, 256, 128);
-      this.helpScene.add(light);
-    }
-    help.paintBackground();
-    this.helpTexture.needsUpdate = true;
-    this.menuCamera.position.set(0, 9.6, -3.2 * 1.7320508 * 3);
-    this.menuCamera.up.set(0, 1, 0);
-    this.menuCamera.lookAt(0, 0, 0);
-    this.menuCamera.setViewOffset(320, 240, 0, help.scroll, 320, 240);
-    help.annotations = [];
-    const mode = help.mode;
-    let ship: ReturnType<HoverRenderer["makeShip"]> | null = null;
-    if (mode >= 3) {
-      ship = this.getMenuShip(mode > 5 ? mode - 6 : 0);
-      const angle = ((mode === 5 ? 2176 : help.frame * 8) * Math.PI * 2) / 4096;
-      this.updateShip(
-        ship,
-        {
-          type: ship.type,
-          x: 0,
-          y: 0,
-          z: 0,
-          heading: -angle,
-          ticks: help.frame,
-          groundY: 0,
-        },
-        {
-          accel: mode === 4,
-          l1: mode === 5,
-          l2: mode === 5,
-          r1: mode === 5,
-          r2: mode === 5,
-        },
-        help.frame / 60,
-      );
-      this.helpScene.add(ship.root);
-      if (ship.shadow) this.helpScene.add(ship.shadow);
-      ship.root.updateMatrixWorld(true);
-      this.menuCamera.updateMatrixWorld(true);
-      const annotate = (
-        mount: THREE.Object3D,
-        text: string,
-        left = false,
-        offset?: THREE.Vector3,
-      ) => {
-        const world = offset
-          ? ship!.body.localToWorld(offset)
-          : mount.getWorldPosition(new THREE.Vector3());
-        const screen = world.project(this.menuCamera);
-        help.annotations.push({
-          x: (screen.x + 1) * 160,
-          y: (1 - screen.y) * 120,
-          text,
-          left,
-        });
-      };
-      if (mode === 3) {
-        const p = MOUNTS[0].rudder[0];
-        annotate(
-          ship.rudders[0],
-          "RADDER",
-          false,
-          new THREE.Vector3(p[0] / 100, -(p[1] + 32) / 100, -(p[2] - 64) / 100),
-        );
-      }
-      if (mode === 4) annotate(ship.flames[0], "BOOSTER");
-      if (mode === 5)
-        ship.sides.forEach((side, i) =>
-          annotate(
-            side,
-            ["SLASTER L1", "SLASTER L2", "SLASTER R1", "SLASTER R2"][i],
-            i < 2,
-          ),
-        );
-    }
-    this.renderer.autoClear = true;
-    this.renderer.render(this.helpScene, this.menuCamera);
-    if (ship) {
-      this.helpScene.remove(ship.root);
-      if (ship.shadow) this.helpScene.remove(ship.shadow);
-    }
-    this.menuCamera.clearViewOffset();
-    ++this.frames;
-  }
   drawMenu(screen: string, track: Track, type: number, time: number, age = 1) {
     if (this.menuScene.children.length === 0) {
       this.menuScene.background = new THREE.Color(0);
@@ -1214,10 +1034,6 @@ export class HoverRenderer {
     }
     this.renderer.autoClear = true;
     this.frames++;
-  }
-  drawBlank() {
-    this.renderer.setClearColor(0x000000, 1);
-    this.renderer.clear(true, true, true);
   }
   diagnostics() {
     return {

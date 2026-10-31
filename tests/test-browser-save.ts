@@ -42,8 +42,8 @@ module.exports = async function verify({
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
       "GAME LEVEL",
       "VIEW RECORDS",
-      "VIEW REPLAY",
-      "MUSIC MODE",
+      "SOUND: ON",
+      "FULLSCREEN: OFF",
     ]);
     await click("GAME LEVEL");
     assert.equal((await snap()).menuSelection, 1);
@@ -60,7 +60,6 @@ module.exports = async function verify({
     await page.evaluate(() => {
       window.HoverRules.completeCup(0);
       window.HoverRules.completeCup(1);
-      window.HoverTraining.saveMark(3, 2);
       window.HoverRecords.save("time", 2, "lap", 12.5, 2, "ABC");
       window.HoverRecords.save("time", 2, "total", 40, 2, "ABC");
     });
@@ -69,38 +68,21 @@ module.exports = async function verify({
     assert.equal((await snap()).cpuDifficulty, 2);
     const progress = await page.evaluate(() => ({
       cups: window.HoverRules.availableCups(),
-      marks: window.HoverTraining.loadMarks(),
       lap: window.HoverRecords.read("time", 2, "lap")[0],
       total: window.HoverRecords.read("time", 2, "total")[0],
     }));
     assert.equal(progress.cups, 3);
-    assert.equal(progress.marks[3], 4);
     assert.deepEqual(progress.lap, { time: 12.5, machine: 2, name: "ABC" });
     assert.deepEqual(progress.total, { time: 40, machine: 2, name: "ABC" });
     assert.equal((await snap()).lastReplay, null);
     await click("OPTION");
     assert.equal(
       await page.getByRole("button", { name: "ENDING", exact: true }).count(),
-      1,
-    );
-    assert.equal(
-      await page
-        .getByRole("button", { name: "MEMORY CARD", exact: true })
-        .count(),
       0,
     );
-    await click("ENDING");
-    assert.equal(
-      (await snap()).postrace,
-      "credits",
-      "credits remain available after reload without a replay",
-    );
-    assert.equal((await snap()).state, "replay");
-    await page.keyboard.press("Enter");
-    assert.equal((await snap()).menuScreen, "option");
     // Ignore all old profiles, including ones with autoload enabled.
     await page.evaluate(() => {
-      localStorage.removeItem("hover-autosave-v1");
+      localStorage.removeItem("hover-autosave-v2");
       localStorage.setItem("hover-unlocks", "15");
       localStorage.setItem("hover-cpu-difficulty", "3");
       localStorage.setItem(
@@ -113,7 +95,7 @@ module.exports = async function verify({
     assert.equal((await snap()).cpuDifficulty, 0);
     assert.equal(await page.evaluate(() => window.HoverRules.unlocks()), 0);
     await page.evaluate(() =>
-      localStorage.setItem("hover-autosave-v1", "{broken"),
+      localStorage.setItem("hover-autosave-v2", "{broken"),
     );
     await page.reload();
     await title();

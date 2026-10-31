@@ -780,12 +780,6 @@ select:disabled {
   }
 }
 
-#training-status {
-  font: 10px monospace;
-  line-height: 1.5;
-  color: var(--accent);
-  margin: 6px 0 10px;
-}
 .game-wrap:not(.playing) {
   min-height: 780px;
 }
@@ -864,12 +858,6 @@ main {
   outline: 1px solid #00ff00;
   outline-offset: 3px;
 }
-.browser-options button {
-  border: 1px solid #444;
-  background: #111;
-  color: #ccc;
-  padding: 8px 12px;
-}
 #fullscreen-host:fullscreen {
   display: flex;
   justify-content: center;
@@ -885,31 +873,15 @@ main {
   flex: none;
 }
 #fullscreen-status {
-  color: #aaa;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px;
+  background: #000;
+  color: #fff;
   text-align: center;
-}
-.browser-options {
-  margin: 12px auto 0;
-  padding: 12px;
-  border: 1px solid #333;
-  color: #aaa;
-  font-size: 12px;
-}
-.browser-options[hidden] {
-  display: none;
-}
-.display-settings {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-.browser-options select {
-  width: auto;
-  margin: 0;
-}
-.browser-options label {
-  margin: 0;
+  z-index: 10;
 }
 .controls,
 main > details {
@@ -946,9 +918,6 @@ main > details {
     height: auto;
     min-height: 0;
     aspect-ratio: 4 / 3;
-  }
-  .browser-options {
-    margin: 12px;
   }
 }
 

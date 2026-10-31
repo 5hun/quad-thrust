@@ -176,7 +176,7 @@ export function decodeOriginalReplay(bytes: Uint8Array): ReplayTape {
   };
 }
 // Re-run the same fixed-step simulation as the race, rather than interpolating
-// positions. No live input, best-time writes, or training/GP progression occurs.
+// positions. No live input, best-time writes, or GP progression occurs.
 export class InputReplay {
   reader: ReplayReader;
   car: Car;

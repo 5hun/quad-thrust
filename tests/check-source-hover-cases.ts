@@ -5,14 +5,12 @@ const assert: typeof import("node:assert/strict") = require("node:assert/strict"
   vm = require("node:vm") as typeof import("node:vm");
 const E = require("../dist/engine.js") as typeof HoverEngine,
   context = { window: {} as Window };
-for (const name of ["tracks", "training-tracks"])
-  vm.runInNewContext(
-    fs.readFileSync(`${__dirname}/../dist/${name}.js`, "utf8"),
-    context,
-  );
+vm.runInNewContext(
+  fs.readFileSync(`${__dirname}/../dist/tracks.js`, "utf8"),
+  context,
+);
 const { jobs, speeds, rolls } = JSON.parse(fs.readFileSync(0, "utf8")) as {
   jobs: {
-    training: boolean;
     course: number;
     cases: [number, number[], number[]][];
   }[];
@@ -34,10 +32,8 @@ for (const [roll, expected] of rolls) {
   );
 }
 let count = 0;
-for (const { training, course, cases } of jobs) {
-  const track = E.prepare(
-    context.window[training ? "HOVER_TRAINING_TRACKS" : "HOVER_TRACKS"][course],
-  );
+for (const { course, cases } of jobs) {
+  const track = E.prepare(context.window.HOVER_TRACKS[course]);
   for (const [index, v, expected] of cases) {
     const car = E.create(track, v[9]);
     Object.assign(car, {

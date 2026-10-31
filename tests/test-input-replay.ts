@@ -185,10 +185,10 @@ const E = require("../dist/engine.js") as typeof HoverEngine;
     machine: 0,
     totalTicks: 1000,
   };
-  assert.equal(memory.beginRace(0, 0, 4), null);
+  assert.equal(memory.beginRace(0, 4), null);
   memory.complete(firstTape);
   assert.equal(
-    memory.beginRace(0, 1, 4),
+    memory.beginRace(0, 4),
     firstTape,
     "different machine uses the same source ghost",
   );
@@ -202,14 +202,14 @@ const E = require("../dist/engine.js") as typeof HoverEngine;
     firstTape,
     "repeated finish snapshots retain the race's starting ghost",
   );
-  memory.beginRace(0, 2, 4);
+  memory.beginRace(0, 4);
   memory.complete({ ...slower, machine: 2, totalTicks: 1000 });
   assert.equal(memory.saved, firstTape, "ties do not replace the ghost buffer");
-  memory.beginRace(0, 3, 4);
+  memory.beginRace(0, 4);
   const faster = { ...firstTape, machine: 3, totalTicks: 900 };
   memory.complete(faster);
   assert.equal(memory.saved, faster);
-  assert.equal(memory.beginRace(1, 0, 4), null);
+  assert.equal(memory.beginRace(1, 4), null);
   assert.equal(
     memory.saved,
     faster,
@@ -218,11 +218,11 @@ const E = require("../dist/engine.js") as typeof HoverEngine;
   const otherCourse = { ...firstTape, course: 1, totalTicks: 1200 };
   memory.complete(otherCourse);
   assert.equal(
-    memory.beginRace(0, 0, 4),
+    memory.beginRace(0, 4),
     null,
     "there is one source buffer, not a per-course cache",
   );
-  memory.beginRace(1, 0, 4, false);
+  memory.beginRace(1, 4, false);
   const disabled = { ...otherCourse, totalTicks: 1300 };
   memory.complete(disabled);
   assert.equal(
@@ -230,27 +230,11 @@ const E = require("../dist/engine.js") as typeof HoverEngine;
     disabled,
     "a run without a ghost records unconditionally",
   );
-  const suzuki = { ...firstTape, machine: 5 };
-  memory.beginRace(0, 5, 4);
-  memory.complete(suzuki);
-  assert.equal(
-    memory.beginRace(0, 5, 4),
-    null,
-    "SUZUKI versus SUZUKI has no ghost",
-  );
-  const slowSuzuki = { ...suzuki, totalTicks: 2000 };
-  memory.complete(slowSuzuki);
-  assert.equal(
-    memory.saved,
-    slowSuzuki,
-    "the source's SUZUKI exception also affects replacement",
-  );
-  assert.equal(memory.beginRace(0, 0, 4), slowSuzuki);
-  assert.equal(memory.beginRace(0, 0, 1), null);
+  assert.equal(memory.beginRace(0, 1), null);
   const practice = { ...firstTape, gameMode: 1 };
   memory.complete(practice);
   assert.equal(
-    memory.beginRace(0, 0, 4),
+    memory.beginRace(0, 4),
     null,
     "a completed GP/practice replay replaces the TA buffer",
   );

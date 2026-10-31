@@ -89,18 +89,16 @@ export class OriginalHUD {
         y = 32 - (p.z - this.mz) * this.scale;
       i ? g.lineTo(x, y) : g.moveTo(x, y);
     });
-    if (!track.training) g.closePath();
+    g.closePath();
     g.stroke();
   }
   draw(
     car: Car,
     track: Track,
     bots: Car[],
-    mode: string,
     best: number,
     state: string,
     countdown: number,
-    training: TrainingSession | null = null,
     ghost: Pose | null = null,
   ) {
     const g = this.g;
@@ -123,41 +121,16 @@ export class OriginalHUD {
         ),
       );
     this.sprite(32, 144, 32, 16, 280, 216);
-    if (training) {
-      this.text("TIME", 232, 8);
-      this.text(
-        String(Math.ceil(training.remaining / 60)).padStart(2, "0"),
-        232,
-        16,
-        16,
-      );
-    } else {
-      this.sprite(64, 144, 40, 8, 8, 8, "red");
-      this.time(car.time, 16, 18);
-      this.sprite(64, 152, 64, 8, 232, 8, "red");
-      const row = car.laps.length % 3;
-      for (let i = 0; i < 3; i++) {
-        let t: number;
-        if (mode === "free") {
-          const completed =
-            car.laps.length - 1 - ((car.laps.length - 1 - i + 3) % 3);
-          t =
-            i === row
-              ? car.time - car.lapStart
-              : completed >= 0
-                ? car.laps[completed]
-                : 0;
-        } else
-          t =
-            car.laps[i] ??
-            (i === car.laps.length ? car.time - car.lapStart : 0);
-        this.time(t, 240, 18 + i * 12);
-      }
-      if (mode !== "free") {
-        this.sprite(64, 168, 64, 8, 232, 58, "red");
-        this.time(Number.isFinite(best) ? best : 0, 240, 68);
-      }
+    this.sprite(64, 144, 40, 8, 8, 8, "red");
+    this.time(car.time, 16, 18);
+    this.sprite(64, 152, 64, 8, 232, 8, "red");
+    for (let i = 0; i < 3; i++) {
+      const t =
+        car.laps[i] ?? (i === car.laps.length ? car.time - car.lapStart : 0);
+      this.time(t, 240, 18 + i * 12);
     }
+    this.sprite(64, 168, 64, 8, 232, 58, "red");
+    this.time(Number.isFinite(best) ? best : 0, 240, 68);
 
     if (bots.length) {
       this.sprite(0, 168, 64, 24, 128, 8);
@@ -169,13 +142,11 @@ export class OriginalHUD {
       );
       this.text("4", 176, 16, 16);
     }
-    if (mode !== "free") {
-      this.sprite(0, 224, 16, 32, 8, 204, 497);
-      const power = Math.max(0, Math.floor((29 * car.energy) / 100));
-      this.sprite(16, 254 - power, 8, power, 16, 234 - power, 497);
-    }
+    this.sprite(0, 224, 16, 32, 8, 204, 497);
+    const power = Math.max(0, Math.floor((29 * car.energy) / 100));
+    this.sprite(16, 254 - power, 8, power, 16, 234 - power, 497);
     if (this.track !== track) this.mapTrack(track);
-    const mapY = training ? 0 : 32;
+    const mapY = 32;
     g.drawImage(this.map, 8, mapY);
     for (const p of [...bots, ...(ghost ? [ghost] : []), car]) {
       const x = 40 + (p.x - this.mx) * this.scale,
@@ -193,7 +164,7 @@ export class OriginalHUD {
       }
       g.restore();
     }
-    if (!training && (car.lapDraw ?? 0) > 0 && mode !== "free") {
+    if ((car.lapDraw ?? 0) > 0) {
       if (car.laps.length === 2) {
         this.sprite(32, 224, 80, 16, 64, 56);
         this.sprite(64, 192, 48, 16, 160, 56);

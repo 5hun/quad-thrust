@@ -55,26 +55,26 @@ module.exports = async function verify({
       await click(mode);
     };
     await page.addInitScript(() => {
-      if (!localStorage.getItem("hover-autosave-v1"))
+      if (!localStorage.getItem("hover-autosave-v2"))
         localStorage.setItem(
-          "hover-autosave-v1",
+          "hover-autosave-v2",
           JSON.stringify({
-            version: 1,
-            values: { "hover-unlocks": "15" },
+            version: 2,
+            values: { "hover-unlocks": "7" },
           }),
         );
     });
     await page.goto(baseURL);
     await enterTitle();
     await screen("title");
-    assert.equal(await page.locator(".browser-options").isVisible(), true);
+    assert.equal(await page.locator(".browser-options").count(), 0);
     assert.equal(await page.locator(".browser-options summary").count(), 0);
     assert.equal(
       await page.locator("#difficulty, #ghost-enabled, #pause").count(),
       0,
     );
     assert.equal(await page.locator("#quality, label[for=quality]").count(), 0);
-    assert.equal(await page.locator("#sound").isVisible(), true);
+    assert.equal(await page.locator("#sound, #fullscreen").count(), 0);
     assert.equal(
       await page.locator("#browser-settings, input[type=file]").count(),
       0,
@@ -82,8 +82,6 @@ module.exports = async function verify({
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
       "START",
       "OPTION",
-      "HELP",
-      "EXIT",
     ]);
     await press("Enter");
     await screen("modes");
@@ -92,7 +90,7 @@ module.exports = async function verify({
     await screen("car");
     assert.equal(await page.locator("#menu nav button").count(), 0);
     assert.equal(await page.locator("#mode").inputValue(), "time");
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       assert.equal(await page.locator("#machine").inputValue(), String(i));
       await press("ArrowRight");
     }
@@ -142,42 +140,6 @@ module.exports = async function verify({
       await page.locator("#back").click();
       await screen("title");
     }
-    for (let level = 1; level <= 3; level++) {
-      await choose("TRAINING");
-      await click("LEVEL " + level);
-      await screen("training");
-      await press("ArrowRight");
-      assert.equal(
-        await page.locator("#course").inputValue(),
-        String((level - 1) * 5 + 1),
-      );
-      await press("Enter");
-      await screen("car");
-      await press("Escape");
-      await screen("training");
-      await press("Enter");
-      await press("Enter");
-      await page.waitForFunction(
-        () => window.hoverDiagnostics().state === "countdown",
-      );
-      assert.equal(
-        (await page.evaluate(() => window.hoverDiagnostics())).training!.stage,
-        (level - 1) * 5 + 1,
-      );
-      await press("Escape");
-      await page.locator("#back").click();
-      await screen("training");
-      await press("Escape");
-      await press("Escape");
-      await press("Escape");
-      await screen("title");
-    }
-    await choose("TRAINING");
-    await click("FREE RUN");
-    await screen("car");
-    await press("Enter");
-    await screen("course");
-    assert.equal(await page.locator("#mode").inputValue(), "free");
     await title();
     await click("OPTION");
     await click("VIEW RECORDS");
@@ -187,7 +149,7 @@ module.exports = async function verify({
     await press("Enter");
     await screen("record-detail");
     await page.evaluate(() => {
-      for (let machine = 0; machine < 6; machine++) {
+      for (let machine = 0; machine < 5; machine++) {
         window.HoverRecords.save(
           "time",
           1,
@@ -220,13 +182,13 @@ module.exports = async function verify({
       };
     });
     await page.waitForFunction(
-      () => new Set(window.recordPortraitRows).size === 6,
+      () => new Set(window.recordPortraitRows).size === 5,
     );
     assert.deepEqual(
       await page.evaluate(() =>
         [...new Set(window.recordPortraitRows)].sort((a, b) => a - b),
       ),
-      [0, 16, 32, 48, 64, 80],
+      [0, 16, 32, 48, 64],
     );
     await page.screenshot({ path: "/tmp/hover-view-records-fixed.png" });
     await press("Enter");
@@ -256,7 +218,7 @@ module.exports = async function verify({
                 course,
                 kind,
                 0.01,
-                (course + line + offset) % 6,
+                (course + line + offset) % 5,
                 "WIN",
               );
           window.recordListPortraits = {};
@@ -292,7 +254,7 @@ module.exports = async function verify({
           const y = 24 + course * 24 + line * 10;
           assert.deepEqual(portraits[y], [
             0,
-            ((course + line + offset) % 6) * 16,
+            ((course + line + offset) % 5) * 16,
             24,
             16,
             160,
@@ -305,27 +267,28 @@ module.exports = async function verify({
     await page.screenshot({ path: "/tmp/hover-record-list-fixed.png" });
     await title();
     await click("OPTION");
-    await click("MUSIC MODE");
-    await screen("music");
+    assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
+      "GAME LEVEL",
+      "VIEW RECORDS",
+      "SOUND: ON",
+      "FULLSCREEN: OFF",
+    ]);
+    await click("SOUND: ON");
+    assert.equal(
+      await page
+        .getByRole("button", { name: "SOUND: OFF", exact: true })
+        .count(),
+      1,
+    );
     await press("Enter");
-    await page.waitForFunction(
-      () => window.hoverDiagnostics().music === "SAMPLE16",
+    assert.equal(
+      await page
+        .getByRole("button", { name: "SOUND: ON", exact: true })
+        .count(),
+      1,
     );
-    await press("Escape");
-    await screen("option");
-    await title();
-    await choose("2P BATTLE");
-    await screen("notice");
-    assert.match(
-      (await page.locator("#menu").getAttribute("aria-label"))!,
-      /未対応/,
-    );
-    await title();
-    await click("HELP");
-    await screen("help");
     await press("Escape");
     await screen("title");
-    await press("ArrowUp");
     await press("ArrowUp");
     // Gamepad button edges follow the same menu path, without race controls firing.
     await page.evaluate(() => {
@@ -370,87 +333,9 @@ module.exports = async function verify({
       1,
     );
     await title();
-    await click("EXIT");
-    await page.waitForFunction(
-      () => window.hoverDiagnostics().state === "exited",
-    );
-    assert.equal(await page.locator(".browser-options").isVisible(), false);
-    assert.equal(await page.locator("#menu-controls").count(), 0);
-    assert.equal(await page.locator("#menu nav button").count(), 0);
-    assert.equal(
-      await page.evaluate(() => window.hoverDiagnostics().music),
-      null,
-    );
-    assert.equal(
-      await page.evaluate(() => {
-        const data = (
-          document.getElementById("original-menu") as HTMLCanvasElement
-        )
-          .getContext("2d")!
-          .getImageData(0, 0, 320, 240).data;
-        return data.every((value, i) => i % 4 !== 3 || value === 0);
-      }),
-      true,
-      "no substitute notice is drawn after EXIT",
-    );
-    await press("Enter");
-    await press("Escape");
-    assert.equal(
-      await page.evaluate(() => window.hoverDiagnostics().state),
-      "exited",
-    );
-    await page.screenshot({ path: "/tmp/hover-exited.png" });
-    // Keyboard confirmation occurs inside update(); it must not redraw the
-    // title later in that same animation frame after clearing the display.
-    await title();
-    await press("ArrowDown");
-    await press("ArrowDown");
-    await press("ArrowDown");
-    await press("Enter");
-    await page.waitForFunction(
-      () => window.hoverDiagnostics().state === "exited",
-    );
-    assert.equal(
-      await page.evaluate(() => {
-        const data = (
-          document.getElementById("original-menu") as HTMLCanvasElement
-        )
-          .getContext("2d")!
-          .getImageData(0, 0, 320, 240).data;
-        return data.every((value, i) => i % 4 !== 3 || value === 0);
-      }),
-      true,
-      "keyboard EXIT keeps the final frame blank",
-    );
-    const exitPixels = await page.locator("#game").screenshot();
-    assert.equal(
-      await page.evaluate(
-        async (bytes) => {
-          const bitmap = await window.createImageBitmap(
-            new window.Blob([new Uint8Array(bytes)], { type: "image/png" }),
-          );
-          const canvas = document.createElement("canvas");
-          canvas.width = bitmap.width;
-          canvas.height = bitmap.height;
-          const context = canvas.getContext("2d");
-          context!.drawImage(bitmap, 0, 0);
-          const data = context!.getImageData(
-            0,
-            0,
-            canvas.width,
-            canvas.height,
-          ).data;
-          return data.every((value, i) => i % 4 === 3 || value === 0);
-        },
-        [...exitPixels],
-      ),
-      true,
-      "keyboard EXIT presents an entirely black WebGL frame",
-    );
-    await title();
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: original title tree; all machines/courses; GP, practice, training and free-run selection order; cancel; race start; records/music/help; keyboard, gamepad and narrow-screen layout",
+      "PASS: simplified title tree; all machines/courses; GP/practice selection order; cancel; race start; records/settings; keyboard, gamepad and narrow-screen layout",
     );
   } finally {
     await browser.close();

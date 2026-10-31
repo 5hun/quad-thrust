@@ -27,12 +27,12 @@ module.exports = async function verify({
         state,
       );
     await page.addInitScript(() => {
-      if (!localStorage.getItem("hover-autosave-v1"))
+      if (!localStorage.getItem("hover-autosave-v2"))
         localStorage.setItem(
-          "hover-autosave-v1",
+          "hover-autosave-v2",
           JSON.stringify({
-            version: 1,
-            values: { "hover-unlocks": "15" },
+            version: 2,
+            values: { "hover-unlocks": "7" },
           }),
         );
     });
@@ -62,11 +62,7 @@ module.exports = async function verify({
         page.getByRole("button", { name, exact: true }).click();
       await click("START");
       if (mode === "time") await click("TIME ATTACK");
-      else if (mode.startsWith("train")) {
-        await click("TRAINING");
-        await click(mode === "train1" ? "LEVEL 2" : "LEVEL 1");
-        await page.keyboard.press("Enter");
-      } else {
+      else {
         await click("GRANDPRIX");
         await click(mode === "practice" ? "PRACTICE" : "Blue GP");
       }
@@ -186,31 +182,6 @@ module.exports = async function verify({
       );
       assert.equal(d.time, 33);
       await page.waitForFunction(() => !!window.hoverDiagnostics().postrace);
-    }
-    // Rolling training retains its source autopilot before the start, and
-    // continues animating under the COMPLETE/MISS text with a frozen timer.
-    for (const status of ["complete", "miss"] as const) {
-      await start("train1");
-      const rolling = await snapshot();
-      await page.waitForTimeout(200);
-      assert.ok((await snapshot()).ticks > rolling.ticks);
-      assert.ok((await snapshot()).speed > 0);
-      await wait("running");
-      await page.evaluate((status) => {
-        window.HoverTraining.step = (session) => {
-          session.status = status;
-          session.reason = "test";
-          return session.status;
-        };
-      }, status);
-      await wait("finished");
-      const a = await snapshot();
-      await page.waitForTimeout(300);
-      const b = await snapshot();
-      assert.ok(b.ticks > a.ticks, "training result keeps simulation alive");
-      assert.equal(b.time, a.time);
-      assert.equal(b.training!.remaining, a.training!.remaining);
-      assert.equal(b.finishCamera, status === "miss");
     }
     // Other racers keep moving during the player's destruction/fall wait.
     for (const reason of ["destroyed", "course-out"] as const) {

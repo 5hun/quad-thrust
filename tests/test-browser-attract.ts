@@ -89,21 +89,12 @@ module.exports = async function verify({
       const yellow = [r.availableCups(), r.machineCount()];
       r.completeCup(2);
       const red = [r.availableCups(), r.machineCount()];
-      for (let stage = 0; stage < 15; stage++)
-        for (let machine = 0; machine < 4; machine++)
-          window.HoverTraining.saveMark(stage, machine);
-      const incomplete = r.machineCount();
-      for (let stage = 0; stage < 15; stage++)
-        window.HoverTraining.saveMark(stage, 4);
-      r.completeTraining();
-      return { blue, yellow, red, incomplete, complete: r.machineCount() };
+      return { blue, yellow, red };
     });
     assert.deepEqual(progress, {
       blue: [2, 4],
       yellow: [3, 4],
       red: [3, 5],
-      incomplete: 5,
-      complete: 6,
     });
     await page.reload();
     await page.waitForFunction(
@@ -147,7 +138,7 @@ module.exports = async function verify({
       "PRACTICE",
     ]);
     await click("Red GP");
-    assert.equal(await page.locator("#machine option").count(), 6);
+    assert.equal(await page.locator("#machine option").count(), 5);
     assert.deepEqual(errors, []);
     console.log(
       "PASS: live startup demo, four CPU racers, replay camera, any-button dismissal, title intro, submenu idle demo, pointer dismissal, fresh/save unlock progression",

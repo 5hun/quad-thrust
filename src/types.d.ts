@@ -32,7 +32,6 @@ interface RawTrack {
   name: string;
   theme: number;
   samples: RawSample[];
-  training?: boolean;
   parts?: {
     id: number;
     next: number;
@@ -157,7 +156,6 @@ interface Car extends Pose {
   tile?: string;
   pace?: number;
   aiTicks?: number;
-  stopped?: boolean;
   lapDraw?: number;
   wrongFrames?: number;
 }
@@ -184,14 +182,6 @@ interface Nearest {
   dy: number;
   surface: number;
   normal: Vec3;
-}
-interface TrainingSession {
-  task: (typeof HoverTraining.tasks)[number];
-  remaining: number;
-  heading: number;
-  turn: number;
-  status: "miss" | "complete" | null;
-  reason: string;
 }
 interface Sample {
   file: string;
@@ -227,11 +217,9 @@ interface BackgroundBank {
   bottom: [number, number, number];
 }
 declare const HOVER_TRACKS: RawTrack[];
-declare const HOVER_TRAINING_TRACKS: RawTrack[];
 interface Window {
   HoverEngine: typeof HoverEngine;
   HoverRules: typeof HoverRules;
-  HoverTraining: typeof HoverTraining;
   HoverRecords: typeof HoverRecords;
   HOVER_MODELS: Record<
     string,

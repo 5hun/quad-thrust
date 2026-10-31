@@ -5,22 +5,16 @@ const fs = require("node:fs") as typeof import("node:fs");
 const vm = require("node:vm") as typeof import("node:vm");
 const E = require("../dist/engine.js") as typeof HoverEngine;
 const context = { window: {} as Window };
-for (const name of ["tracks", "training-tracks"])
-  vm.runInNewContext(
-    fs.readFileSync(`${__dirname}/../dist/${name}.js`, "utf8"),
-    context,
-  );
+vm.runInNewContext(
+  fs.readFileSync(`${__dirname}/../dist/tracks.js`, "utf8"),
+  context,
+);
 let count = 0;
-for (const { training, course, cases } of JSON.parse(
-  fs.readFileSync(0, "utf8"),
-) as {
-  training: boolean;
+for (const { course, cases } of JSON.parse(fs.readFileSync(0, "utf8")) as {
   course: number;
   cases: [number, number, number, number, number, number, number, number][];
 }[]) {
-  const track = E.prepare(
-    context.window[training ? "HOVER_TRAINING_TRACKS" : "HOVER_TRACKS"][course],
-  );
+  const track = E.prepare(context.window.HOVER_TRACKS[course]);
   const boostIndex = track.nodes.findIndex((node) => node.tiles.includes(">"));
   if (boostIndex >= 0) {
     const node = track.nodes[boostIndex],

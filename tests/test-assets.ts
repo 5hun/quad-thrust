@@ -40,12 +40,14 @@ for (const sample of Object.values(HOVER_MUSIC.samples)) {
   assert.ok(sample.loopEnd > sample.loopStart);
   assert.ok(b.length > 44);
 }
+assert.equal(Object.keys(HOVER_MUSIC.songs).length, 11);
 assert.equal(HOVER_MUSIC.courses.length, 9);
+assert.equal(HOVER_MODELS.YAKA_MAN, undefined);
 assert.equal(Object.keys(HOVER_MUSIC.samples).length, 17);
 assert.ok(HOVER_MODELS.OTHER[0]["solid|semi"]);
 assert.equal(HOVER_MODELS.ALP_0_9.length, 15);
 console.log(
-  "PASS: 12 original sequences, 17 original samples, 9 course mappings, translucent POWER UP and countdown models",
+  "PASS: 11 original sequences, 17 original samples, 9 course mappings, translucent POWER UP and countdown models",
 );
 
 require("../dist/backgrounds.js");

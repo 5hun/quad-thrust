@@ -43,7 +43,7 @@ def main():
                 shadow=[rng.randint(-32768,32767) for _ in range(9)]
             else:
                 body,shadow=matrix(rng),matrix(rng)
-            values.append([*angles,speed,rudder,i%2,0 if i%3 else 8,i%6,*normal,*body,*shadow])
+            values.append([*angles,speed,rudder,i%2,0 if i%3 else 8,i%5,*normal,*body,*shadow])
         for v in values:
             result=(ctypes.c_int*9)()
             oracle.rotation_probe((ctypes.c_int*35)(*v),result)
@@ -51,7 +51,7 @@ def main():
         accelerations=[]
         speeds=(0,4,5,63,64,80,81,223,224,1000,1999,2000,2001,2047)
         inputs=[]
-        for machine in range(6):
+        for machine in range(5):
             for speed in speeds:
                 for mode in range(5):
                     for grip in (0,1):
@@ -61,7 +61,7 @@ def main():
                                     inputs.append([machine,speed,turbo,lev,catch,grip,32767,777,101,-217,331,-443,557,-661,*matrix(rng),mode])
         for i in range(10000):
             m=[rng.randint(-32768,32767) for _ in range(9)] if i%5==0 else matrix(rng)
-            inputs.append([i%6,rng.randint(-4,2500),rng.randint(0,300),[0,1,2,8][i%4],i%2,(i//2)%2,rng.randint(-32768,32767),rng.randint(-2147483648,2147483647),
+            inputs.append([i%5,rng.randint(-4,2500),rng.randint(0,300),[0,1,2,8][i%4],i%2,(i//2)%2,rng.randint(-32768,32767),rng.randint(-2147483648,2147483647),
                 *[rng.randint(-2147483648,2147483647) for _ in range(6)],*m,i%5])
         for v in inputs:
             result=(ctypes.c_int*8)()

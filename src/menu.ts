@@ -1,54 +1,43 @@
 // MENU_ETC.C / GP1_MAIN.C: original title tree and selection order.
-import { OriginalHelp } from "./help.js";
 export type MenuScreen =
   | "title"
   | "modes"
   | "gp"
-  | "levels"
   | "option"
   | "difficulty"
   | "record-kind"
   | "car"
   | "course"
-  | "training"
   | "record-detail"
-  | "records"
-  | "music"
-  | "help"
-  | "notice";
+  | "records";
 interface MenuHooks {
   mode(value: string): void;
   change(kind: "machine" | "course", delta: number): void;
   start(): void;
-  replay(): void;
-  ending(): void;
+  fullscreen(): boolean | null;
+  toggleFullscreen(): void;
+  soundEnabled(): boolean;
+  toggleSound(): void;
   difficulty(): number;
   setDifficulty(level: number): void;
-  trainingDone?(): void;
-  exit(): void;
   sound(kind: "move" | "ok" | "cancel"): void;
   music(name: string | null): void;
 }
 const lists: Partial<Record<MenuScreen, string[]>> = {
-  title: ["START", "OPTION", "HELP", "EXIT"],
-  modes: ["GRANDPRIX", "TIME ATTACK", "TRAINING", "2P BATTLE"],
+  title: ["START", "OPTION"],
+  modes: ["GRANDPRIX", "TIME ATTACK"],
   gp: ["Blue GP", "Yellow GP", "Red GP", "PRACTICE"],
-  levels: ["LEVEL 1", "LEVEL 2", "LEVEL 3", "FREE RUN"],
-  option: ["GAME LEVEL", "VIEW RECORDS", "VIEW REPLAY", "MUSIC MODE"],
+  option: [],
   difficulty: ["EASY", "NORMAL", "HARD", "EXPART"],
   "record-kind": ["GRANDPRIX'S", "TIME ATTACK'S"],
 };
 const parent: Partial<Record<MenuScreen, [MenuScreen, number]>> = {
   modes: ["title", 0],
   gp: ["modes", 0],
-  levels: ["modes", 2],
   option: ["title", 1],
   difficulty: ["option", 0],
   "record-kind": ["option", 1],
-  training: ["levels", 0],
   records: ["record-kind", 0],
-  music: ["option", 3],
-  help: ["title", 2],
 };
 const field = (id: string) => document.getElementById(id) as HTMLSelectElement;
 export class OriginalMenu {
@@ -60,9 +49,6 @@ export class OriginalMenu {
   recordClass = "gp";
   recordCourse = 0;
   recordFrames = 0;
-  notice = "";
-  noticeParent: MenuScreen = "title";
-  noticeSelection = 0;
   panel: HTMLElement;
   canvas: HTMLCanvasElement;
   g: CanvasRenderingContext2D;
@@ -73,13 +59,6 @@ export class OriginalMenu {
   palettes = new Map<string, HTMLCanvasElement>();
   curves: number[][][] = [];
   padHeld = new Set<string>();
-  help = new OriginalHelp(
-    () => this.show("help", this.help.selected),
-    () => {
-      this.hooks.music(null);
-      this.show("title", 2);
-    },
-  );
   constructor(public hooks: MenuHooks) {
     this.panel = document.getElementById("menu")!;
     this.panel.replaceChildren();
@@ -125,26 +104,29 @@ export class OriginalMenu {
     this.introFrames = 120;
     this.buttons.inert = true;
   }
-  tick(keys: Record<string, boolean> = {}) {
+  tick() {
     if (this.screen === "record-detail")
       this.recordFrames = (this.recordFrames + 1) % 1320;
-    if (this.screen === "help") {
-      const held = (code: string) => !!keys[code] || this.padHeld.has(code);
-      this.help.tick(
-        +held("ArrowDown") - +held("ArrowUp"),
-        held("KeyZ") || held("Space"),
-      );
-    }
     if (this.introFrames > 0 && --this.introFrames === 0) {
       this.buttons.inert = false;
     }
   }
   show(screen: MenuScreen, selected = 0) {
+    const restoreFocus =
+      this.screen === screen && this.buttons.contains(document.activeElement);
+    document.getElementById("fullscreen-status")!.hidden = true;
     this.recordFrames = 0;
     this.introFrames = 0;
     this.buttons.inert = false;
-    lists.option = ["GAME LEVEL", "VIEW RECORDS", "VIEW REPLAY", "MUSIC MODE"];
-    if (HoverRules.unlocks() & 1) lists.option.push("ENDING");
+    const fullscreen = this.hooks.fullscreen();
+    lists.option = [
+      "GAME LEVEL",
+      "VIEW RECORDS",
+      `SOUND: ${this.hooks.soundEnabled() ? "ON" : "OFF"}`,
+      ...(fullscreen === null
+        ? []
+        : [`FULLSCREEN: ${fullscreen ? "ON" : "OFF"}`]),
+    ];
     lists.gp = ["Blue GP", "Yellow GP", "Red GP"]
       .slice(0, HoverRules.availableCups())
       .concat("PRACTICE");
@@ -153,30 +135,7 @@ export class OriginalMenu {
     this.entered = performance.now();
     this.panel.dataset.screen = screen;
     this.buttons.replaceChildren();
-    if (screen === "help") {
-      if (this.help.page === "book") {
-        this.button("上へスクロール", 296, 0, 24, 100, () =>
-          this.help.move(-1),
-        );
-        this.button("下へスクロール", 296, 140, 24, 100, () =>
-          this.help.move(1),
-        );
-      } else
-        this.help.items.forEach((label, i) =>
-          this.button(
-            label,
-            32,
-            40 + i * 24,
-            280,
-            16,
-            () => {
-              this.help.selected = i;
-              this.help.confirm();
-            },
-            i,
-          ),
-        );
-    } else if (lists[screen])
+    if (lists[screen])
       lists[screen]!.forEach((label, i) => {
         const count = lists[screen]!.length;
         const y =
@@ -202,6 +161,7 @@ export class OriginalMenu {
       });
     this.syncSelection();
     this.draw();
+    if (restoreFocus) this.focusSelection();
   }
   button(
     label: string,
@@ -217,7 +177,13 @@ export class OriginalMenu {
     b.setAttribute("aria-label", label);
     b.style.cssText = `left:${x / 3.2}%;top:${y / 2.4}%;width:${w / 3.2}%;height:${h / 2.4}%`;
     b.onclick = click;
-    if (index !== undefined) b.dataset.index = String(index);
+    if (index !== undefined) {
+      b.dataset.index = String(index);
+      b.onfocus = () => {
+        this.selected = index;
+        this.syncSelection();
+      };
+    }
     this.buttons.append(b);
   }
   syncSelection() {
@@ -230,15 +196,13 @@ export class OriginalMenu {
         ),
       );
   }
+  focusSelection() {
+    this.buttons
+      .querySelector<HTMLButtonElement>(`[data-index="${this.selected}"]`)
+      ?.focus({ preventScroll: true });
+  }
   move(delta: number) {
     if (this.introFrames) return;
-    if (this.screen === "help") {
-      this.help.move(delta);
-      this.selected = this.help.selected;
-      this.syncSelection();
-      if (this.help.page !== "book") this.hooks.sound("move");
-      return;
-    }
     this.hooks.sound("move");
     if (lists[this.screen])
       this.selected = Math.max(
@@ -247,98 +211,40 @@ export class OriginalMenu {
       );
     else if (this.screen === "car") this.hooks.change("machine", delta);
     else if (this.screen === "course") this.hooks.change("course", delta);
-    else if (this.screen === "training") {
-      const i = field("course").selectedIndex;
-      if (i + delta >= 0 && i + delta < 5) this.hooks.change("course", delta);
-    } else if (this.screen === "records")
+    else if (this.screen === "records")
       this.selected = Math.max(0, Math.min(8, this.selected + delta));
-    else if (this.screen === "music")
-      this.selected =
-        (this.selected + delta + this.songs.length) % this.songs.length;
     this.syncSelection();
-  }
-  get songs() {
-    return [
-      "SAMPLE16",
-      "SAMPLE15",
-      "HOVER4",
-      "TO7",
-      "ENTRY1",
-      "SELECT",
-      "SAMPLE19",
-      "HOVER2",
-      "CANION",
-      "B",
-      "SAMPLE26",
-      "SAMPLE21",
-    ];
-  }
-  get songNames() {
-    return [
-      "Mysterious Wave",
-      "Laser Wind",
-      "A North Breeze",
-      "Freezing Moment",
-      "Rest On Space",
-      "E.O.E.",
-      "Groove On Night",
-      "Drop To The Sky",
-      "Dead Heat",
-      "ON!",
-      "Help Mode",
-      "NoTitle -UnUsed-",
-    ];
+    if (this.buttons.contains(document.activeElement)) this.focusSelection();
   }
   choose(mode: string) {
     this.mode = mode;
     this.hooks.mode(mode);
     this.hooks.music("SELECT");
-    this.show(mode.startsWith("train") ? "training" : "car");
-  }
-  message(text: string, from = this.screen) {
-    this.notice = text;
-    this.noticeParent = from;
-    this.noticeSelection = this.selected;
-    this.show("notice");
+    this.show("car");
   }
   confirm() {
-    if (
-      this.introFrames ||
-      (this.screen === "help" && this.help.page === "book")
-    )
-      return;
+    if (this.introFrames) return;
     this.hooks.sound("ok");
     const i = this.selected;
     switch (this.screen) {
       case "title":
-        if (i < 3) {
-          this.show((["modes", "option", "help"] as MenuScreen[])[i]);
-          if (i === 2) {
-            this.help.reset();
-            this.show("help");
-            this.hooks.music("SAMPLE26");
-          }
-        } else this.hooks.exit();
+        this.show(i === 0 ? "modes" : "option");
         break;
       case "modes":
         if (i === 0) this.show("gp");
         if (i === 1) this.choose("time");
-        if (i === 2) this.show("levels");
-        if (i === 3)
-          this.message("2P BATTLE\n画面分割対戦は未対応です。", "modes");
         break;
       case "gp":
         this.choose(i === HoverRules.availableCups() ? "practice" : "gp" + i);
         break;
-      case "levels":
-        this.choose(i === 3 ? "free" : "train" + i);
-        break;
       case "option":
         if (i === 0) this.show("difficulty", this.hooks.difficulty() + 1);
         if (i === 1) this.show("record-kind");
-        if (i === 2) this.hooks.replay();
-        if (i === 3) this.show("music");
-        if (i === 4) this.hooks.ending();
+        if (i === 2) {
+          this.hooks.toggleSound();
+          this.show("option", i);
+        }
+        if (i === 3) this.hooks.toggleFullscreen();
         break;
       case "difficulty":
         this.hooks.setDifficulty(i - 1);
@@ -348,25 +254,12 @@ export class OriginalMenu {
         this.recordClass = i === 0 ? "gp" : "time";
         this.show("records");
         break;
-      case "training":
-        this.show("car");
-        break;
       case "car":
-        if (this.mode.startsWith("gp") || this.mode.startsWith("train"))
-          this.hooks.start();
+        if (this.mode.startsWith("gp")) this.hooks.start();
         else this.show("course");
         break;
       case "course":
         this.hooks.start();
-        break;
-      case "music":
-        this.hooks.music(this.songs[i]);
-        break;
-      case "notice":
-        this.show(this.noticeParent, this.noticeSelection);
-        break;
-      case "help":
-        this.help.confirm();
         break;
       case "records":
         this.recordCourse = this.selected;
@@ -380,46 +273,24 @@ export class OriginalMenu {
   back() {
     if (this.introFrames) return;
     this.hooks.sound("cancel");
-    if (this.screen === "help") {
-      this.help.back();
-      return;
-    }
     if (this.screen === "course") this.show("car");
     else if (this.screen === "car") {
-      if (this.mode.startsWith("train")) this.show("training");
-      else {
-        this.hooks.music(null);
-        this.show(
-          this.mode.startsWith("gp") || this.mode === "practice"
-            ? "gp"
-            : this.mode === "free"
-              ? "levels"
-              : "modes",
-          this.mode.startsWith("gp")
-            ? +this.mode.slice(2)
-            : this.mode === "practice"
-              ? HoverRules.availableCups()
-              : this.mode === "free"
-                ? 3
-                : 1,
-        );
-      }
+      this.hooks.music(null);
+      this.show(
+        this.mode.startsWith("gp") || this.mode === "practice" ? "gp" : "modes",
+        this.mode.startsWith("gp")
+          ? +this.mode.slice(2)
+          : this.mode === "practice"
+            ? HoverRules.availableCups()
+            : 1,
+      );
     } else if (this.screen === "record-detail")
       this.show("records", this.recordCourse);
-    else if (this.screen === "notice")
-      this.show(this.noticeParent, this.noticeSelection);
     else if (parent[this.screen]) {
-      if (this.screen === "training") this.hooks.trainingDone?.();
-      if (this.screen === "training" || this.screen === "music")
-        this.hooks.music(null);
       const [screen, i] = parent[this.screen]!;
       this.show(
         screen,
-        this.screen === "training"
-          ? +this.mode.slice(5)
-          : this.screen === "records"
-            ? +(this.recordClass === "time")
-            : i,
+        this.screen === "records" ? +(this.recordClass === "time") : i,
       );
     }
   }
@@ -431,21 +302,6 @@ export class OriginalMenu {
       }
       return;
     }
-    if (this.screen === "help" && ["ArrowLeft", "ArrowRight"].includes(code))
-      return;
-    if (
-      this.screen === "help" &&
-      this.help.page === "book" &&
-      [
-        "ArrowUp",
-        "ArrowDown",
-        "ArrowLeft",
-        "ArrowRight",
-        "KeyZ",
-        "Space",
-      ].includes(code)
-    )
-      return;
     if (["ArrowUp", "ArrowLeft"].includes(code)) this.move(-1);
     else if (["ArrowDown", "ArrowRight"].includes(code)) this.move(1);
     else if (["Enter", "Space", "KeyZ"].includes(code)) this.confirm();
@@ -462,12 +318,6 @@ export class OriginalMenu {
       if (p.buttons[0]?.pressed) active.add("Enter");
       if (p.buttons[9]?.pressed) active.add("Enter");
       if (p.buttons[1]?.pressed) active.add("Escape");
-      if (
-        p.buttons[2]?.pressed &&
-        this.screen === "help" &&
-        this.help.page === "book"
-      )
-        active.add("KeyZ");
     }
     for (const code of active)
       if (dispatch && !this.padHeld.has(code)) this.key(code);
@@ -637,22 +487,6 @@ export class OriginalMenu {
         if (row)
           this.text(HoverEngine.MACHINES[row.machine].name, 32 + i * 176, 216);
       });
-    } else if (this.screen === "training") {
-      const task = HoverTraining.tasks[+field("course").value];
-      this.text("TRAINING MODE", 16, 16, 16, "#ff00ff");
-      this.jp(
-        `${Math.floor(task.id / 5) + 1}-${(task.id % 5) + 1}`,
-        16,
-        56,
-        16,
-      );
-      this.jp(task.description, 32, 80);
-      this.jp(`制限時間 ${task.limit} 秒`, 160, 152);
-      const marks = HoverTraining.loadMarks()[task.id];
-      HoverEngine.MACHINES.forEach((m, i) => {
-        if (marks & (1 << i))
-          this.text(m.name, 16 + (i % 3) * 104, 184 + Math.floor(i / 3) * 16);
-      });
     } else if (this.screen === "records") {
       this.text("BEST RECORDS", 8, 0, 16, "red");
       HOVER_TRACKS.forEach((_, i) => {
@@ -736,39 +570,10 @@ export class OriginalMenu {
             );
         }
       }
-    } else if (this.screen === "music") {
-      this.text("MUSIC MODE", 8, 8, 16, "blue");
-      this.songNames.forEach((s, i) =>
-        this.text(
-          s,
-          32,
-          32 + i * 17,
-          16,
-          i === this.selected ? "#00ff00" : "white",
-        ),
-      );
-    } else if (this.screen === "help") {
-      this.help.draw(g, (text, x, y, color) => this.text(text, x, y, 8, color));
-    } else if (this.screen === "notice") this.jp(this.notice, 16, 32);
+    }
     this.panel.setAttribute(
       "aria-label",
-      `${this.screen}: ${list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : this.screen === "training" ? HoverTraining.tasks[+field("course").value].description : this.screen === "notice" ? this.notice : this.screen === "help" ? (this.help.page === "book" ? `${this.help.book} ${this.help.scroll}/${this.help.maxScroll}\n${this.help.description}` : this.help.items[this.help.selected]) : "選択画面")}`,
+      `${this.screen}: ${list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : "選択画面")}`,
     );
-  }
-  jp(text: string, x: number, y: number, size = 12) {
-    this.g.fillStyle = "white";
-    this.g.font = `${size}px monospace`;
-    this.g.textBaseline = "top";
-    let line = 0,
-      col = 0;
-    for (const ch of text) {
-      if (ch === "\n" || col * size > 288 - x) {
-        line++;
-        col = 0;
-        if (ch === "\n") continue;
-      }
-      this.g.fillText(ch, x + col * size, y + line * (size + 6));
-      col += ch.charCodeAt(0) > 255 ? 1 : 0.6;
-    }
   }
 }

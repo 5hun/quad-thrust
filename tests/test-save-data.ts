@@ -26,11 +26,10 @@ const fs: typeof import("node:fs") = require("node:fs");
   assert.equal(writes, 0, "startup does not overwrite existing storage");
   const values = {
     "hover-unlocks": "7",
-    "hover-training-marks": JSON.stringify([31, ...Array(14).fill(0)]),
     "hover-player-name": "B9!",
     "hover-cpu-difficulty": "3",
     "hover-records-time-8-lap": JSON.stringify([
-      { time: 10.25, machine: 5, name: "B9!" },
+      { time: 10.25, machine: 4, name: "B9!" },
     ]),
     "hover-v3-record-time-8": "10.25",
   };
@@ -72,17 +71,23 @@ const fs: typeof import("node:fs") = require("node:fs");
   for (const raw of [
     "{",
     "null",
-    JSON.stringify({ version: 2, values }),
-    JSON.stringify({ version: 1, values: [] }),
+    JSON.stringify({ version: 1, values }),
+    JSON.stringify({ version: 99, values }),
+    JSON.stringify({ version: 2, values: [] }),
     ...[null, 4, "4", "NaN"].map((value) =>
       JSON.stringify({
-        version: 1,
+        version: 2,
         values: { "hover-cpu-difficulty": value },
       }),
     ),
-    JSON.stringify({ version: 1, values: { "hover-training-marks": "{}" } }),
+    JSON.stringify({ version: 2, values: { "hover-training-marks": "{}" } }),
+    JSON.stringify({ version: 2, values: { "hover-unlocks": "8" } }),
     JSON.stringify({
-      version: 1,
+      version: 2,
+      values: { "hover-records-time-0-lap": '[{"time":10,"machine":5}]' },
+    }),
+    JSON.stringify({
+      version: 2,
       values: { "hover-records-time-0-lap": '[{"time":-1,"machine":0}]' },
     }),
   ]) {

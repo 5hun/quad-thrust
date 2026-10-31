@@ -47,12 +47,12 @@ module.exports = async function verify({
       );
     }
     await page.addInitScript(() => {
-      if (!localStorage.getItem("hover-autosave-v1"))
+      if (!localStorage.getItem("hover-autosave-v2"))
         localStorage.setItem(
-          "hover-autosave-v1",
+          "hover-autosave-v2",
           JSON.stringify({
-            version: 1,
-            values: { "hover-unlocks": "15" },
+            version: 2,
+            values: { "hover-unlocks": "7" },
           }),
         );
     });
@@ -276,42 +276,13 @@ module.exports = async function verify({
     await key("Enter");
     await key("Enter");
     await wait("menu");
-    // Training success returns to the same task; a miss retries automatically.
-    await page.getByRole("button", { name: "START", exact: true }).click();
-    await page.getByRole("button", { name: "TRAINING", exact: true }).click();
-    await page.getByRole("button", { name: "LEVEL 1", exact: true }).click();
-    await key("Enter");
-    await key("Enter");
-    await wait("running");
-    await page.evaluate(() => {
-      window.HoverTraining.step = (session) => {
-        session.status = "miss";
-        session.reason = "test";
-        return session.status;
-      };
-    });
-    await wait("finished");
-    await wait("countdown");
-    await page.evaluate(() => {
-      window.HoverTraining.step = (session) => {
-        session.status = "complete";
-        session.reason = "test";
-        return session.status;
-      };
-    });
-    await wait("finished");
-    await wait("menu");
-    assert.equal(
-      (await page.evaluate(() => window.hoverDiagnostics())).menuScreen,
-      "training",
-    );
     assert.deepEqual(errors, []);
     assert.deepEqual(
       (await page.evaluate(() => window.hoverDiagnostics())).assetErrors,
       [],
     );
     console.log(
-      "PASS: source pause restart; GP fall/destruction/defeat CONTINUE?, YES retry and NO exit, rank delay, touch controls, three-letter entry, named record persistence, mobile records, BESTLAP/TOTAL pages, all GP rounds/credits/batch records, training success/miss transitions",
+      "PASS: source pause restart; GP fall/destruction/defeat CONTINUE?, YES retry and NO exit, rank delay, touch controls, three-letter entry, named record persistence, mobile records, BESTLAP/TOTAL pages, all GP rounds/credits/batch records",
     );
   } finally {
     await browser.close();

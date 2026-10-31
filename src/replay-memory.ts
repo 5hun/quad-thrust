@@ -5,19 +5,13 @@ export class ReplayMemory {
   saved: ReplayTape | null = null;
   recent: ReplayTape | null = null;
   raceGhost: ReplayTape | null = null;
-  beginRace(
-    course: number,
-    machine: number,
-    sourceMode: number,
-    enabled = true,
-  ) {
+  beginRace(course: number, sourceMode: number, enabled = true) {
     const tape = this.saved;
     this.raceGhost =
       enabled &&
       sourceMode === 4 &&
       tape?.gameMode === 4 &&
-      tape.course === course &&
-      !(machine === 5 && tape.machine === 5)
+      tape.course === course
         ? tape
         : null;
     return this.raceGhost;
