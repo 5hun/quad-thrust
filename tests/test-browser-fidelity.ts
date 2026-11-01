@@ -528,11 +528,11 @@ module.exports = async function verify({
     assert.deepEqual(
       turboFlame,
       [
-        [0.5, true, 0, 1],
-        [0.5, true, 1, 1],
-        [0.5, true, 0, 1],
+        [0.65, true, 0, 1],
+        [0.65, true, 1, 1],
+        [0.65, true, 0, 1],
       ],
-      "turbo disables flame lighting without changing the half blend",
+      "turbo disables flame lighting without changing the rear jet blend",
     );
     // CAR_CTR.C uses TMD object 2. Its three nested blue shells have
     // single-sided packets (flag=0); drawing their backs hides the inner colours.

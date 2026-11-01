@@ -363,24 +363,26 @@ export class HoverRenderer {
       const [textureName, semi] = material.split("|");
       const jet = !name.startsWith("ALP_") && (index === 2 || index === 3);
       const fx = name === "OTHER" || jet;
-      // The source draws jets opaque on alternate ticks, so they read as half
-      // see-through. Drawing them every tick keeps that look with a 50% blend.
-      const half = translucent || !!semi || jet;
+      // The source draws rear jets opaque on alternate ticks, which the eye
+      // averages in linear light. Drawn every tick, a 65% sRGB blend matches
+      // that average over typical road colours.
+      const rearJet = jet && index === 2;
+      const half = translucent || !!semi;
       const mat = new THREE.MeshLambertMaterial({
         map: textureName === "solid" ? null : this.texture(textureName),
         vertexColors: true,
         // Rear/side jet TMD packets have flag=0 (single-sided). Their nested
         // shells expose three blue colours; back faces would hide the core.
         side: jet ? THREE.FrontSide : THREE.DoubleSide,
-        transparent: half,
-        opacity: half ? 0.5 : 1,
-        depthWrite: !half,
+        transparent: half || rearJet,
+        opacity: half ? 0.5 : rearJet ? 0.65 : 1,
+        depthWrite: !half && !rearJet,
         alphaTest: 0.01,
       });
       mat.userData.sourceCameraLight = { value: fx ? 1 : 0 };
       this.sourceMaterial(mat);
       group.add(new THREE.Mesh(geometry, mat));
-      if (jet) {
+      if (rearJet) {
         // Depth-only pass, so only the nearest shell blends over the scene
         // instead of every nested shell darkening the one behind it.
         const depth = mat.clone();
@@ -586,8 +588,8 @@ export class HoverRenderer {
       g.rotation.y = (-(p.rudderAngle || 0) * Math.PI * 2) / 4096;
     const size =
       (input.accel || p.turbo ? 64 : p.fireTail || 0) + (p.turbo ? 16 : 0);
-    // The original blinks jets on alternate ticks (rear even, side odd), which
-    // read as a steady flame on CRTs but strobes at 30 Hz on modern displays.
+    // The original blinks rear jets on even ticks, which strobes at 30 Hz on
+    // modern displays, so they are drawn every tick with a partial blend.
     for (const g of ship.flames) {
       g.visible = size > 0;
       g.scale.setScalar(size / 64);
@@ -609,7 +611,10 @@ export class HoverRenderer {
     ship.power.rotation.y = (-(effect - 1) * Math.PI) / 4;
     const names: (keyof Input)[] = ["l1", "l2", "r1", "r2"];
     ship.sides.forEach((g, i) => {
-      g.visible = (!p.cpuSlot || ship.ghost) && !!input[names[i]];
+      g.visible =
+        (!p.cpuSlot || ship.ghost) &&
+        !!input[names[i]] &&
+        ((tick + (p.cpuSlot || 0)) & 1) === 1;
       g.rotation.x = (-tick * 165 * Math.PI * 2) / 4096;
     });
     if (ship.shadow) {

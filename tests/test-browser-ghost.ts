@@ -204,7 +204,11 @@ module.exports = async function verify({
     for (const v of observations.visuals) {
       assert.equal(v.semi, true);
       assert.equal(v.opacity, 0.5);
-      assert.equal(v.sides[0], v.l1, "slot-1 ghost side jets follow L1");
+      assert.equal(
+        v.sides[0],
+        v.l1 && ((v.ticks + 1) & 1) === 1,
+        "slot-1 side jets use their source phase",
+      );
       if (v.accel) assert.equal(v.rear, true);
     }
     await page.screenshot({ path: "/tmp/hover-input-ghost.png" });
