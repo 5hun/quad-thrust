@@ -17,6 +17,9 @@ const LOW_ENERGY = 25;
 // Damage stays visible this long before the lost segment drains.
 const LOST_HOLD = 20;
 const HIT_FRAMES = 18;
+// Lap notices use only the start of lapDraw's 180 frames so they do not
+// cover the road for long; CSS fades them out over the same 1.4 seconds.
+const LAP_BANNER_FRAMES = 84;
 const ORDINAL = ["ST", "ND", "RD", "TH"];
 
 export const hudTime = (t?: number) => {
@@ -187,8 +190,10 @@ export class RaceHUD {
       Math.min(100, (100 * speed) / Math.max(1, frame.topSpeed)) + "%";
     this.el("hud-speed").classList.toggle("turbo", !!car.turbo);
 
-    if (car.leftHit) this.hits.left = HIT_FRAMES;
-    if (car.rightHit) this.hits.right = HIT_FRAMES;
+    const sides = car.wallSides ?? 0;
+    car.wallSides = 0;
+    if (sides & 1) this.hits.left = HIT_FRAMES;
+    if (sides & 2) this.hits.right = HIT_FRAMES;
     for (const side of ["left", "right"] as const) {
       const hit = this.el(`hud-hit-${side}`);
       hit.style.opacity = String(this.hits[side] / HIT_FRAMES);
@@ -198,7 +203,10 @@ export class RaceHUD {
     // Wrong way outranks the lap notice, as both used the same screen area.
     let banner = "";
     if ((car.wrongFrames ?? 0) > 5) banner = "WARNING|WRONG WAY";
-    else if ((car.lapDraw ?? 0) > 0 && car.laps.length < 3)
+    else if (
+      (car.lapDraw ?? 0) > 180 - LAP_BANNER_FRAMES &&
+      car.laps.length < 3
+    )
       banner =
         car.laps.length === 2
           ? "LAP 3 / 3|FINAL LAP"

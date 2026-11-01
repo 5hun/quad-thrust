@@ -933,7 +933,10 @@ namespace HoverEngine {
     // car_enemy first checks the inner (mode 1) walls, then repeats mode 0.
     if (enemy) sourceWallCheck(car, node, nextPosition, racing, 1);
     while (sourceWallCheck(car, node, nextPosition, racing)) {
-      /* original correction loop */
+      // Original correction loop. The last pass clears left/rightHit, so
+      // keep the touched sides for the HUD (display only; bit 1 = left).
+      car.wallSides =
+        (car.wallSides ?? 0) | (car.leftHit ? 1 : 0) | (car.rightHit ? 2 : 0);
     }
     setSourcePosition(car, nextPosition);
   }
@@ -1303,6 +1306,7 @@ namespace HoverEngine {
         car.z += normalZ * (margin - distance + 0.2);
         car.damage += 2 * hr * hr + 10;
         car.flash = 0.18;
+        car.wallSides = (car.wallSides ?? 0) | (right ? 2 : 1);
         car.events.push("wall");
         if (hr > 16) car.events.push("wall-sound");
         if (!car.cpuLevel)

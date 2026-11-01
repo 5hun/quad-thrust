@@ -119,6 +119,8 @@ interface Car extends Pose {
   rightDistance?: number;
   leftHit?: number;
   rightHit?: number;
+  // Wall sides touched since the HUD last read them (1 left, 2 right).
+  wallSides?: number;
   pitch: number;
   roll: number;
   sourceSpeed: number;

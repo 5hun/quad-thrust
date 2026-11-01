@@ -1601,39 +1601,58 @@ main > details {
   background: var(--hud-cyan);
   box-shadow: 0 0 10px var(--hud-cyan);
 }
+/* Kept between the left and right readouts, clear of the road. */
 .hud-banner {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 34%;
-  padding: 2.2cqh 0;
+  left: 25%;
+  right: 25%;
+  top: 19%;
+  padding: 1.2cqh 0;
   text-align: center;
   background: linear-gradient(
     90deg,
     transparent,
-    rgb(7 14 27 / 70%) 25%,
-    rgb(7 14 27 / 70%) 75%,
+    rgb(7 14 27 / 60%) 20%,
+    rgb(7 14 27 / 60%) 80%,
     transparent
   );
-  border-top: 1px solid #ffffff22;
-  border-bottom: 1px solid #ffffff22;
+  border-block: 1px solid;
+  border-image: linear-gradient(
+      90deg,
+      transparent,
+      #ffffff33 20%,
+      #ffffff33 80%,
+      transparent
+    )
+    1;
 }
+/* Matches LAP_BANNER_FRAMES in hud.ts: slide in, hold, fade out. */
 .hud-banner.enter {
-  animation: hud-slide 0.45s ease-out;
+  animation: hud-notice 1.4s ease-out forwards;
 }
 .hud-banner .hud-label {
   color: var(--hud-cyan);
 }
 .hud-banner strong {
   display: block;
-  margin-top: 0.8cqh;
+  margin-top: 0.5cqh;
   padding-left: 0.45em;
-  font-size: 3.4cqw;
+  font-size: 2.6cqw;
   font-weight: 300;
   letter-spacing: 0.45em;
 }
 .hud-banner.warn {
-  border-color: rgb(255 90 82 / 50%);
+  border-image: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 90 82 / 50%) 20%,
+      rgb(255 90 82 / 50%) 80%,
+      transparent
+    )
+    1;
+}
+.hud-banner.warn.enter {
+  animation: hud-slide 0.3s ease-out;
 }
 .hud-banner.warn .hud-label,
 .hud-banner.warn strong {
@@ -1641,6 +1660,20 @@ main > details {
 }
 .hud-banner.warn strong {
   animation: hud-blink 0.5s steps(1) infinite;
+}
+@keyframes hud-notice {
+  0% {
+    transform: translateX(-6%);
+    opacity: 0;
+  }
+  20%,
+  75% {
+    transform: none;
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 @keyframes hud-slide {
   from {
