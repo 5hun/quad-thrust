@@ -208,7 +208,9 @@ module.exports = async function verify({
         mode + " uses front chase after finish",
       );
       assert.equal(d.time, 33);
-      await page.waitForFunction(() => !!window.hoverDiagnostics().postrace);
+      await page.waitForFunction(
+        () => window.hoverDiagnostics().gpScreen !== null,
+      );
     }
     // Other racers keep moving during the player's destruction/fall wait.
     for (const reason of ["destroyed", "course-out"] as const) {
@@ -242,8 +244,16 @@ module.exports = async function verify({
       assert.ok(
         b.opponents.every((car, i) => car.ticks > a.opponents[i].ticks),
       );
-      // A failed practice returns directly to machine selection.
-      await wait("menu");
+      // A failed practice shows its result, with RETRY selected.
+      await page.waitForFunction(
+        () => window.hoverDiagnostics().gpScreen === "time-result",
+      );
+      assert.match(
+        await page.locator("#gp-panel").innerText(),
+        reason === "destroyed"
+          ? /PRACTICE[\s\S]*MACHINE DESTROYED/
+          : /COURSE OUT/,
+      );
       const bombSounds = await page.evaluate(() => window.bombSounds);
       if (reason === "course-out")
         assert.equal(

@@ -771,55 +771,8 @@ main > details {
   }
 }
 
-#postrace {
-  position: absolute;
-  inset: 0;
-  z-index: 7;
-}
-#postrace-canvas {
-  width: 100%;
-  height: 100%;
-  image-rendering: pixelated;
-  pointer-events: none;
-}
-#postrace button {
-  position: absolute;
-  background: transparent;
-  border: 0;
-  color: transparent;
-  font-size: 0;
-}
-#postrace-prev {
-  left: 0;
-  top: 30%;
-  width: 25%;
-  height: 50%;
-}
-#postrace-next {
-  right: 0;
-  top: 30%;
-  width: 25%;
-  height: 50%;
-}
-#postrace-confirm {
-  left: 25%;
-  top: 30%;
-  width: 50%;
-  height: 50%;
-}
-#postrace-exit {
-  right: 0;
-  bottom: 0;
-  width: 25%;
-  height: 20%;
-}
-#postrace button:focus-visible {
-  outline: 1px solid #00ff00;
-}
-
-/* The same 4:3 box positions both artwork and its pointer targets. */
-.menu,
-#postrace {
+/* The 4:3 box positions both artwork and its pointer targets. */
+.menu {
   inset: 0 auto 0 50%;
   transform: translateX(-50%);
   width: min(100cqw, calc(100cqh * 4 / 3));
@@ -1172,12 +1125,39 @@ button[aria-current="true"] .volume-meter i {
   font-weight: 300;
   letter-spacing: 0.08em;
 }
-.goal-finish {
-  margin-top: 6cqh;
-  padding-left: 0.4em;
-  font-size: 8.6cqw;
+.goal-time {
+  margin-top: 0.4cqh;
+  color: #20e5ec;
+  font-size: 9.4cqw;
   font-weight: 200;
-  letter-spacing: 0.4em;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 75%),
+    0 0 28px rgb(32 229 236 / 35%);
+}
+/* Faster and slower also differ in lightness, not only in hue. */
+.goal-delta {
+  display: flex;
+  align-items: baseline;
+  gap: 1.1cqw;
+  margin: 0;
+  color: #c2c8ce;
+  font-size: 0.94cqw;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  animation: goal-fade 0.4s 0.45s ease-out both;
+}
+.goal-delta span,
+.ta-delta {
+  color: #ff9a5c;
+  font-size: 2.65cqw;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+.goal-delta[data-faster="true"] span,
+.ta-delta[data-faster="true"] {
+  color: #b3ff65;
 }
 .goal-badges {
   position: absolute;
@@ -1246,7 +1226,11 @@ button[aria-current="true"] .volume-meter i {
   background: rgb(0 5 13 / 76%);
   font-variant-numeric: tabular-nums;
 }
-#gp-panel:is([data-screen="result"], [data-screen="quit"]) {
+#gp-panel:is(
+  [data-screen="result"],
+  [data-screen="quit"],
+  [data-screen="time-result"]
+) {
   background: linear-gradient(
     90deg,
     rgb(0 5 13 / 88%) 0%,
@@ -1804,6 +1788,105 @@ button[aria-current="true"] .volume-meter i {
   letter-spacing: 0.2em;
   text-align: left;
 }
+/* Time Attack and practice result: the run on the left, records right. */
+.ta-summary {
+  position: absolute;
+  left: 4.4%;
+  top: 22.2%;
+  width: 43.75%;
+}
+.ta-summary .gp-label {
+  margin-bottom: 0 !important;
+}
+.ta-total {
+  display: flex;
+  align-items: baseline;
+  gap: 1.7cqw;
+  margin-top: 0.8cqh !important;
+}
+.ta-total > span:first-child {
+  color: #20e5ec;
+  font-size: 5cqw;
+  font-weight: 200;
+}
+.ta-delta {
+  font-size: 1.72cqw;
+}
+.ta-total small {
+  color: #c2c8ce;
+  font-size: 0.86cqw;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+}
+.ta-summary .gp-laps {
+  margin-top: 1.9cqh;
+}
+.ta-summary .gp-laps > div,
+.ta-bests > div {
+  align-items: center;
+}
+.ta-summary .gp-laps > div {
+  height: 4.7cqh;
+}
+.ta-summary .gp-laps dd {
+  font-size: 1.4cqw;
+}
+.ta-summary [data-missing] dd {
+  color: #8a9cab;
+}
+.ta-retired {
+  color: #ff9a5c;
+  font-size: 4.05cqw;
+  font-weight: 200;
+  letter-spacing: 0.16em;
+}
+.ta-retired + .gp-laps {
+  margin-top: 2.8cqh;
+}
+#gp-panel[data-screen="time-result"] nav {
+  top: 63.9%;
+  width: 40.6%;
+  gap: 0.3cqh;
+}
+#gp-panel[data-screen="time-result"] nav button {
+  min-height: 6.1cqh;
+  padding-block: 0;
+  font-size: 1.72cqw;
+}
+#gp-panel[data-screen="time-result"] nav button::before {
+  height: 4.2cqh;
+}
+.ta-records {
+  top: 22.2% !important;
+  width: 37.5% !important;
+}
+.ta-records .gp-tabs {
+  position: static;
+  margin-bottom: 1.9cqh;
+}
+.ta-record-rows li {
+  grid-template-columns: 7% 1fr 30% 22%;
+  align-items: center;
+  height: 6.4cqh;
+}
+.ta-record-rows .gp-gap {
+  display: flex;
+  align-items: center;
+  gap: 0.8cqw;
+}
+.ta-records .record-machine-icon {
+  width: 2.8cqw;
+  flex: none;
+}
+.ta-bests dd {
+  font-size: 1.4cqw;
+}
+.ta-bests small {
+  margin-left: 0.6cqw;
+  color: #c2c8ce;
+  font-size: 0.94cqw;
+  letter-spacing: 0.2em;
+}
 @container (max-width: 600px) {
   .gp-kicker,
   .gp-label,
@@ -1844,8 +1927,27 @@ button[aria-current="true"] .volume-meter i {
     display: none;
   }
   .goal-kicker,
-  .goal-badge {
+  .goal-badge,
+  .goal-delta,
+  .ta-total small {
     font-size: 2.2cqw;
+  }
+  .ta-summary .gp-laps dd,
+  .ta-bests dd {
+    font-size: 2.6cqw;
+  }
+  .ta-bests small {
+    font-size: 2cqw;
+  }
+  #gp-panel[data-screen="time-result"] nav button {
+    font-size: 2.6cqw;
+  }
+  .ta-records {
+    left: 54% !important;
+    width: 42% !important;
+  }
+  .ta-records .record-machine-icon {
+    width: 4.4cqw;
   }
 }
 

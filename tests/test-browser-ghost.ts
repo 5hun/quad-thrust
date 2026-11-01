@@ -94,14 +94,19 @@ module.exports = async function verify({
       }, total);
       await wait("finished");
       await page.waitForFunction(
-        () => window.hoverDiagnostics().postrace === "name",
+        () => window.hoverDiagnostics().gpScreen === "name",
       );
     }
+    // Keep the name, then CHANGE MACHINE on the result.
     async function selection() {
       await press("Enter");
       await press("Enter");
       await press("Enter");
-      await press("Escape");
+      await page.waitForFunction(
+        () => window.hoverDiagnostics().gpScreen === "time-result",
+      );
+      await press("ArrowDown");
+      await press("Enter");
       await wait("menu");
       assert.equal((await snap()).menuScreen, "car");
     }
@@ -225,7 +230,7 @@ module.exports = async function verify({
     assert.equal(
       (await snap()).replayPose!.type,
       1,
-      "postrace background uses the current attempt, not the older ghost",
+      "result background uses the current attempt, not the older ghost",
     );
     await selection();
     await press("ArrowRight");

@@ -1,11 +1,18 @@
 // Source: src/gp-screens.ts. Build with npm run build; do not edit dist/gp-screens.js directly.
-// Grand Prix screens after the finish line, in the title menu's style: race
+// Screens after the finish line, in the title menu's style. Grand Prix: race
 // result, next race intro, cup clear, name entry and the cup's records.
+// Time Attack and practice: name entry and the result with course records.
 import { hudTime } from "./hud.js";
-import { ENTRY_CHARACTERS, type GPRecord } from "./postrace.js";
 
 export type GPScreen =
-  "result" | "quit" | "intro" | "clear" | "name" | "records";
+  "result" | "quit" | "intro" | "clear" | "name" | "records" | "time-result";
+export interface GPRecord {
+  course: number;
+  best: number;
+  total: number;
+  machine: number;
+}
+export const ENTRY_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ,.^_0123456789%*?&!";
 type MenuSound = "move" | "ok" | "cancel";
 export interface Standing {
   machine: number;
@@ -29,6 +36,25 @@ interface ResultActions {
   retry(): void;
   quit(): void;
 }
+// A Time Attack or practice run, finished or retired.
+export interface TimeResult {
+  // "TIME ATTACK" or "PRACTICE".
+  label: string;
+  recordClass: "gp" | "time";
+  course: number;
+  machine: number;
+  laps: number[];
+  // "COURSE OUT" or "MACHINE DESTROYED" when the player retired.
+  retired: string | null;
+  // The course's saved best total before this run, for the delta.
+  bestBefore: number | null;
+}
+interface TimeActions {
+  retry(): void;
+  changeMachine(): void;
+  changeCourse(): void;
+  quit(): void;
+}
 interface MenuItem {
   label: string;
   run(): void;
@@ -50,6 +76,13 @@ const courseLabel = (course: number) =>
 const machineName = (type: number) => HoverEngine.MACHINES[type]?.name ?? "";
 // Gaps drop the minutes while they are zero: +01"24.
 const gapTime = (t: number) => "+" + hudTime(t).replace(/^00'/, "");
+// Against the best: −00"42 when faster, +01"05 when slower.
+export const deltaTime = (t: number) =>
+  (t < 0 ? "−" : "+") + hudTime(Math.abs(t)).replace(/^00'/, "");
+const ordinal = (rank: number) => ORDINALS[rank - 1] ?? `${rank}TH`;
+// The course select's sprite, one machine per row.
+const machineIcon = (type: number) =>
+  `<span class="record-machine-icon" aria-hidden="true"><img src="assets/minicars.png" alt="" style="top: ${-type * 100}%"></span>`;
 const guide = (items: string[]) =>
   `<div class="title-guide">${items.join("")}</div>`;
 const guideKey = (key: string, label: string, action = "") =>
@@ -57,7 +90,7 @@ const guideKey = (key: string, label: string, action = "") =>
 const guideArrows = (arrows: string, label: string) =>
   `<span><span class="guide-arrows">${arrows}</span> ${label}</span>`;
 // Where a record would land among the six, or 0 when it would not enter.
-function rankAmong(rows: { time: number }[], time: number) {
+export function rankAmong(rows: { time: number }[], time: number) {
   const rank = 1 + rows.filter((r) => r.time <= time).length;
   return rank <= 6 ? rank : 0;
 }
@@ -82,6 +115,11 @@ export class GPScreens {
   resultScreen: (() => void) | null = null;
   quitAction: () => void = () => {};
   recordsDone: () => void = () => {};
+  // Records the name entry saves into: the GP's, or Time Attack's.
+  recordClass: "gp" | "time" = "gp";
+  // Time Attack result's record table: TOTAL or BEST LAP.
+  recordKind: "total" | "lap" = "total";
+  timeResult: (() => void) | null = null;
   constructor(
     public sound: (kind: MenuSound) => void,
     public storage: Pick<Storage, "getItem" | "setItem">,
@@ -329,9 +367,22 @@ export class GPScreens {
   // One name for every course of the cup, as before. Cups whose times
   // stay out of the top six go straight to the records.
   showRecords(batch: GPRecord[], done: () => void) {
+    this.recordClass = "gp";
     this.batch = batch
       .map((r) => ({ ...r }))
       .sort((a, b) => a.course - b.course);
+    this.loadName();
+    const entries = this.newRecords();
+    const finish = () => {
+      this.save();
+      this.page = 0;
+      this.showRecordPage(done);
+    };
+    if (entries.length) this.showName(entries, finish, "NEW RECORD");
+    else finish();
+  }
+  // The last name entered, in GP or Time Attack, comes back.
+  loadName() {
     let saved = "";
     try {
       saved = this.storage.getItem("hover-player-name") || "";
@@ -341,14 +392,6 @@ export class GPScreens {
       [...saved].every((c) => ENTRY_CHARACTERS.includes(c))
         ? [...saved].map((c) => ENTRY_CHARACTERS.indexOf(c))
         : [0, 0, 0];
-    const entries = this.newRecords();
-    const finish = () => {
-      this.save();
-      this.page = 0;
-      this.showRecordPage(done);
-    };
-    if (entries.length) this.showName(entries, finish);
-    else finish();
   }
   newRecords() {
     const rows: { course: number; kind: string; time: number; rank: number }[] =
@@ -358,7 +401,10 @@ export class GPScreens {
         ["lap", r.best],
         ["total", r.total],
       ] as const) {
-        const rank = rankAmong(HoverRecords.read("gp", r.course, kind), time);
+        const rank = rankAmong(
+          HoverRecords.read(this.recordClass, r.course, kind),
+          time,
+        );
         if (rank) rows.push({ course: r.course, kind, time, rank });
       }
     return rows;
@@ -366,11 +412,15 @@ export class GPScreens {
   get nameText() {
     return this.name.map((i) => ENTRY_CHARACTERS[i]).join("");
   }
-  showName(entries: ReturnType<GPScreens["newRecords"]>, done: () => void) {
+  showName(
+    entries: ReturnType<GPScreens["newRecords"]>,
+    done: () => void,
+    kicker: string,
+  ) {
     this.cursor = 0;
     this.open(
       "name",
-      this.header("NEW RECORD", "ENTER YOUR NAME") +
+      this.header(kicker, "ENTER YOUR NAME") +
         `<div class="gp-name" role="group" aria-label="Name, 3 letters">${[
           0, 1, 2,
         ]
@@ -470,9 +520,16 @@ export class GPScreens {
       this.storage.setItem("hover-player-name", name);
     } catch {}
     for (const row of this.batch) {
-      HoverRecords.save("gp", row.course, "lap", row.best, row.machine, name);
       HoverRecords.save(
-        "gp",
+        this.recordClass,
+        row.course,
+        "lap",
+        row.best,
+        row.machine,
+        name,
+      );
+      HoverRecords.save(
+        this.recordClass,
         row.course,
         "total",
         row.total,
@@ -539,6 +596,133 @@ export class GPScreens {
     this.page = page;
     this.showRecordPage(done);
   }
+  // A finished run enters the name first when it makes the top six.
+  showTimeAttack(result: TimeResult, actions: TimeActions) {
+    this.recordClass = result.recordClass;
+    this.recordKind = "total";
+    this.batch = result.retired
+      ? []
+      : [
+          {
+            course: result.course,
+            best: Math.min(...result.laps),
+            total: result.laps.reduce((a, b) => a + b, 0),
+            machine: result.machine,
+          },
+        ];
+    this.loadName();
+    const entries = this.newRecords();
+    const ranks = { lap: 0, total: 0 };
+    for (const e of entries) ranks[e.kind as "lap" | "total"] = e.rank;
+    this.timeResult = () => this.showTimeResult(result, actions, ranks);
+    const finish = () => {
+      if (this.batch.length) this.save();
+      this.timeResult?.();
+    };
+    if (entries.length)
+      this.showName(entries, finish, `${result.label}  ·  NEW RECORD`);
+    else finish();
+  }
+  showTimeResult(
+    result: TimeResult,
+    actions: TimeActions,
+    ranks: { lap: number; total: number },
+  ) {
+    const finished = !result.retired;
+    // Switching the record table keeps the menu row.
+    const selected = this.screen === "time-result" ? this.selected : 0;
+    const total = result.laps.reduce((a, b) => a + b, 0);
+    const best = result.laps.length ? Math.min(...result.laps) : NaN;
+    const badge = (rank: number) =>
+      rank ? ` <span class="gp-new">NEW · ${ordinal(rank)}</span>` : "";
+    const laps = [0, 1, 2]
+      .map((i) => {
+        const t = result.laps[i];
+        return `<div${finished && t === best ? " data-best" : ""}${t === undefined ? " data-missing" : ""}><dt>LAP ${i + 1}</dt><dd>${hudTime(t)}</dd></div>`;
+      })
+      .join("");
+    const summary = finished
+      ? `<h3 class="gp-label">TOTAL${badge(ranks.total)}</h3>` +
+        `<p class="ta-total"><span>${hudTime(total)}</span>${
+          result.bestBefore === null
+            ? ""
+            : `<span class="ta-delta" data-faster="${total < result.bestBefore}">${deltaTime(total - result.bestBefore)}</span><small>VS BEST</small>`
+        }</p>` +
+        `<dl class="gp-laps">${laps}<div class="gp-best-lap"><dt>BEST LAP${badge(ranks.lap)}</dt><dd>${hudTime(best)}</dd></div></dl>`
+      : `<p class="ta-retired">${esc(result.retired!)}</p><dl class="gp-laps">${laps}</dl>`;
+    this.open(
+      "time-result",
+      this.header(
+        `${result.label}  ·  ${machineName(result.machine)}`,
+        courseName(result.course),
+      ) +
+        `<section class="ta-summary">${summary}</section>` +
+        `<section class="gp-side ta-records">${finished ? this.recordTable(result, ranks) : this.courseBests(result)}</section>` +
+        guide([
+          guideArrows("↑ ↓", "SELECT"),
+          ...(finished ? [guideArrows("← →", "RECORDS")] : []),
+          guideKey("ENTER", "CONFIRM"),
+        ]),
+    );
+    this.layout
+      .querySelectorAll<HTMLButtonElement>(".ta-records [data-kind]")
+      .forEach((b) => {
+        b.onclick = () => this.turnKind(b.dataset.kind as "total" | "lap");
+      });
+    this.menu(
+      [
+        { label: "RETRY", run: actions.retry },
+        { label: "CHANGE MACHINE", run: actions.changeMachine },
+        { label: "CHANGE COURSE", run: actions.changeCourse },
+        { label: "QUIT", run: actions.quit },
+      ],
+      `${result.label} result`,
+      selected,
+    );
+  }
+  // The course's top six, this run's rows marked NEW.
+  private recordTable(
+    result: TimeResult,
+    ranks: { lap: number; total: number },
+  ) {
+    const kind = this.recordKind;
+    const rows = HoverRecords.read(result.recordClass, result.course, kind);
+    const mine = ranks[kind] - 1;
+    return (
+      `<div class="gp-tabs" role="group" aria-label="Record table">${(
+        [
+          ["total", "TOTAL"],
+          ["lap", "BEST LAP"],
+        ] as const
+      )
+        .map(
+          ([k, label]) =>
+            `<button type="button" data-kind="${k}" aria-current="${k === kind}">${label}</button>`,
+        )
+        .join("")}</div>` +
+      `<ol class="gp-record-rows ta-record-rows">${Array.from(
+        { length: 6 },
+        (_, i) => {
+          const r = rows[i];
+          return `<li${i === mine ? " data-player" : ""}><span class="gp-pos">${i + 1}</span><span class="gp-machine">${esc(r ? r.name || "---" : "---")}${i === mine ? "<small>NEW</small>" : ""}</span><span class="gp-gap">${r ? `${machineIcon(r.machine)}${esc(machineName(r.machine))}` : ""}</span><span class="gp-time">${hudTime(r?.time)}</span></li>`;
+        },
+      ).join("")}</ol>`
+    );
+  }
+  // A retired run saves nothing; the course's bests stay as the target.
+  private courseBests(result: TimeResult) {
+    const best = (kind: string, label: string) => {
+      const r = HoverRecords.read(result.recordClass, result.course, kind)[0];
+      return `<div><dt>${label}</dt><dd>${hudTime(r?.time)}${r ? ` <small>${esc(r.name || "---")} · ${esc(machineName(r.machine))}</small>` : ""}</dd></div>`;
+    };
+    return `<h3 class="gp-label">COURSE RECORDS</h3><dl class="gp-laps ta-bests">${best("total", "BEST TOTAL")}${best("lap", "BEST LAP")}</dl>`;
+  }
+  turnKind(kind: "total" | "lap") {
+    if (kind === this.recordKind) return;
+    this.sound("move");
+    this.recordKind = kind;
+    this.timeResult?.();
+  }
   key(code: string) {
     if (!this.screen) return false;
     if (this.screen === "name") {
@@ -560,6 +744,12 @@ export class GPScreens {
       (code === "ArrowLeft" || code === "ArrowRight")
     )
       this.turnPage(code === "ArrowLeft" ? -1 : 1, this.recordsDone);
+    else if (
+      this.screen === "time-result" &&
+      (code === "ArrowLeft" || code === "ArrowRight") &&
+      this.batch.length
+    )
+      this.turnKind(code === "ArrowLeft" ? "total" : "lap");
     else if (CONFIRM.includes(code)) this.confirm();
     else if (BACK.includes(code) && this.backAction) {
       this.sound("cancel");

@@ -189,19 +189,33 @@ module.exports = async function verify({
     await wait("running");
     await force("finish");
     await wait("finished");
+    // Time Attack's goal shows the time; the course has no record to beat yet.
+    const timedGoal = await page.locator("#goal-banner").innerText();
+    assert.match(timedGoal, /TIME ATTACK\s*·\s*FINISH/);
+    assert.match(timedGoal, /00'33"00/);
+    assert.doesNotMatch(timedGoal, /VS BEST/);
+    assert.match(timedGoal, /NEW RECORD\s*TOTAL 1ST/);
+    assert.match(timedGoal, /NEW BEST LAP\s*00'10"00 · 1ST/);
+    assert.match(timedGoal, /GHOST UPDATED/);
     await page.waitForFunction(
-      () => window.hoverDiagnostics().postrace === "name",
+      () => window.hoverDiagnostics().gpScreen === "name",
+    );
+    assert.equal(
+      (await page.evaluate(() => window.hoverDiagnostics())).replaying,
+      true,
+    );
+    assert.match(
+      await page.locator("#gp-panel .gp-kicker").innerText(),
+      /TIME ATTACK\s*·\s*NEW RECORD/,
     );
     await page.setViewportSize({ width: 375, height: 780 });
     const mobile = await page.locator(".game-wrap").boundingBox();
     assert.ok(Math.abs(mobile!.width / mobile!.height - 4 / 3) < 0.01);
-    await key("ArrowRight");
-    await page.waitForTimeout(320);
+    await key("ArrowDown");
     await page.screenshot({ path: "/tmp/hover-name-entry.png" });
     for (let i = 0; i < 3; i++) await key("Enter");
-    assert.equal(
-      (await page.evaluate(() => window.hoverDiagnostics())).postrace,
-      "laps",
+    await page.waitForFunction(
+      () => window.hoverDiagnostics().gpScreen === "time-result",
     );
     const row = await page.evaluate(
       () => window.HoverRecords.read("time", 0, "lap")[0],
@@ -209,19 +223,67 @@ module.exports = async function verify({
     // Starts from the name saved by the GP (NKA); the first letter turned to O.
     assert.equal(row.name, "OKA");
     assert.equal(row.time, 10);
-    await key("Enter");
-    assert.equal(
-      (await page.evaluate(() => window.hoverDiagnostics())).postrace,
-      "lap",
+    await page.screenshot({ path: "/tmp/hover-time-result.png" });
+    await page.setViewportSize({ width: 1100, height: 900 });
+    const result = await page.locator("#gp-panel").innerText();
+    assert.match(result, /TIME ATTACK\s*·\s*LUSTER/);
+    assert.match(result, /TOTAL\s*NEW · 1ST/);
+    assert.match(
+      result,
+      /RETRY[\s\S]*CHANGE MACHINE[\s\S]*CHANGE COURSE[\s\S]*QUIT/,
     );
-    await page.screenshot({ path: "/tmp/hover-best-records.png" });
-    await key("Enter");
-    assert.equal(
-      (await page.evaluate(() => window.hoverDiagnostics())).postrace,
-      "total",
+    // The record table marks this run and shows each holder's machine.
+    assert.match(
+      await page.locator(".ta-record-rows [data-player]").innerText(),
+      /OKA\s*NEW\s*LUSTER\s*00'33"00/,
     );
-    await key("Escape");
+    assert.equal(
+      await page.locator(".ta-record-rows .record-machine-icon").count(),
+      1,
+    );
+    await key("ArrowDown");
+    await key("ArrowRight");
+    assert.equal(
+      await page.locator('.ta-records [aria-current="true"]').innerText(),
+      "BEST LAP",
+    );
+    assert.match(
+      await page.locator(".ta-record-rows [data-player]").innerText(),
+      /OKA[\s\S]*00'10"00/,
+    );
+    // Switching the table keeps the menu row.
+    assert.equal(
+      (await page.evaluate(() => window.hoverDiagnostics())).gpSelection,
+      1,
+    );
+    await page.screenshot({ path: "/tmp/hover-time-records.png" });
+    // RETRY races the same course and machine against the new ghost.
+    await key("ArrowUp");
+    await key("Enter");
+    await wait("countdown");
+    const retry = await page.evaluate(() => window.hoverDiagnostics());
+    assert.equal(retry.mode, "time");
+    assert.equal(retry.ghost!.machine, 0);
+    await wait("running");
+    // A retirement goes straight to the result, with the course's bests.
+    await force("course-out");
+    await wait("finished");
+    await page.waitForFunction(
+      () => window.hoverDiagnostics().gpScreen === "time-result",
+    );
+    const retired = await page.locator("#gp-panel").innerText();
+    assert.match(retired, /COURSE OUT/);
+    assert.match(retired, /BEST TOTAL\s*00'33"00\s*OKA · LUSTER/);
+    assert.equal(await page.locator(".ta-records .gp-tabs").count(), 0);
+    await page.screenshot({ path: "/tmp/hover-time-retired.png" });
+    await page
+      .getByRole("button", { name: "CHANGE COURSE", exact: true })
+      .click();
     await wait("menu");
+    assert.equal(
+      (await page.evaluate(() => window.hoverDiagnostics())).menuScreen,
+      "course",
+    );
     await page.setViewportSize({ width: 1100, height: 900 });
     // Complete a full GP: result, intro, cup clear, one name for all courses.
     await page.reload();
@@ -366,7 +428,7 @@ module.exports = async function verify({
       [],
     );
     console.log(
-      "PASS: source pause restart; GP fall/destruction/defeat results, RETRY and confirmed QUIT, goal banner delay, pointer controls, typed and confirmed names, named record persistence, mobile records, BESTLAP/TOTAL pages, all GP rounds with intros, cup clear and records",
+      "PASS: source pause restart; GP fall/destruction/defeat results, RETRY and confirmed QUIT, goal banner delay, pointer controls, typed and confirmed names, named record persistence, Time Attack goal, name entry, result tables, RETRY and retirement, all GP rounds with intros, cup clear and records",
     );
   } finally {
     await browser.close();
