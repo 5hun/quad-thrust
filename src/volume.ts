@@ -6,7 +6,7 @@ export const volumeLabel = (level: number) => `VOLUME: ${level}`;
 export const clampVolume = (level: number) =>
   Math.max(0, Math.min(VOLUME_STEPS, Math.round(level)));
 
-// Shows "VOLUME ◀ ■■■■□ 8 ▶". The arrows step the level for mouse and touch;
+// Shows "VOLUME ◀ ━━━── ▶". The arrows step the level for mouse and touch;
 // clicking elsewhere on the row is handled by the menu's own confirm.
 export function decorateVolumeButton(
   button: HTMLButtonElement,
@@ -34,13 +34,8 @@ export function decorateVolumeButton(
   const meter = document.createElement("span");
   meter.className = "volume-meter";
   meter.setAttribute("aria-hidden", "true");
-  for (let i = 0; i < VOLUME_STEPS; i++) {
-    const cell = document.createElement("i");
-    if (i < level) cell.dataset.on = "";
-    meter.append(cell);
-  }
-  const value = document.createElement("span");
-  value.className = "volume-value";
-  value.textContent = String(level);
-  button.replaceChildren(name, arrow(-1), meter, value, arrow(1));
+  const fill = document.createElement("i");
+  fill.style.width = `${(level / VOLUME_STEPS) * 100}%`;
+  meter.append(fill);
+  button.replaceChildren(name, arrow(-1), meter, arrow(1));
 }

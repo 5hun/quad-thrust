@@ -665,19 +665,24 @@ module.exports = async function verify({
         label: document
           .querySelector("#menu nav button.volume-option")!
           .getAttribute("aria-label"),
-        lit: document.querySelectorAll("#menu .volume-meter i[data-on]").length,
+        fill: (document.querySelector("#menu .volume-meter i") as HTMLElement)
+          .style.width,
         gain: window.hoverDiagnostics().volume,
       }));
     await press("ArrowDown");
     await press("ArrowLeft");
     await press("ArrowLeft");
-    assert.deepEqual(await volume(), { label: "VOLUME: 8", lit: 8, gain: 0.8 });
+    assert.deepEqual(await volume(), {
+      label: "VOLUME: 8",
+      fill: "80%",
+      gain: 0.8,
+    });
     await press("ArrowRight");
     await press("ArrowRight");
     await press("ArrowRight");
     assert.deepEqual(await volume(), {
       label: "VOLUME: 10",
-      lit: 10,
+      fill: "100%",
       gain: 1,
     });
     await page.locator("#menu .volume-arrow").first().click();

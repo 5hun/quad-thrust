@@ -983,23 +983,19 @@ button[aria-current="true"] > .volume-arrow {
 .volume-arrow[data-disabled="true"] {
   visibility: hidden;
 }
+/* A thin white line over a gray track, slimmer than the HUD ENERGY bar. */
 .volume-meter {
-  display: flex;
-  gap: 0.3cqw;
+  position: relative;
+  width: 12cqw;
+  height: max(2px, 0.4cqh);
+  background: rgb(172 196 216 / 45%);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
 }
 .volume-meter i {
-  width: 0.7cqw;
-  height: 2.2cqh;
-  background: currentColor;
-  opacity: 0.2;
-}
-.volume-meter i[data-on] {
-  opacity: 1;
-}
-.volume-value {
-  min-width: 1.2em;
-  letter-spacing: 0;
-  text-align: center;
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #f3faff;
+  box-shadow: 0 0 8px rgb(243 250 255 / 35%);
 }
 :is(#menu[data-presentation="list"], #pause-panel) nav button:focus-visible {
   outline: none;
