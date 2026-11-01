@@ -1338,7 +1338,7 @@ main > details {
 #hud {
   --hud-cyan: #20e5ec;
   --hud-white: #f3faff;
-  --hud-muted: #aebdc9;
+  --hud-muted: #e2eaf0;
   --hud-track: rgb(172 196 216 / 22%);
   --hud-danger: #ff5a52;
   position: absolute;
@@ -1371,10 +1371,14 @@ main > details {
   container-type: size;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  text-shadow: 0 1px 8px rgb(0 0 0 / 45%);
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 75%),
+    0 1px 3px rgb(0 0 0 / 60%),
+    0 2px 12px rgb(0 0 0 / 45%);
 }
 .hud-label {
   display: block;
+  font-weight: 600;
   color: var(--hud-muted);
   font-size: 0.8cqw;
   letter-spacing: 0.3em;
@@ -1387,7 +1391,7 @@ main > details {
 .hud-lap-count {
   margin: 0.6cqh 0 2.4cqh;
   font-size: 3.4cqw;
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1;
   letter-spacing: 0.08em;
 }
@@ -1399,8 +1403,14 @@ main > details {
 .hud-total {
   margin: 0.6cqh 0 0;
   font-size: 1.8cqw;
-  font-weight: 300;
+  font-weight: 400;
   letter-spacing: 0.06em;
+}
+/* Thin lines need their own outline; text-shadow does not reach them. */
+.hud-map,
+.hud-energy-bar,
+.hud-speed-bar {
+  filter: drop-shadow(0 0 1.5px rgb(0 0 0 / 85%));
 }
 .hud-map {
   display: block;
@@ -1423,7 +1433,9 @@ main > details {
   font-size: 5.2cqw;
   font-weight: 300;
   line-height: 1;
-  text-shadow: 0 0 14px rgb(32 229 236 / 25%);
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 75%),
+    0 0 14px rgb(32 229 236 / 25%);
 }
 .hud-position b {
   font-weight: inherit;
@@ -1467,14 +1479,14 @@ main > details {
   justify-content: space-between;
   padding: 0.6cqh 0 0.6cqh 1.4cqw;
   font-size: 1.35cqw;
-  font-weight: 300;
+  font-weight: 400;
 }
 .hud-laps li .hud-label {
   align-self: center;
   font-size: 0.75cqw;
 }
 .hud-laps li.pending {
-  opacity: 0.55;
+  opacity: 0.75;
 }
 .hud-laps li.current {
   color: var(--hud-cyan);
@@ -1497,7 +1509,7 @@ main > details {
   display: block;
   margin-top: 0.5cqh;
   font-size: 1.35cqw;
-  font-weight: 300;
+  font-weight: 400;
 }
 /* ENERGY matches the machine-select spec bars. */
 .hud-energy {
@@ -1513,7 +1525,7 @@ main > details {
 }
 .hud-energy-head > span:last-child {
   font-size: 1.6cqw;
-  font-weight: 300;
+  font-weight: 400;
 }
 .hud-energy-bar {
   position: relative;
@@ -1569,7 +1581,7 @@ main > details {
 }
 .hud-speed strong {
   font-size: 6.4cqw;
-  font-weight: 200;
+  font-weight: 300;
   line-height: 1;
   letter-spacing: 0.04em;
 }
@@ -1595,7 +1607,9 @@ main > details {
 }
 .hud-speed.turbo strong {
   color: var(--hud-cyan);
-  text-shadow: 0 0 18px rgb(32 229 236 / 55%);
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 75%),
+    0 0 18px rgb(32 229 236 / 55%);
 }
 .hud-speed.turbo .hud-speed-bar i {
   background: var(--hud-cyan);
