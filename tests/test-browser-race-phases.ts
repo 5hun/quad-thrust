@@ -113,7 +113,22 @@ module.exports = async function verify({
     }
     await page.keyboard.up("Shift");
     await page.keyboard.up("q");
+    const hudText = (id: string) =>
+      page.evaluate((id) => {
+        const el = document.getElementById(id)!;
+        return el.hidden ? null : el.textContent!.trim();
+      }, id);
+    // The HTML countdown keeps the 3D digits' frames: 3 from 200 left.
+    for (const digit of ["3", "2", "1"])
+      await page.waitForFunction((digit) => {
+        const el = document.getElementById("hud-countdown")!;
+        return !el.hidden && el.textContent === digit;
+      }, digit);
     await wait("running");
+    assert.equal(await hudText("hud-countdown"), null);
+    assert.match((await hudText("hud-energy"))!, /^ENERGY\s*100%/);
+    assert.match((await hudText("hud-position"))!, /\/ 4$/);
+    assert.equal(await hudText("hud-best"), `--'--"--`);
     await page.waitForTimeout(200);
     assert.ok(
       (await snapshot()).speed > 0,
@@ -170,6 +185,11 @@ module.exports = async function verify({
     for (const mode of ["time", "practice"]) {
       await start(mode);
       await wait("running");
+      assert.equal(
+        await page.locator("#hud-position").isVisible(),
+        mode !== "time",
+        mode + " shows position only against opponents",
+      );
       await forceFinish(true);
       await page.waitForTimeout(350);
       const d = await snapshot();

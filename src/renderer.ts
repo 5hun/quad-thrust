@@ -114,7 +114,6 @@ export class HoverRenderer {
   canvas: HTMLCanvasElement;
   countScene: THREE.Scene;
   countCamera: THREE.PerspectiveCamera;
-  countDigits: THREE.Group[];
   skyGroup: THREE.Group;
   countdown: number | null = null;
   finishCamera = false;
@@ -186,12 +185,6 @@ export class HoverRenderer {
     this.gpRecordBackground = new THREE.CanvasTexture(recordCanvas);
     this.gpRecordBackground.colorSpace = THREE.SRGBColorSpace;
     this.countCamera = new THREE.PerspectiveCamera(42, 4 / 3, 0.15, 100);
-    this.countDigits = [1, 2, 3].map((i) => {
-      const m = this.modelObject("ALP_0_9", i);
-      m.position.set(-10, 4, -60);
-      this.countScene.add(m);
-      return m;
-    });
     this.countScene.add(new THREE.AmbientLight(0xffffff, 2));
     this.countScene.add(this.resultLetters);
     this.skyGroup = new THREE.Group();
@@ -786,24 +779,6 @@ export class HoverRenderer {
     this.nameLetters.visible = !!this.nameEntry;
     this.continueLetters.visible = !!this.continuePrompt;
     this.resultLetters.visible = !!this.result;
-    if (this.countdown !== null && this.countdown !== undefined) {
-      const n = this.countdown;
-      let i = Math.floor(n / 60);
-      const j = n % 60;
-      if (i < 4) {
-        if (j <= 20 && i !== 0) i--;
-        this.countDigits.forEach((m, k) => {
-          m.visible = k === i;
-          if (m.visible)
-            m.rotation.y =
-              j <= 20 ? (-(-204 * (j - 40)) * Math.PI * 2) / 4096 : 0;
-        });
-        this.renderer.autoClear = false;
-        this.renderer.clearDepth();
-        this.renderer.render(this.countScene, this.countCamera);
-        this.renderer.autoClear = true;
-      }
-    }
     this.frames++;
     if (this.result) {
       const { text, frame } = this.result;
@@ -824,7 +799,6 @@ export class HoverRenderer {
           );
         }
       }
-      this.countDigits.forEach((m) => (m.visible = false));
       this.resultLetters.visible = true;
       // Goal text approaches its final position one character every 8 ticks.
       this.resultLetters.children.forEach((m, i) => {
@@ -861,7 +835,6 @@ export class HoverRenderer {
         });
         this.countScene.add(this.continueLetters);
       }
-      this.countDigits.forEach((m) => (m.visible = false));
       this.resultLetters.visible = false;
       this.continueLetters.children.forEach((letter, i) => {
         letter.visible =
@@ -889,7 +862,6 @@ export class HoverRenderer {
         );
         if (!this.nameLetters.parent) this.countScene.add(this.nameLetters);
       }
-      this.countDigits.forEach((m) => (m.visible = false));
       this.resultLetters.visible = false;
       this.continueLetters.visible = false;
       this.nameLetters.visible = true;

@@ -166,16 +166,7 @@ module.exports = async function verify({
     await wait("paused");
     for (const viewport of viewports.slice(0, 4)) {
       await page.setViewportSize(viewport);
-      await page.waitForFunction(() => {
-        const canvas = document.getElementById(
-          "original-hud",
-        ) as HTMLCanvasElement;
-        return (
-          canvas.width ===
-          Math.round(240 * Math.min(16 / 9, innerWidth / innerHeight))
-        );
-      });
-      const hud = await page.locator("#original-hud").boundingBox();
+      const hud = await page.locator(".race-hud").boundingBox();
       assert.ok(
         Math.abs(
           hud!.width - Math.min(viewport.width, (viewport.height * 16) / 9),

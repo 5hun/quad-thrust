@@ -4,17 +4,6 @@ interface Elements {
   "fullscreen-host": HTMLDivElement;
   "fullscreen-status": HTMLParagraphElement;
   hud: HTMLElement;
-  "original-hud": HTMLCanvasElement;
-  "course-label": HTMLElement;
-  lap: HTMLElement;
-  time: HTMLElement;
-  best: HTMLElement;
-  "energy-num": HTMLElement;
-  energy: HTMLElement;
-  thrusters: HTMLElement;
-  speed: HTMLElement;
-  position: HTMLElement;
-  minimap: HTMLCanvasElement;
   message: HTMLElement;
   menu: HTMLElement;
   mode: HTMLSelectElement;
@@ -45,7 +34,7 @@ function $<K extends keyof Elements>(id: K): Elements[K] {
 }
 import { HoverRenderer } from "./renderer.js";
 import { OriginalSound } from "./sound.js";
-import { OriginalHUD } from "./hud.js";
+import { RaceHUD } from "./hud.js";
 import { OriginalMenu } from "./menu.js";
 import { ReplayMemory } from "./replay-memory.js";
 import { SaveStore } from "./save-data.js";
@@ -64,7 +53,7 @@ const session = new SaveStore({
 R.useStorage(session);
 B.useStorage(session);
 
-const originalHUD = new OriginalHUD($("original-hud"));
+const raceHUD = new RaceHUD($("hud"));
 let view: HoverRenderer;
 try {
   view = new HoverRenderer(canvas);
@@ -278,12 +267,11 @@ const originalMenu = new OriginalMenu({
 const postrace = new OriginalPostrace(originalMenu, session);
 function resize() {
   view.resize();
-  const rect = canvas.getBoundingClientRect();
-  if (rect.height > 0) originalHUD.resize(rect.width / rect.height);
 }
 new ResizeObserver(resize).observe(canvas);
 const gpRecords: GPRecord[] = [];
-let fallFrames = 0,
+let hudBest = Infinity,
+  fallFrames = 0,
   gpRound = 0,
   resultFrames = 0,
   gpCup = 0,
@@ -368,10 +356,13 @@ function start(nextRound = false) {
   $("result").hidden = true;
   $("pause-panel").hidden = true;
   $("hud").hidden = false;
+  raceHUD.reset();
+  // Same BEST LAP as course select: the top of the saved lap records.
+  hudBest =
+    B.read(R.profile(mode).recordClass, tracks.indexOf(track), "lap")[0]
+      ?.time ?? Infinity;
   $("touch").hidden = !matchMedia("(pointer:coarse)").matches;
   document.querySelector(".game-wrap")!.classList.add("playing");
-  $("course-label").textContent = track.name.toUpperCase();
-  $("best").textContent = "BEST " + format(getBest());
   if (sound) initAudio();
   canvas.focus();
   if (matchMedia("(max-width:600px)").matches)
@@ -898,37 +889,15 @@ function render() {
   if (postrace.phase) postrace.draw();
 }
 function hud() {
-  originalHUD.draw(
+  raceHUD.draw({
     car,
     track,
     bots,
-    getBest(),
-    state,
-    countdown,
-    ghostReplay?.car || null,
-  );
-  const speed = car.sourceSpeed >> 1;
-  $("speed").textContent = String(speed).padStart(3, "0");
-  $("time").textContent = format(car.time);
-  $("lap").textContent = `LAP ${Math.min(car.laps.length + 1, 3)} / 3`;
-  $("energy").style.width = car.energy + "%";
-  $("energy").style.background = car.energy < 25 ? "#ff7969" : "#b3ff65";
-  $("energy-num").textContent = Math.ceil(car.energy) + "%";
-  $("position").textContent = bots.length
-    ? `POSITION ${1 + bots.filter((b) => b.progress > car.progress).length} / 4`
-    : "TIME ATTACK";
-  const m: Record<string, keyof Input> = {
-    KeyQ: "l1",
-    KeyA: "l2",
-    KeyE: "r1",
-    KeyD: "r2",
-  };
-  document
-    .querySelectorAll<HTMLElement>("[data-thruster]")
-    .forEach((el) =>
-      el.classList.toggle("on", !!currentInput[m[el.dataset.thruster!]]),
-    );
-  mapDraw($("minimap"), track, car, bots);
+    ghost: ghostReplay?.car || null,
+    best: hudBest,
+    countdown: state === "countdown" ? Math.round(countdown * 60) : null,
+    topSpeed: originalMenu.curves[car.type]?.[1][159] ?? 0,
+  });
 }
 // The original keeps every car moving during goal text and failure waits.
 function updateBots(dt: number, racing = true) {
@@ -1098,10 +1067,7 @@ function update(dt: number) {
   if (car.progress < previousProgress)
     car.wrongFrames = (car.wrongFrames || 0) + 1;
   else if (car.progress > previousProgress) car.wrongFrames = 0;
-  if (car.laps.length > laps) {
-    $("best").textContent = "BEST " + format(getBest());
-    car.lapDraw = 180;
-  }
+  if (car.laps.length > laps) car.lapDraw = 180;
   updateBots(dt);
   E.collideAll([car, ...bots]);
 

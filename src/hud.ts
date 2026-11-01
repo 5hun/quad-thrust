@@ -1,76 +1,87 @@
 // Source: src/hud.ts. Build with npm run build; do not edit dist/hud.js directly.
-// DRAW_SP.C coordinates are centered on a 320 x 240 screen.
-export class OriginalHUD {
-  canvas: HTMLCanvasElement;
-  g: CanvasRenderingContext2D;
-  images: Record<string, HTMLImageElement>;
-  map: HTMLCanvasElement;
-  track!: Track;
-  mx!: number;
-  mz!: number;
-  scale!: number;
+// Race HUD in the title-menu style. Readouts are DOM elements in #hud; only
+// the minimap is a canvas, and it keeps the original machine icons.
+export interface HUDFrame {
+  car: Car;
+  track: Track;
+  bots: Car[];
+  ghost: Pose | null;
+  best: number;
+  // Frames left in the countdown, or null once racing.
+  countdown: number | null;
+  // Machine top speed with turbo, so the speed bar fills at full throttle.
+  topSpeed: number;
+}
 
-  constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas;
-    this.g = canvas.getContext("2d")!;
-    this.images = {};
-    for (const n of ["hud-487", "hud-497", "hud-red", "font"]) {
-      const i = new Image();
-      i.src = "assets/" + n + ".png";
-      this.images[n] = i;
-    }
-    this.map = document.createElement("canvas");
-    this.map.width = this.map.height = 64;
+const LOW_ENERGY = 25;
+// Damage stays visible this long before the lost segment drains.
+const LOST_HOLD = 20;
+const HIT_FRAMES = 18;
+const ORDINAL = ["ST", "ND", "RD", "TH"];
+
+export const hudTime = (t?: number) => {
+  if (t === undefined || !Number.isFinite(t)) return "--'--\"--";
+  const n = Math.floor((Math.round(t * 60) * 100) / 60);
+  return `${String(Math.floor(n / 6000)).padStart(2, "0")}'${String(Math.floor(n / 100) % 60).padStart(2, "0")}"${String(n % 100).padStart(2, "0")}`;
+};
+
+// The 3D digits used to spin in 20 frames before each second; the HTML
+// digit switches at the same frames so the start timing does not change.
+export const countdownDigit = (frames: number) =>
+  frames > 200 ? null : frames > 140 ? 3 : frames > 80 ? 2 : 1;
+
+export class RaceHUD {
+  root: HTMLElement;
+  icons: HTMLImageElement;
+  map: HTMLCanvasElement;
+  track: Track | null = null;
+  path: Path2D | null = null;
+  mx = 0;
+  mz = 0;
+  scale = 1;
+  shown: Record<string, string> = {};
+  rank = 0;
+  lost = 100;
+  lostHold = 0;
+  hits = { left: 0, right: 0 };
+  banner = "";
+  digit: number | null = null;
+
+  constructor(root: HTMLElement) {
+    this.root = root;
+    this.icons = new Image();
+    this.icons.src = "assets/hud-497.png";
+    this.map = this.el<HTMLCanvasElement>("hud-map");
+    new ResizeObserver(() => this.resizeMap()).observe(this.map);
   }
-  resize(aspect: number) {
-    const width = Math.round(240 * Math.min(16 / 9, Math.max(4 / 3, aspect)));
-    if (this.canvas.width !== width) this.canvas.width = width;
+  el<T extends HTMLElement = HTMLElement>(id: string) {
+    return this.root.querySelector<T>("#" + id)!;
   }
-  sprite(
-    u: number,
-    v: number,
-    w: number,
-    h: number,
-    x: number,
-    y: number,
-    palette: number | string = 487,
-  ) {
-    const i = this.images["hud-" + palette];
-    if (i.complete && i.naturalWidth)
-      this.g.drawImage(i, u, v, w, h, x, y, w, h);
+  // Writes only on change; the HUD updates every frame.
+  set(id: string, text: string) {
+    if (this.shown[id] === text) return;
+    this.shown[id] = text;
+    this.el(id).textContent = text;
   }
-  text(s: string, x: number, y: number, size = 8) {
-    const i = this.images.font;
-    if (!i.complete || !i.naturalWidth) return;
-    for (const c of s) {
-      const t = c.charCodeAt(0) - 32;
-      this.g.drawImage(
-        i,
-        size === 8 ? Math.floor(t / 16) * 8 : 128 + Math.floor(t / 8) * 16,
-        size === 8 ? (t % 16) * 8 : (t % 8) * 16,
-        size,
-        size,
-        x,
-        y,
-        size,
-        size,
-      );
-      x += size;
-    }
+  restart(el: HTMLElement, className: string) {
+    el.classList.remove(className);
+    void el.offsetWidth;
+    el.classList.add(className);
   }
-  time(seconds: number, x: number, y: number) {
-    const t = Math.floor((Math.round(seconds * 60) * 100) / 60);
-    const s =
-      String(Math.floor(t / 6000)).padStart(2, "0") +
-      "'" +
-      String(Math.floor(t / 100) % 60).padStart(2, "0") +
-      '"' +
-      String(t % 100).padStart(2, "0");
-    for (const c of s) {
-      const n = c === "'" ? 10 : c === '"' ? 11 : +c;
-      this.sprite(n * 8, 160, 8, 8, x, y);
-      x += 8;
-    }
+  reset() {
+    this.shown = {};
+    this.rank = 0;
+    this.lost = 100;
+    this.lostHold = 0;
+    this.hits = { left: 0, right: 0 };
+    this.banner = "";
+    this.digit = null;
+  }
+  resizeMap() {
+    const box = this.map.getBoundingClientRect();
+    const size = Math.round(box.width * Math.min(2, devicePixelRatio || 1));
+    if (size > 0 && this.map.width !== size)
+      this.map.width = this.map.height = size;
   }
   mapTrack(track: Track) {
     this.track = track;
@@ -78,120 +89,145 @@ export class OriginalHUD {
       zs = track.nodes.map((p) => p.z);
     this.mx = (Math.max(...xs) + Math.min(...xs)) / 2;
     this.mz = (Math.max(...zs) + Math.min(...zs)) / 2;
-    this.scale = Math.min(
-      58 / (Math.max(...xs) - Math.min(...xs)),
-      58 / (Math.max(...zs) - Math.min(...zs)),
-    );
-    const g = this.map.getContext("2d")!;
-    g.clearRect(0, 0, 64, 64);
-    g.strokeStyle = "#808080";
-    g.lineWidth = 2;
-    g.lineJoin = "round";
-    g.beginPath();
+    // Unit-square coordinates; drawMap scales them to the canvas.
+    this.scale =
+      0.86 /
+      Math.max(
+        Math.max(...xs) - Math.min(...xs),
+        Math.max(...zs) - Math.min(...zs),
+      );
+    this.path = new Path2D();
     track.nodes.forEach((p, i) => {
-      const x = 32 + (p.x - this.mx) * this.scale,
-        y = 32 - (p.z - this.mz) * this.scale;
-      i ? g.lineTo(x, y) : g.moveTo(x, y);
+      const [x, y] = this.mapPoint(p);
+      if (i) this.path!.lineTo(x, y);
+      else this.path!.moveTo(x, y);
     });
-    g.closePath();
-    g.stroke();
+    this.path.closePath();
   }
-  draw(
-    car: Car,
-    track: Track,
-    bots: Car[],
-    best: number,
-    state: string,
-    countdown: number,
-    ghost: Pose | null = null,
-  ) {
-    const g = this.g;
-    g.clearRect(0, 0, this.canvas.width, 240);
+  mapPoint(p: { x: number; z: number }) {
+    return [
+      0.5 + (p.x - this.mx) * this.scale,
+      0.5 - (p.z - this.mz) * this.scale,
+    ];
+  }
+  drawMap(car: Car, bots: Car[], ghost: Pose | null) {
+    const g = this.map.getContext("2d")!,
+      size = this.map.width;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, size, size);
+    if (!this.path) return;
+    g.setTransform(size, 0, 0, size, 0, 0);
+    g.lineJoin = "round";
+    g.strokeStyle = "rgb(0 0 0 / 35%)";
+    g.lineWidth = 0.03;
+    g.stroke(this.path);
+    g.strokeStyle = "rgb(243 250 255 / 70%)";
+    g.lineWidth = 0.013;
+    g.stroke(this.path);
+    const [sx, sy] = this.mapPoint(this.track!.nodes[0]);
+    g.fillStyle = "#20e5ec";
+    g.fillRect(sx - 0.03, sy - 0.005, 0.06, 0.01);
+    if (!this.icons.complete || !this.icons.naturalWidth) return;
     g.imageSmoothingEnabled = false;
-    if (state === "menu") return;
-    const extra = this.canvas.width - 320;
-    g.save();
-    g.translate(extra, 0);
-    const speed = Math.max(0, car.sourceSpeed >> 1);
-    String(speed)
-      .padStart(3, "0")
-      .slice(-3)
-      .split("")
-      .forEach((d, i) =>
-        this.sprite(
-          (+d & 7) * 16,
-          128 + (+d >> 3) * 16,
-          16,
-          16,
-          232 + i * 16,
-          216,
-        ),
-      );
-    this.sprite(32, 144, 32, 16, 280, 216);
-    g.restore();
-    this.sprite(64, 144, 40, 8, 8, 8, "red");
-    this.time(car.time, 16, 18);
-    g.save();
-    g.translate(extra, 0);
-    this.sprite(64, 152, 64, 8, 232, 8, "red");
-    for (let i = 0; i < 3; i++) {
-      const t =
-        car.laps[i] ?? (i === car.laps.length ? car.time - car.lapStart : 0);
-      this.time(t, 240, 18 + i * 12);
-    }
-    this.sprite(64, 168, 64, 8, 232, 58, "red");
-    this.time(Number.isFinite(best) ? best : 0, 240, 68);
-    g.restore();
-
-    g.save();
-    g.translate(extra / 2, 0);
-    if (bots.length) {
-      this.sprite(0, 168, 64, 24, 128, 8);
-      this.text(
-        String(1 + bots.filter((b) => b.progress > car.progress).length),
-        128,
-        16,
-        16,
-      );
-      this.text("4", 176, 16, 16);
-    }
-    g.restore();
-    this.sprite(0, 224, 16, 32, 8, 204, 497);
-    const power = Math.max(0, Math.floor((29 * car.energy) / 100));
-    this.sprite(16, 254 - power, 8, power, 16, 234 - power, 497);
-    if (this.track !== track) this.mapTrack(track);
-    const mapY = 32;
-    g.drawImage(this.map, 8, mapY);
+    // Other racers and the ghost use their machine icon at a smaller size.
     for (const p of [...bots, ...(ghost ? [ghost] : []), car]) {
-      const x = 40 + (p.x - this.mx) * this.scale,
-        y = mapY + 32 - (p.z - this.mz) * this.scale;
+      const [x, y] = this.mapPoint(p),
+        s = p === car ? 0.08 : 0.047;
       g.save();
-      g.translate(Math.round(x), Math.round(y));
+      g.translate(x, y);
       g.rotate(p.heading);
-      if (p === car) this.sprite(64 + 8 * p.type, 184, 8, 8, -4, -4, 497);
-      else {
-        // DRAW_SP.C draw_map: every other racer, including the TA ghost,
-        // uses its own machine portrait at half size rather than a square.
-        const image = this.images["hud-497"];
-        if (image.complete && image.naturalWidth)
-          g.drawImage(image, 64 + 8 * p.type, 184, 8, 8, -2, -2, 4, 4);
-      }
+      g.globalAlpha = p === ghost ? 0.6 : 1;
+      g.drawImage(this.icons, 64 + 8 * p.type, 184, 8, 8, -s / 2, -s / 2, s, s);
       g.restore();
     }
-    g.save();
-    g.translate(extra / 2, 0);
-    if ((car.lapDraw ?? 0) > 0) {
-      if (car.laps.length === 2) {
-        this.sprite(32, 224, 80, 16, 64, 56);
-        this.sprite(64, 192, 48, 16, 160, 56);
-      } else if (car.laps.length < 3) {
-        this.sprite(0, 192, 64, 16, 56, 56);
-        this.text(String(3 - car.laps.length), 128, 56, 16);
-        this.sprite(64, 192, 64, 16, 168, 56);
-      }
+  }
+  draw(frame: HUDFrame) {
+    const { car, track, bots, ghost } = frame;
+    if (this.track !== track) this.mapTrack(track);
+    const lap = Math.min(car.laps.length + 1, 3);
+    this.set("hud-lap", String(lap));
+    this.set("hud-total", hudTime(car.time));
+    for (let i = 0; i < 3; i++) {
+      const current = i === car.laps.length;
+      const t = car.laps[i] ?? (current ? car.time - car.lapStart : undefined);
+      this.set(`hud-lap-${i}`, hudTime(t));
+      const row = this.el(`hud-lap-row-${i}`);
+      row.classList.toggle("current", current);
+      row.classList.toggle("pending", i > car.laps.length);
     }
-    if ((car.wrongFrames ?? 0) > 5 && (car.ticks & 31) < 16)
-      this.sprite(0, 208, 128, 16, 16, 64);
-    g.restore();
+    this.set("hud-best", hudTime(frame.best));
+
+    const position = this.el("hud-position");
+    position.hidden = !bots.length;
+    if (bots.length) {
+      const rank = 1 + bots.filter((b) => b.progress > car.progress).length;
+      this.set("hud-rank", String(rank));
+      this.set("hud-rank-suffix", ORDINAL[rank - 1]);
+      this.set("hud-racers", `/ ${bots.length + 1}`);
+      if (this.rank && rank !== this.rank) this.restart(position, "changed");
+      this.rank = rank;
+    }
+
+    const energy = Math.max(0, Math.min(100, car.energy));
+    if (energy >= this.lost) {
+      this.lost = energy;
+      this.lostHold = LOST_HOLD;
+    } else if (this.lostHold > 0) this.lostHold--;
+    else this.lost = Math.max(energy, this.lost - 0.6);
+    this.set("hud-energy-num", Math.ceil(energy) + "%");
+    this.el("hud-energy-fill").style.width = energy + "%";
+    this.el("hud-energy-lost").style.width = this.lost + "%";
+    const energyBox = this.el("hud-energy");
+    energyBox.classList.toggle("low", energy < LOW_ENERGY);
+    energyBox.classList.toggle("repair", (car.repairFrames ?? 0) > 0);
+
+    const speed = Math.max(0, car.sourceSpeed >> 1);
+    this.set("hud-speed-num", String(speed).padStart(3, "0"));
+    this.el("hud-speed-fill").style.width =
+      Math.min(100, (100 * speed) / Math.max(1, frame.topSpeed)) + "%";
+    this.el("hud-speed").classList.toggle("turbo", !!car.turbo);
+
+    if (car.leftHit) this.hits.left = HIT_FRAMES;
+    if (car.rightHit) this.hits.right = HIT_FRAMES;
+    for (const side of ["left", "right"] as const) {
+      const hit = this.el(`hud-hit-${side}`);
+      hit.style.opacity = String(this.hits[side] / HIT_FRAMES);
+      this.hits[side] = Math.max(0, this.hits[side] - 1);
+    }
+
+    // Wrong way outranks the lap notice, as both used the same screen area.
+    let banner = "";
+    if ((car.wrongFrames ?? 0) > 5) banner = "WARNING|WRONG WAY";
+    else if ((car.lapDraw ?? 0) > 0 && car.laps.length < 3)
+      banner =
+        car.laps.length === 2
+          ? "LAP 3 / 3|FINAL LAP"
+          : `${3 - car.laps.length} LAPS TO GO|LAP ${lap}`;
+    if (banner !== this.banner) {
+      const el = this.el("hud-banner");
+      el.hidden = !banner;
+      if (banner) {
+        const [label, text] = banner.split("|");
+        this.set("hud-banner-label", label);
+        this.set("hud-banner-text", text);
+        el.classList.toggle("warn", banner.startsWith("WARNING"));
+        this.restart(el, "enter");
+      }
+      this.banner = banner;
+    }
+
+    const digit =
+      frame.countdown === null ? null : countdownDigit(frame.countdown);
+    if (digit !== this.digit) {
+      const el = this.el("hud-countdown");
+      el.hidden = digit === null;
+      if (digit !== null) {
+        this.set("hud-countdown", String(digit));
+        this.restart(el, "enter");
+      }
+      this.digit = digit;
+    }
+
+    this.drawMap(car, bots, ghost);
   }
 }

@@ -127,14 +127,14 @@ module.exports = async function verify({
           "./renderer.js" as string
         )) as typeof import("../src/renderer"),
         update = HoverRenderer.prototype.updateShip;
-      const { OriginalHUD } = (await import(
+      const { RaceHUD } = (await import(
         "./hud.js" as string
       )) as typeof import("../src/hud");
-      const drawHUD = OriginalHUD.prototype.draw;
+      const drawMap = RaceHUD.prototype.drawMap;
       window.ghostMapMachines = [];
-      OriginalHUD.prototype.draw = function (...args) {
-        if (args[6]) window.ghostMapMachines.push(args[6].type);
-        return drawHUD.apply(this, args);
+      RaceHUD.prototype.drawMap = function (car, bots, ghost) {
+        if (ghost) window.ghostMapMachines.push(ghost.type);
+        return drawMap.call(this, car, bots, ghost);
       };
       window.ghostVisuals = [];
       window.ghostMismatches = [];
@@ -194,7 +194,7 @@ module.exports = async function verify({
     assert.ok(observations.visuals.length > 10);
     assert.ok(
       await page.evaluate(() => window.ghostMapMachines.includes(0)),
-      "source HUD map includes the ghost machine",
+      "HUD map includes the ghost machine",
     );
     for (const v of observations.visuals) {
       assert.equal(v.semi, true);
