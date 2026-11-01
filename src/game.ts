@@ -1102,7 +1102,6 @@ function update(dt: number) {
     return;
   }
   if (state === "menu") {
-    originalMenu.tick();
     if (showingMenuDemo()) updateDemo(dt);
     return;
   }

@@ -58,9 +58,6 @@ declare global {
     };
     bombSounds: number;
     bombEvents: { note?: number; volume?: number }[];
-    recordPortraitRows: number[];
-    recordListPortraits: Record<number, number[]>;
-    recordListDrawImage: CanvasRenderingContext2D["drawImage"];
     menuTestPad: { buttons: { pressed: boolean }[]; axes: number[] };
   }
 }

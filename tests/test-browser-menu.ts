@@ -512,11 +512,79 @@ module.exports = async function verify({
     await title();
     await click("OPTIONS");
     await click("VIEW RECORDS");
-    await click("TIME ATTACK'S");
     await screen("records");
-    await press("ArrowDown");
-    await press("Enter");
-    await screen("record-detail");
+    // VIEW RECORDS is one screen: GP / TIME ATTACK tabs, the nine courses
+    // grouped by cup, and the selected course's six BEST LAP and TOTAL rows.
+    // The panel follows the selection on the next rendered frame.
+    const recordsView = async () => {
+      await page.waitForFunction(
+        () =>
+          document.querySelector("#menu .records-title")?.textContent ===
+          window.HOVER_TRACKS[
+            window.hoverDiagnostics().menuSelection
+          ].name.toUpperCase(),
+      );
+      return page.evaluate(() => ({
+        tab: document.querySelector(
+          '#menu [data-record-class][aria-current="true"]',
+        )?.textContent,
+        selection: window.hoverDiagnostics().menuSelection,
+        cups: Array.from(
+          document.querySelectorAll("#menu .records-cup"),
+          (h) => h.textContent,
+        ),
+        courses: document.querySelectorAll("#menu nav button[data-index]")
+          .length,
+        title: document.querySelector("#menu .records-title")?.textContent,
+        empty: document.querySelector("#menu .records-empty") !== null,
+        rows: Array.from(
+          document.querySelectorAll("#menu .records-rows"),
+          (ol) =>
+            Array.from(ol.children, (li) => [
+              li.querySelector(".gp-machine")!.textContent,
+              li.querySelector(".gp-gap")!.textContent,
+              li.querySelector(".gp-time")!.textContent,
+              li
+                .querySelector(".record-machine-icon img")
+                ?.getAttribute("style") ?? null,
+            ]),
+        ),
+        bests: Array.from(
+          document.querySelectorAll("#menu .records-course-best"),
+          (b) => b.textContent,
+        ),
+      }));
+    };
+    let view = await recordsView();
+    assert.equal(view.tab, "GRAND PRIX");
+    assert.equal(view.selection, 0);
+    assert.deepEqual(view.cups, ["BLUE GP", "YELLOW GP", "RED GP"]);
+    assert.equal(view.courses, 9);
+    assert.deepEqual(
+      await page
+        .locator("#menu .title-guide > :visible")
+        .evaluateAll((items) =>
+          items.map((e) => (e as HTMLElement).innerText.replace(/\s+/g, " ")),
+        ),
+      ["↑ ↓ COURSE", "← → MODE", "ESC BACK"],
+    );
+    await press("ArrowUp");
+    for (let i = 0; i < 9; i++) await press("ArrowDown");
+    view = await recordsView();
+    assert.equal(view.selection, 8);
+    assert.deepEqual(
+      await page.evaluate(() => [
+        window.HoverRecords.read("gp", 8, "lap"),
+        window.HoverRecords.read("gp", 8, "total"),
+      ]),
+      [[], []],
+    );
+    assert.equal(view.empty, true);
+    assert.deepEqual(view.rows, []);
+    assert.equal(
+      view.title,
+      await page.evaluate(() => window.HOVER_TRACKS[8].name.toUpperCase()),
+    );
     await page.evaluate(() => {
       for (let machine = 0; machine < 5; machine++) {
         window.HoverRecords.save(
@@ -536,104 +604,56 @@ module.exports = async function verify({
           "DEF",
         );
       }
-      window.recordPortraitRows = [];
-      const drawImage = window.CanvasRenderingContext2D.prototype.drawImage;
-      window.CanvasRenderingContext2D.prototype.drawImage = function (
-        image: CanvasImageSource,
-        ...coords: number[]
-      ) {
-        const args = [image, ...coords] as Parameters<
-          CanvasRenderingContext2D["drawImage"]
-        >;
-        if ((args[0] as HTMLImageElement)?.src?.endsWith("/minicars.png"))
-          window.recordPortraitRows.push(args[2]);
-        return drawImage.apply(this, args);
-      };
     });
+    // Left and right switch the record class; a click picks a course.
+    await press("ArrowRight");
+    await page.locator('#menu nav button[data-index="1"]').click();
     await page.waitForFunction(
-      () => new Set(window.recordPortraitRows).size === 5,
+      () => document.querySelectorAll("#menu .records-rows").length === 2,
     );
-    assert.deepEqual(
-      await page.evaluate(() =>
-        [...new Set(window.recordPortraitRows)].sort((a, b) => a - b),
-      ),
-      [0, 16, 32, 48, 64],
+    view = await recordsView();
+    assert.equal(view.tab, "TIME ATTACK");
+    assert.equal(view.selection, 1);
+    assert.equal(view.empty, false);
+    const machineNames = await page.evaluate(() =>
+      window.HoverEngine.MACHINES.slice(0, 5).map((m) => m.name),
     );
-    await page.screenshot({ path: "/tmp/hover-view-records-fixed.png" });
+    for (const [column, name, base] of [
+      [0, "ABC", 10],
+      [1, "DEF", 30],
+    ] as const)
+      assert.deepEqual(view.rows[column], [
+        ...machineNames.map((machine, i) => [
+          name,
+          machine,
+          `00'${base + i}"00`,
+          `top: ${-i * 100}%`,
+        ]),
+        ["---", "", "--'--\"--", null],
+      ]);
+    assert.equal(view.bests[1], `00'30"00`);
+    assert.equal(
+      await page
+        .locator("#menu .records-rows li")
+        .first()
+        .getAttribute("data-top"),
+      "",
+    );
+    await page.screenshot({ path: "/tmp/hover-view-records.png" });
+    await press("ArrowLeft");
+    await press("ArrowLeft");
+    assert.equal((await recordsView()).tab, "GRAND PRIX");
+    await click("TIME ATTACK");
+    assert.equal((await recordsView()).tab, "TIME ATTACK");
+    // ENTER has nothing further to open; ESC returns to OPTIONS.
     await press("Enter");
-    await screen("record-detail");
-    await press("Escape");
     await screen("records");
-    // The course overview has separate half-size portraits for the two
-    // winning machines; cover every course, machine and record category.
-    for (const [category, offset] of [
-      ["time", 0],
-      ["gp", 2],
-    ] as const) {
-      if (category === "gp") {
-        await press("Escape");
-        await click("GRANDPRIX'S");
-        await screen("records");
-      }
-      await page.evaluate(
-        ({ category, offset }) => {
-          for (let course = 0; course < 9; course++)
-            for (const [kind, line] of [
-              ["lap", 0],
-              ["total", 1],
-            ] as const)
-              window.HoverRecords.save(
-                category,
-                course,
-                kind,
-                0.01,
-                (course + line + offset) % 5,
-                "WIN",
-              );
-          window.recordListPortraits = {};
-          window.recordListDrawImage =
-            window.CanvasRenderingContext2D.prototype.drawImage;
-          window.CanvasRenderingContext2D.prototype.drawImage = function (
-            image: CanvasImageSource,
-            ...coords: number[]
-          ) {
-            const args = [image, ...coords] as Parameters<
-              CanvasRenderingContext2D["drawImage"]
-            >;
-            if (
-              this.canvas.id === "original-menu" &&
-              (args[0] as HTMLImageElement)?.src?.endsWith("/minicars.png")
-            )
-              window.recordListPortraits[args[6]] = coords;
-            return window.recordListDrawImage.apply(this, args);
-          };
-        },
-        { category, offset },
-      );
-      await page.waitForFunction(
-        () => Object.keys(window.recordListPortraits).length === 18,
-      );
-      const portraits = await page.evaluate(() => {
-        window.CanvasRenderingContext2D.prototype.drawImage =
-          window.recordListDrawImage;
-        return window.recordListPortraits;
-      });
-      for (let course = 0; course < 9; course++)
-        for (let line = 0; line < 2; line++) {
-          const y = 24 + course * 24 + line * 10;
-          assert.deepEqual(portraits[y], [
-            0,
-            ((course + line + offset) % 5) * 16,
-            24,
-            16,
-            160,
-            y,
-            12,
-            8,
-          ]);
-        }
-    }
-    await page.screenshot({ path: "/tmp/hover-record-list-fixed.png" });
+    await press("Escape");
+    await screen("option");
+    assert.equal(
+      (await page.evaluate(() => window.hoverDiagnostics())).menuSelection,
+      0,
+    );
     await title();
     await click("OPTIONS");
     assert.deepEqual(

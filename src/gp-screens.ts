@@ -62,7 +62,7 @@ interface MenuItem {
 const ORDINALS = ["1ST", "2ND", "3RD", "4TH"];
 const CONFIRM = ["Enter", "Space", "KeyZ"];
 const BACK = ["Escape", "KeyX", "Backspace"];
-const esc = (s: string) =>
+export const esc = (s: string) =>
   s.replace(
     /[&<>"']/g,
     (c) =>

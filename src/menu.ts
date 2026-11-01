@@ -5,15 +5,9 @@ import {
   decorateVolumeButton,
   volumeLabel,
 } from "./volume.js";
+import { esc } from "./gp-screens.js";
 export type MenuScreen =
-  | "title"
-  | "gp"
-  | "option"
-  | "record-kind"
-  | "car"
-  | "course"
-  | "record-detail"
-  | "records";
+  "title" | "gp" | "option" | "car" | "course" | "records";
 interface MenuHooks {
   mode(value: string): void;
   change(kind: "machine" | "course", delta: number): void;
@@ -26,23 +20,25 @@ interface MenuHooks {
   setVolume(level: number): void;
   sound(kind: "move" | "ok" | "cancel"): void;
 }
+const CUPS = ["Blue GP", "Yellow GP", "Red GP"];
 const lists: Partial<Record<MenuScreen, string[]>> = {
   title: ["GRANDPRIX", "TIME ATTACK", "OPTIONS"],
-  gp: ["Blue GP", "Yellow GP", "Red GP", "PRACTICE"],
+  gp: [...CUPS, "PRACTICE"],
   option: [],
-  "record-kind": ["GRANDPRIX'S", "TIME ATTACK'S"],
 };
 const captions: Partial<Record<MenuScreen, string>> = {
   gp: "GRANDPRIX",
   option: "OPTIONS",
-  "record-kind": "VIEW RECORDS",
 };
 const parent: Partial<Record<MenuScreen, [MenuScreen, number]>> = {
   gp: ["title", 0],
   option: ["title", 2],
-  "record-kind": ["option", 0],
-  records: ["record-kind", 0],
+  records: ["option", 0],
 };
+const RECORD_CLASSES = [
+  ["gp", "GRAND PRIX"],
+  ["time", "TIME ATTACK"],
+] as const;
 const OPTION_VOLUME = 2;
 const field = (id: string) => document.getElementById(id) as HTMLSelectElement;
 export class OriginalMenu {
@@ -50,20 +46,17 @@ export class OriginalMenu {
   selected = 0;
   entered = performance.now();
   mode = "time";
-  recordClass = "gp";
-  recordCourse = 0;
-  recordFrames = 0;
+  // VIEW RECORDS: the Grand Prix's records or Time Attack's.
+  recordClass: "gp" | "time" = "gp";
   panel: HTMLElement;
-  canvas: HTMLCanvasElement;
-  g: CanvasRenderingContext2D;
   buttons: HTMLElement;
   caption: HTMLElement;
-  font = new Image();
-  portraits = new Image();
-  palettes = new Map<string, HTMLCanvasElement>();
+  guideSelect: HTMLElement;
   curves: number[][][] = [];
   machineInfo: HTMLElement;
   courseInfo: HTMLElement;
+  recordsView: HTMLElement;
+  recordsDetail: HTMLElement;
   displayedRecords = "";
   displayedMachine = -1;
   scrollUp: HTMLButtonElement;
@@ -77,21 +70,11 @@ export class OriginalMenu {
     );
   }
   get usesDemoBackdrop() {
-    return (
-      this.usesListLayout ||
-      this.screen === "records" ||
-      this.screen === "record-detail"
-    );
+    return this.usesListLayout || this.screen === "records";
   }
   constructor(public hooks: MenuHooks) {
     this.panel = document.getElementById("menu")!;
     this.panel.replaceChildren();
-    this.canvas = document.createElement("canvas");
-    this.canvas.id = "original-menu";
-    this.canvas.width = 320;
-    this.canvas.height = 240;
-    this.canvas.setAttribute("aria-hidden", "true");
-    this.g = this.canvas.getContext("2d")!;
     this.buttons = document.createElement("nav");
     this.buttons.setAttribute("aria-label", "ゲームメニュー");
     const titleLayout = document.createElement("div");
@@ -107,9 +90,10 @@ export class OriginalMenu {
     const guide = document.createElement("div");
     guide.className = "title-guide";
     guide.innerHTML =
-      '<span><span class="guide-arrows">↑ ↓</span> SELECT</span><button type="button" class="guide-confirm"><kbd>ENTER</kbd> CONFIRM</button><span class="back-guide"><kbd>ESC</kbd> BACK</span>';
+      '<span><span class="guide-arrows">↑ ↓</span> <span class="guide-select">SELECT</span></span><span class="guide-mode"><span class="guide-arrows">← →</span> MODE</span><button type="button" class="guide-confirm"><kbd>ENTER</kbd> CONFIRM</button><span class="back-guide"><kbd>ESC</kbd> BACK</span>';
     guide.querySelector<HTMLButtonElement>(".guide-confirm")!.onclick = () =>
       this.confirm();
+    this.guideSelect = guide.querySelector<HTMLElement>(".guide-select")!;
     titleLayout.append(title, this.caption, this.buttons, guide);
     const scrollArrow = (direction: number) => {
       const button = document.createElement("button");
@@ -146,9 +130,31 @@ export class OriginalMenu {
     this.courseInfo.setAttribute("aria-label", "コース記録");
     this.courseInfo.setAttribute("aria-live", "polite");
     titleLayout.append(this.courseInfo);
-    this.panel.append(this.canvas, titleLayout);
-    this.font.src = "assets/font.png";
-    this.portraits.src = "assets/minicars.png";
+    this.recordsView = document.createElement("section");
+    this.recordsView.className = "records-view gp-layout";
+    this.recordsView.setAttribute("aria-label", "記録");
+    const recordsHeader = document.createElement("div");
+    recordsHeader.className = "gp-header";
+    recordsHeader.innerHTML =
+      '<p class="gp-kicker">OPTIONS</p><h2 class="gp-title">RECORDS</h2>';
+    const tabs = document.createElement("div");
+    tabs.className = "gp-tabs";
+    tabs.setAttribute("role", "group");
+    tabs.setAttribute("aria-label", "記録の種類");
+    for (const [kind, label] of RECORD_CLASSES) {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.dataset.recordClass = kind;
+      tab.textContent = label;
+      tab.onclick = () => this.switchRecordClass(kind);
+      tabs.append(tab);
+    }
+    this.recordsDetail = document.createElement("section");
+    this.recordsDetail.className = "records-detail";
+    this.recordsDetail.setAttribute("aria-live", "polite");
+    this.recordsView.append(recordsHeader, tabs, this.recordsDetail);
+    titleLayout.append(this.recordsView);
+    this.panel.append(titleLayout);
     // car_select_init: 136 samples, three simulation ticks per graph pixel.
     this.curves = HoverEngine.MACHINES.map((m) =>
       [false, true].map((turbo) => {
@@ -175,15 +181,10 @@ export class OriginalMenu {
     );
     this.show("title");
   }
-  tick() {
-    if (this.screen === "record-detail")
-      this.recordFrames = (this.recordFrames + 1) % 1320;
-  }
   show(screen: MenuScreen, selected = 0) {
     const restoreFocus =
       this.screen === screen && this.buttons.contains(document.activeElement);
     document.getElementById("fullscreen-status")!.hidden = true;
-    this.recordFrames = 0;
     const fullscreen = this.hooks.fullscreen();
     lists.option = [
       "VIEW RECORDS",
@@ -193,26 +194,21 @@ export class OriginalMenu {
         ? []
         : [`FULLSCREEN: ${fullscreen ? "ON" : "OFF"}`]),
     ];
-    lists.gp = ["Blue GP", "Yellow GP", "Red GP"]
-      .slice(0, HoverRules.availableCups())
-      .concat("PRACTICE");
+    lists.gp = CUPS.slice(0, HoverRules.availableCups()).concat("PRACTICE");
     this.screen = screen;
     this.selected = selected;
     this.entered = performance.now();
     this.panel.dataset.screen = screen;
-    this.panel.dataset.presentation = this.usesListLayout
-      ? "list"
-      : this.usesDemoBackdrop
-        ? "records"
-        : "original";
+    this.panel.dataset.presentation = this.usesListLayout ? "list" : "records";
     this.panel.dataset.count = String(
       screen === "car"
         ? HoverRules.machineCount()
-        : screen === "course"
+        : screen === "course" || screen === "records"
           ? HOVER_TRACKS.length
           : lists[screen]?.length || 0,
     );
     this.caption.textContent = captions[screen] || "";
+    this.guideSelect.textContent = screen === "records" ? "COURSE" : "SELECT";
     this.buttons.replaceChildren();
     this.buttons.style.removeProperty("height");
     if (screen === "car" || screen === "course") {
@@ -231,10 +227,6 @@ export class OriginalMenu {
       labels.forEach((label, i) => {
         this.button(
           label,
-          0,
-          0,
-          0,
-          0,
           () => {
             if (i !== +field(kind).value) {
               this.hooks.sound("move");
@@ -247,23 +239,31 @@ export class OriginalMenu {
         );
       });
     }
+    if (screen === "records") {
+      this.displayedRecords = "";
+      CUPS.forEach((cup, c) => {
+        const heading = document.createElement("h3");
+        heading.className = "records-cup";
+        heading.textContent = cup.toUpperCase();
+        this.buttons.append(heading);
+        for (let i = c * 3; i < c * 3 + 3; i++) {
+          const b = this.button(
+            `${this.courseLabel(i)} ${HOVER_TRACKS[i].name}`,
+            () => {
+              if (i !== this.selected) this.hooks.sound("move");
+              this.selected = i;
+              this.syncSelection();
+            },
+            i,
+          );
+          b.innerHTML = `<span class="records-course-label">${this.courseLabel(i)}</span><span class="records-course-name">${esc(HOVER_TRACKS[i].name.toUpperCase())}</span><span class="records-course-best"></span>`;
+        }
+      });
+    }
     if (lists[screen])
       lists[screen]!.forEach((label, i) => {
-        const count = lists[screen]!.length;
-        const y =
-          count > 4
-            ? 116 + i * 20
-            : count === 2
-              ? 140 + i * 32
-              : count === 3
-                ? 124 + i * 32
-                : 124 + i * 24;
         this.button(
           label,
-          160 - label.length * 8,
-          y,
-          label.length * 16,
-          16,
           () => {
             this.selected = i;
             this.confirm();
@@ -285,20 +285,10 @@ export class OriginalMenu {
     this.draw();
     if (restoreFocus) this.focusSelection();
   }
-  button(
-    label: string,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    click: () => void,
-    index?: number,
-  ) {
+  button(label: string, click: () => void, index?: number) {
     const b = document.createElement("button");
     b.textContent = label;
     b.setAttribute("aria-label", label);
-    if (!this.usesListLayout)
-      b.style.cssText = `left:${x / 3.2}%;top:${y / 2.4}%;width:${w / 3.2}%;height:${h / 2.4}%`;
     b.onclick = click;
     if (index !== undefined) {
       b.dataset.index = String(index);
@@ -316,6 +306,7 @@ export class OriginalMenu {
       };
     }
     this.buttons.append(b);
+    return b;
   }
   syncSelection() {
     this.buttons
@@ -326,6 +317,7 @@ export class OriginalMenu {
           String(+b.dataset.index! === this.selected),
         ),
       );
+    if (this.screen === "records") this.updateRecordsView();
     if (this.screen === "car" || this.screen === "course") {
       const selected = this.buttons.querySelector<HTMLElement>(
         `[data-index="${this.selected}"]`,
@@ -410,7 +402,10 @@ export class OriginalMenu {
       this.hooks.change("course", delta);
       this.selected = +field("course").value;
     } else if (this.screen === "records")
-      this.selected = Math.max(0, Math.min(8, this.selected + delta));
+      this.selected = Math.max(
+        0,
+        Math.min(HOVER_TRACKS.length - 1, this.selected + delta),
+      );
     this.syncSelection();
     if (this.buttons.contains(document.activeElement)) this.focusSelection();
   }
@@ -419,7 +414,15 @@ export class OriginalMenu {
     this.hooks.mode(mode);
     this.show("car");
   }
+  switchRecordClass(kind: "gp" | "time") {
+    if (kind === this.recordClass) return;
+    this.hooks.sound("move");
+    this.recordClass = kind;
+    this.updateRecordsView();
+  }
   confirm() {
+    // VIEW RECORDS shows the selected course without a further step.
+    if (this.screen === "records") return;
     this.hooks.sound("ok");
     const i = this.selected;
     switch (this.screen) {
@@ -432,7 +435,7 @@ export class OriginalMenu {
         this.choose(i === HoverRules.availableCups() ? "practice" : "gp" + i);
         break;
       case "option":
-        if (i === 0) this.show("record-kind");
+        if (i === 0) this.show("records");
         if (i === 1) {
           this.hooks.toggleSound();
           this.show("option", i);
@@ -443,23 +446,12 @@ export class OriginalMenu {
           );
         if (i === 3) this.hooks.toggleFullscreen();
         break;
-      case "record-kind":
-        this.recordClass = i === 0 ? "gp" : "time";
-        this.show("records");
-        break;
       case "car":
         if (this.mode.startsWith("gp")) this.hooks.start();
         else this.show("course");
         break;
       case "course":
         this.hooks.start();
-        break;
-      case "records":
-        this.recordCourse = this.selected;
-        this.show("record-detail");
-        break;
-      case "record-detail":
-        this.recordFrames = this.recordFrames < 660 ? 690 : 0;
         break;
     }
   }
@@ -475,14 +467,9 @@ export class OriginalMenu {
             ? HoverRules.availableCups()
             : 1,
       );
-    } else if (this.screen === "record-detail")
-      this.show("records", this.recordCourse);
-    else if (parent[this.screen]) {
+    } else if (parent[this.screen]) {
       const [screen, i] = parent[this.screen]!;
-      this.show(
-        screen,
-        this.screen === "records" ? +(this.recordClass === "time") : i,
-      );
+      this.show(screen, i);
     }
   }
   adjustVolume(delta: number) {
@@ -503,6 +490,11 @@ export class OriginalMenu {
       ["ArrowLeft", "ArrowRight"].includes(code)
     )
       this.adjustVolume(code === "ArrowLeft" ? -1 : 1);
+    else if (
+      this.screen === "records" &&
+      ["ArrowLeft", "ArrowRight"].includes(code)
+    )
+      this.switchRecordClass(code === "ArrowLeft" ? "gp" : "time");
     else if (["ArrowUp", "ArrowLeft"].includes(code)) this.move(-1);
     else if (["ArrowDown", "ArrowRight"].includes(code)) this.move(1);
     else if (["Enter", "Space", "KeyZ"].includes(code)) this.confirm();
@@ -524,48 +516,13 @@ export class OriginalMenu {
       if (dispatch && !this.padHeld.has(code)) this.key(code);
     this.padHeld = active;
   }
-  text(text: string, x: number, y: number, size = 8, color = "white") {
-    if (!this.font.complete || !this.font.naturalWidth) return;
-    let image = this.palettes.get(color);
-    if (!image) {
-      image = document.createElement("canvas");
-      image.width = 256;
-      image.height = 128;
-      const ctx = image.getContext("2d")!;
-      ctx.drawImage(this.font, 0, 0);
-      if (color !== "white") {
-        ctx.globalCompositeOperation = "multiply";
-        ctx.fillStyle = color;
-        ctx.fillRect(0, 0, 256, 128);
-        ctx.globalCompositeOperation = "destination-in";
-        ctx.drawImage(this.font, 0, 0);
-      }
-      this.palettes.set(color, image);
-    }
-    for (const c of text) {
-      const t = (size === 16 ? c.toUpperCase() : c).charCodeAt(0) - 32;
-      if (t >= 0 && t < 96)
-        this.g.drawImage(
-          image,
-          size === 8 ? Math.floor(t / 16) * 8 : 128 + Math.floor(t / 8) * 16,
-          size === 8 ? (t % 16) * 8 : (t % 8) * 16,
-          size,
-          size,
-          Math.round(x),
-          Math.round(y),
-          size,
-          size,
-        );
-      x += size;
-    }
-  }
   time(t?: number) {
     if (t === undefined) return "--'--\"--";
     const n = Math.floor((Math.round(t * 60) * 100) / 60);
     return `${String(Math.floor(n / 6000)).padStart(2, "0")}'${String(Math.floor(n / 100) % 60).padStart(2, "0")}"${String(n % 100).padStart(2, "0")}`;
   }
-  courseName(i: number) {
-    return `${Math.floor(i / 3) + 1}-${(i % 3) + 1} ${HOVER_TRACKS[i].name.replace("’", "'")}`;
+  courseLabel(i: number) {
+    return `${Math.floor(i / 3) + 1}-${(i % 3) + 1}`;
   }
   updateMachineInfo() {
     const type = +field("machine").value;
@@ -681,102 +638,71 @@ export class OriginalMenu {
       this.courseInfo.append(column);
     });
   }
+  updateRecordsView() {
+    const course = this.selected;
+    const columns = (["lap", "total"] as const).map((kind) =>
+      HoverRecords.read(this.recordClass, course, kind),
+    );
+    const bests = HOVER_TRACKS.map(
+      (_, i) => HoverRecords.read(this.recordClass, i, "total")[0]?.time,
+    );
+    const signature = JSON.stringify([
+      this.recordClass,
+      course,
+      columns,
+      bests,
+    ]);
+    if (signature === this.displayedRecords) return;
+    this.displayedRecords = signature;
+    this.recordsView
+      .querySelectorAll<HTMLButtonElement>("[data-record-class]")
+      .forEach((tab) =>
+        tab.setAttribute(
+          "aria-current",
+          String(tab.dataset.recordClass === this.recordClass),
+        ),
+      );
+    this.buttons
+      .querySelectorAll<HTMLElement>(".records-course-best")
+      .forEach((best, i) => (best.textContent = this.time(bests[i])));
+    const mode = RECORD_CLASSES.find(([kind]) => kind === this.recordClass)![1];
+    const header =
+      `<p class="gp-label">${this.courseLabel(course)}  ·  ${CUPS[Math.floor(course / 3)].toUpperCase()}  ·  ${mode}</p>` +
+      `<h3 class="records-title">${esc(HOVER_TRACKS[course].name.toUpperCase())}</h3>`;
+    if (!columns[0].length && !columns[1].length) {
+      this.recordsDetail.innerHTML =
+        header +
+        `<div class="records-empty"><p>NO RECORDS</p><p>${this.recordClass === "gp" ? "FINISH THIS COURSE IN A GRAND PRIX TO SET A RECORD" : "RUN A TIME ATTACK ON THIS COURSE TO SET A RECORD"}</p></div>`;
+      return;
+    }
+    this.recordsDetail.innerHTML =
+      header +
+      `<div class="records-columns">${columns
+        .map(
+          (rows, k) =>
+            `<section><h4 class="gp-label">${k === 0 ? "BEST LAP" : "TOTAL"}</h4><ol class="gp-record-rows records-rows">${Array.from(
+              { length: 6 },
+              (_, i) => {
+                const r = rows[i];
+                const machine = r && HoverEngine.MACHINES[r.machine];
+                return `<li${r ? (i === 0 ? " data-top" : "") : " data-empty"}><span class="gp-pos">${i + 1}</span><span class="gp-machine">${esc(r?.name || "---")}</span><span class="gp-gap">${machine ? `<span class="record-machine-icon" aria-hidden="true"><img src="assets/minicars.png" alt="" style="top: ${-r.machine * 100}%"></span>${esc(machine.name)}` : ""}</span><span class="gp-time">${this.time(r?.time)}</span></li>`;
+              },
+            ).join("")}</ol></section>`,
+        )
+        .join("")}</div>`;
+  }
   draw() {
-    const g = this.g;
-    g.clearRect(0, 0, 320, 240);
-    g.imageSmoothingEnabled = false;
     const list = lists[this.screen];
     if (this.screen === "car") {
       this.updateMachineInfo();
     } else if (this.screen === "course") {
       this.updateCourseRecords();
     } else if (this.screen === "records") {
-      this.text("BEST RECORDS", 8, 0, 16, "red");
-      HOVER_TRACKS.forEach((_, i) => {
-        const row = HoverRecords.read(
-          this.recordClass as "gp" | "time",
-          i,
-          "lap",
-        )[0];
-        this.text(
-          this.courseName(i),
-          16,
-          24 + i * 24,
-          8,
-          i === this.selected ? "#00ff00" : "white",
-        );
-        const total = HoverRecords.read(
-          this.recordClass as "gp" | "time",
-          i,
-          "total",
-        )[0];
-        // OTR_MODE.C view_records: draw_minicar(..., 2048) halves the
-        // 24x16 portrait beside each course's BEST LAP and TOTAL record.
-        [row, total].forEach((record, line) => {
-          const y = 24 + i * 24 + line * 10;
-          this.text(
-            `${this.time(record?.time)} ${record?.name || "---"}`,
-            184,
-            y,
-            8,
-            i === this.selected ? "#00ff00" : "white",
-          );
-          if (record && this.portraits.complete && this.portraits.naturalWidth)
-            g.drawImage(
-              this.portraits,
-              0,
-              record.machine * 16,
-              24,
-              16,
-              160,
-              y,
-              12,
-              8,
-            );
-        });
-      });
-    } else if (this.screen === "record-detail") {
-      // OTR_MODE.C view_records2: alternate BESTLAP and TOTAL over a live
-      // four-car course view, including DRAW_SP.C's original 24x16 portraits.
-      const frame = this.recordFrames;
-      const kind = frame < 660 ? "lap" : "total";
-      if ((frame >= 60 && frame < 660) || frame >= 720) {
-        this.text(
-          kind === "lap" ? "BESTLAP RECORDS" : "TOTAL RECORDS",
-          8,
-          16,
-          16,
-        );
-        const rows = HoverRecords.read(
-          this.recordClass as "gp" | "time",
-          this.recordCourse,
-          kind,
-        );
-        for (let i = 0; i < 6; i++) {
-          this.text(
-            `${this.time(rows[i]?.time)} ${rows[i]?.name || "---"}`,
-            80,
-            48 + i * 32,
-            16,
-          );
-          if (rows[i] && this.portraits.complete && this.portraits.naturalWidth)
-            g.drawImage(
-              this.portraits,
-              0,
-              rows[i].machine * 16,
-              24,
-              16,
-              40,
-              48 + i * 32,
-              24,
-              16,
-            );
-        }
-      }
+      this.updateRecordsView();
     }
     this.panel.setAttribute(
       "aria-label",
-      `${this.screen}: ${list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : this.screen === "course" ? HOVER_TRACKS[+field("course").value].name : "選択画面")}`,
+      `${this.screen}: ${list?.[this.selected] || (this.screen === "car" ? field("machine").selectedOptions[0]?.text : this.screen === "course" ? HOVER_TRACKS[+field("course").value].name : this.screen === "records" ? HOVER_TRACKS[this.selected].name : "選択画面")}`,
     );
   }
 }

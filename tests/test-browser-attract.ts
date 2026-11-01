@@ -151,8 +151,7 @@ module.exports = async function verify({
       assert.equal(current.music, previous.music);
       assert.notDeepEqual(current.demo.positions, previous.demo.positions);
       if (list) {
-        assert.equal(await page.locator("#original-menu").isVisible(), false);
-        const selected = page.locator('#menu button[aria-current="true"]');
+        const selected = page.locator('#menu nav button[aria-current="true"]');
         assert.equal(
           await selected.evaluate((b) => getComputedStyle(b).color),
           "rgb(32, 229, 236)",
@@ -175,12 +174,8 @@ module.exports = async function verify({
     await assertContinuingDemo("option");
     await page.screenshot({ path: "/tmp/quad-thrust-option-c1.png" });
     await click("VIEW RECORDS");
-    await assertContinuingDemo("record-kind");
-    await click("TIME ATTACK'S");
     await assertContinuingDemo("records", false);
-    await page.keyboard.press("Enter");
-    await assertContinuingDemo("record-detail", false);
-    for (let i = 0; i < 4; i++) await page.keyboard.press("Escape");
+    for (let i = 0; i < 2; i++) await page.keyboard.press("Escape");
     await assertContinuingDemo("title");
     const progress = await page.evaluate(() => {
       const r = window.HoverRules;
