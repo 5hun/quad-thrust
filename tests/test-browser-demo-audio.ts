@@ -68,6 +68,39 @@ module.exports = async function verify({
         return samples.some((value) => Math.abs(value) > 0.00001) === expected;
       };
       await page.waitForFunction(audioMatches, true);
+      await page.evaluate(async () => {
+        const { OriginalSound } = (await import(
+          "./sound.js" as string
+        )) as typeof import("../src/sound");
+        const playCourse = OriginalSound.prototype.playCourse;
+        document.documentElement.dataset.menuMusicStarts = "0";
+        OriginalSound.prototype.playCourse = function (index, loop) {
+          document.documentElement.dataset.menuMusicStarts = String(
+            Number(document.documentElement.dataset.menuMusicStarts) + 1,
+          );
+          return playCourse.call(this, index, loop);
+        };
+      });
+      await page
+        .getByRole("button", { name: "TIME ATTACK", exact: true })
+        .click();
+      await page.keyboard.press("Enter");
+      await page.waitForFunction(
+        () => window.hoverDiagnostics().menuScreen === "course",
+      );
+      assert.equal(
+        (await page.evaluate(() => window.hoverDiagnostics())).music,
+        "B",
+      );
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.dataset.menuMusicStarts,
+        ),
+        "0",
+        "selection screens must not replace or restart the title BGM",
+      );
       await page.getByRole("button", { name: "OPTION", exact: true }).click();
       await page
         .getByRole("button", { name: "SOUND: ON", exact: true })
@@ -90,7 +123,7 @@ module.exports = async function verify({
       await page
         .getByRole("button", { name: "SOUND: OFF", exact: true })
         .click();
-      // SELECT BGM resumes only after sound is enabled again.
+      // Menu BGM resumes only after sound is enabled again.
       await page.keyboard.press("Escape");
 
       await page

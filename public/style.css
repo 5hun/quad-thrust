@@ -1072,7 +1072,8 @@ main > details {
 .menu-caption {
   display: none;
 }
-.machine-info {
+.machine-info,
+.course-records {
   display: none;
 }
 #menu[data-presentation="list"] {
@@ -1243,14 +1244,98 @@ main > details {
 
 /* Machine selection shares the title typography and safe area. The renderer
    dims the demo before drawing the foreground machine, so it stays bright. */
-#menu[data-screen="car"] {
+#menu[data-screen="car"],
+#menu[data-screen="course"] {
   background: transparent;
 }
-#menu[data-screen="car"] nav {
+#menu[data-screen="car"] nav,
+#menu[data-screen="course"] nav {
   max-height: 44cqh;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #aebdc980 transparent;
+  scrollbar-width: none;
+  scroll-snap-type: y mandatory;
+  overscroll-behavior-y: contain;
+}
+#menu[data-screen="car"] nav::-webkit-scrollbar,
+#menu[data-screen="course"] nav::-webkit-scrollbar {
+  display: none;
+}
+#menu[data-screen="car"] nav button,
+#menu[data-screen="course"] nav button {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+}
+.selection-scroll {
+  position: absolute;
+  transform: translateX(-50%);
+  width: 5cqw;
+  height: 2cqh;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 1.15cqw;
+  line-height: 1;
+  touch-action: manipulation;
+  opacity: 0.45;
+  display: grid;
+  place-items: center;
+}
+.selection-scroll:hover,
+.selection-scroll:focus-visible {
+  opacity: 1;
+}
+.selection-scroll[data-direction="up"] {
+  transform: translate(-50%, -100%);
+}
+#menu[data-screen="course"] nav button {
+  letter-spacing: 0.1em;
+  font-size: 1.8cqw;
+}
+#menu[data-screen="course"] .course-records {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2cqw;
+  position: absolute;
+  left: 50%;
+  top: 70%;
+  width: 43%;
+  text-align: center;
+  color: #f3faff;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 45%);
+}
+.course-records h3 {
+  margin: 0;
+  font-size: 1cqw;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+}
+.course-record-time {
+  margin: 1.5cqh 0;
+  font-size: 1.8cqw;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.course-record-holder {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1cqw;
+  font-size: 1.2cqw;
+}
+.record-machine-icon {
+  display: inline-block;
+  position: relative;
+  width: 3cqw;
+  aspect-ratio: 24 / 16;
+  overflow: hidden;
+}
+.record-machine-icon img {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
 }
 #menu[data-screen="car"] .machine-info {
   display: block;
@@ -1340,9 +1425,26 @@ main > details {
   }
 }
 @container (max-width: 600px) {
-  #menu[data-screen="car"] nav {
+  #menu[data-screen="car"] nav,
+  #menu[data-screen="course"] nav {
     width: 43%;
     max-height: 46cqh;
+  }
+  #menu[data-screen="course"] nav button {
+    font-size: 2.7cqw;
+    min-height: 11.5cqh;
+  }
+  .course-records h3 {
+    font-size: 2cqw;
+  }
+  .course-record-time {
+    font-size: 2.8cqw;
+  }
+  .course-record-holder {
+    font-size: 2.5cqw;
+  }
+  .record-machine-icon {
+    width: 5cqw;
   }
   #menu[data-screen="car"][data-count="5"] nav button {
     min-height: 11.5cqh;
@@ -1377,7 +1479,8 @@ main > details {
     min-height: 2.8cqh;
     grid-template-columns: 55% 45%;
   }
-  #menu[data-screen="car"] .title-guide {
+  #menu[data-screen="car"] .title-guide,
+  #menu[data-screen="course"] .title-guide {
     gap: 1.7cqw;
     font-size: 1.5cqw;
   }

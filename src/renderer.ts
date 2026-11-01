@@ -314,6 +314,10 @@ export class HoverRenderer {
       track.theme === 4 ? 32 : 128,
       128,
     );
+    this.buildTrackGeometry(track, this.trackGroup);
+    this.yaw = null;
+  }
+  private buildTrackGeometry(track: Track, group: THREE.Group, source = true) {
     const buffers = new Map<number, { p: number[]; uv: number[] }>();
     const add = (a: Vec3, b: Vec3, c: Vec3, d: Vec3, t: number) => {
       const bucket = buffers.get(t) || { p: [], uv: [] };
@@ -358,16 +362,20 @@ export class HoverRenderer {
       );
       geometry.setAttribute("uv", new THREE.Float32BufferAttribute(data.uv, 2));
       geometry.computeVertexNormals();
-      const mat = new THREE.MeshBasicMaterial({
-        map: tile < 0 ? null : this.texture("tile-" + tile + ".png"),
-        color: tile < 0 ? 0x080808 : 0xffffff,
-        side: tile < 0 ? THREE.DoubleSide : THREE.FrontSide,
-        alphaTest: 0.1,
-      });
-      this.sourceMaterial(mat);
-      this.trackGroup.add(new THREE.Mesh(geometry, mat));
+      const mat = source
+        ? new THREE.MeshBasicMaterial({
+            map: tile < 0 ? null : this.texture("tile-" + tile + ".png"),
+            color: tile < 0 ? 0x080808 : 0xffffff,
+            side: tile < 0 ? THREE.DoubleSide : THREE.FrontSide,
+            alphaTest: 0.1,
+          })
+        : new THREE.MeshLambertMaterial({
+            color: tile < 0 ? 0x344351 : tile === 3 ? 0x20e5ec : 0xb9c7d3,
+            side: THREE.DoubleSide,
+          });
+      if (source) this.sourceMaterial(mat);
+      group.add(new THREE.Mesh(geometry, mat));
     }
-    this.yaw = null;
   }
   modelObject(name: string, index: number, translucent = false) {
     const group = new THREE.Group();
@@ -942,13 +950,8 @@ export class HoverRenderer {
     "(prefers-reduced-motion: reduce)",
   );
 
-  // Composite over the running demo using the same WebGL context. The viewport
-  // follows the DOM menu's centered 16:9 safe area, including ultrawide screens.
-  drawMachinePreview(type: number, time: number) {
-    if (!this.machineScene.children.length) {
-      const light = new THREE.DirectionalLight(0xffffff, 1.5);
-      light.position.set(-8, 12, -8);
-      this.machineScene.add(new THREE.AmbientLight(0xffffff, 1.6), light);
+  private dimMenuDemo() {
+    if (!this.machineBackdrop.children.length) {
       this.machineBackdrop.add(
         new THREE.Mesh(
           new THREE.PlaneGeometry(2, 2),
@@ -961,6 +964,115 @@ export class HoverRenderer {
           }),
         ),
       );
+    }
+    this.renderer.autoClear = false;
+    this.renderer.setViewport(0, 0, this.canvas.width, this.canvas.height);
+    this.renderer.render(this.machineBackdrop, this.machineBackdropCamera);
+    this.renderer.clearDepth();
+  }
+  private coursePreviewScene = new THREE.Scene();
+  private coursePreviewGroup = new THREE.Group();
+  private coursePreviewTrack: Track | null = null;
+  private coursePreviewCamera = new THREE.PerspectiveCamera(35, 1, 0.1, 10000);
+  private coursePreviewRadius = 1;
+  private coursePreviewTarget = new THREE.WebGLRenderTarget(1, 1, {
+    samples: 4,
+  });
+  private coursePreviewComposite = new THREE.Scene();
+
+  drawCoursePreview(track: Track, time: number) {
+    if (!this.coursePreviewScene.children.length) {
+      const light = new THREE.DirectionalLight(0xffffff, 1.5);
+      light.position.set(-1, 3, 2);
+      this.coursePreviewScene.add(new THREE.AmbientLight(0xffffff, 1.4), light);
+    }
+    if (this.coursePreviewTrack !== track) {
+      this.clear(this.coursePreviewGroup);
+      this.coursePreviewGroup.position.set(0, 0, 0);
+      this.buildTrackGeometry(track, this.coursePreviewGroup, false);
+      const bounds = new THREE.Box3().setFromObject(this.coursePreviewGroup);
+      this.coursePreviewGroup.position
+        .copy(bounds.getCenter(new THREE.Vector3()))
+        .multiplyScalar(-1);
+      this.coursePreviewRadius =
+        bounds.getSize(new THREE.Vector3()).length() / 2;
+      this.coursePreviewScene.add(this.coursePreviewGroup);
+      this.coursePreviewTrack = track;
+    }
+    const width = this.canvas.width,
+      height = this.canvas.height;
+    const safeWidth = Math.min(width, (height * 16) / 9);
+    const previewWidth = safeWidth * 0.43,
+      previewHeight = height * 0.46;
+    const camera = this.coursePreviewCamera;
+    camera.aspect = previewWidth / previewHeight;
+    camera.updateProjectionMatrix();
+    const halfFov = THREE.MathUtils.degToRad(camera.fov / 2);
+    const distance =
+      this.coursePreviewRadius /
+      Math.sin(Math.min(halfFov, Math.atan(Math.tan(halfFov) * camera.aspect)));
+    // A race-sized near plane wastes depth precision at this overview scale,
+    // making the road and its underside fight for the same depth values.
+    camera.near = Math.max(0.1, distance - this.coursePreviewRadius * 1.1);
+    camera.far = distance + this.coursePreviewRadius * 1.1;
+    camera.updateProjectionMatrix();
+    const angle = this.machineReducedMotion.matches ? 0.6 : 0.6 + time * 0.18;
+    camera.position.set(
+      Math.sin(angle) * distance * 0.75,
+      distance * 0.66,
+      Math.cos(angle) * distance * 0.75,
+    );
+    camera.lookAt(0, 0, 0);
+    this.dimMenuDemo();
+    // Resolve multisampled preview edges separately from the deliberately
+    // pixelated race. Both passes reuse the existing WebGL context.
+    const target = this.coursePreviewTarget;
+    const targetWidth = Math.max(1, Math.round(previewWidth));
+    const targetHeight = Math.max(1, Math.round(previewHeight));
+    if (target.width !== targetWidth || target.height !== targetHeight)
+      target.setSize(targetWidth, targetHeight);
+    if (!this.coursePreviewComposite.children.length) {
+      this.coursePreviewComposite.add(
+        new THREE.Mesh(
+          new THREE.PlaneGeometry(2, 2),
+          new THREE.MeshBasicMaterial({
+            map: target.texture,
+            transparent: true,
+            depthTest: false,
+            depthWrite: false,
+          }),
+        ),
+      );
+    }
+    const clearColor = this.renderer.getClearColor(new THREE.Color());
+    const clearAlpha = this.renderer.getClearAlpha();
+    this.renderer.setRenderTarget(target);
+    this.renderer.setViewport(0, 0, targetWidth, targetHeight);
+    this.renderer.setClearColor(0, 0);
+    this.renderer.clear();
+    this.renderer.render(this.coursePreviewScene, camera);
+    this.renderer.setRenderTarget(null);
+    this.renderer.setClearColor(clearColor, clearAlpha);
+    this.renderer.setViewport(
+      (width - safeWidth) / 2 + safeWidth * 0.5,
+      height * 0.36,
+      previewWidth,
+      previewHeight,
+    );
+    this.renderer.render(
+      this.coursePreviewComposite,
+      this.machineBackdropCamera,
+    );
+    this.renderer.setViewport(0, 0, width, height);
+    this.renderer.autoClear = true;
+  }
+  // Composite over the running demo using the same WebGL context. The viewport
+  // follows the DOM menu's centered 16:9 safe area, including ultrawide screens.
+  drawMachinePreview(type: number, time: number) {
+    if (!this.machineScene.children.length) {
+      const light = new THREE.DirectionalLight(0xffffff, 1.5);
+      light.position.set(-8, 12, -8);
+      this.machineScene.add(new THREE.AmbientLight(0xffffff, 1.6), light);
     }
     const changed = this.menuShip?.type !== type;
     const ship = this.getMenuShip(type);
@@ -1001,11 +1113,7 @@ export class HoverRenderer {
       );
     this.machineCamera.position.set(0, distance * 0.42, -distance * 0.91);
     this.machineCamera.lookAt(0, 0, 0);
-    this.renderer.autoClear = false;
-    // Dim the entire demo; the foreground ship stays bright.
-    this.renderer.setViewport(0, 0, width, height);
-    this.renderer.render(this.machineBackdrop, this.machineBackdropCamera);
-    this.renderer.clearDepth();
+    this.dimMenuDemo();
     this.renderer.setViewport(
       (width - safeWidth) / 2 + safeWidth * 0.5,
       height * 0.48,

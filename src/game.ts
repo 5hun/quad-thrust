@@ -274,9 +274,6 @@ const originalMenu = new OriginalMenu({
       ),
     );
   },
-  music(name) {
-    originalSound.playCourse(name || titleDemo.music);
-  },
 });
 const postrace = new OriginalPostrace(originalMenu, session);
 function resize() {
@@ -450,9 +447,7 @@ function updateDemo(dt: number) {
     view.setTrack(track);
     view.yaw = null;
     view.replayDirector.reset();
-    originalSound.playCourse(
-      originalMenu.screen === "car" ? "SELECT" : titleDemo.music,
-    );
+    originalSound.playCourse(titleDemo.music);
     titleDemoVisible = true;
   }
   for (const racer of [car, ...bots]) {
@@ -851,6 +846,8 @@ function render() {
     view.draw(track, car, bots, "demo", worldTime, car.active || {});
     if (originalMenu.screen === "car")
       view.drawMachinePreview(+$("machine").value, worldTime);
+    else if (originalMenu.screen === "course")
+      view.drawCoursePreview(selectedTrack(), worldTime);
     originalMenu.draw();
     return;
   }

@@ -57,7 +57,9 @@ module.exports = async function verify({
           "hover-autosave-v2",
           JSON.stringify({
             version: 2,
-            values: { "hover-unlocks": "7" },
+            values: {
+              "hover-unlocks": "7",
+            },
           }),
         );
     });
@@ -135,6 +137,57 @@ module.exports = async function verify({
     );
     await page.screenshot({ path: "/tmp/hover-machine-select-desktop.png" });
     await click("LUSTER");
+    assert.equal(
+      await page
+        .locator("#menu nav")
+        .evaluate((nav) => getComputedStyle(nav).scrollbarWidth),
+      "none",
+    );
+    await page.getByRole("button", { name: "一覧を下へ", exact: true }).click();
+    await page.waitForFunction(
+      () => document.querySelector("#menu nav")!.scrollTop > 0,
+    );
+    assert.equal(await page.locator("#machine").inputValue(), "0");
+    await page.getByRole("button", { name: "一覧を上へ", exact: true }).click();
+    await page.waitForFunction(
+      () => document.querySelector("#menu nav")!.scrollTop < 1,
+    );
+    // The last label can be fully visible before its row padding finishes
+    // scrolling into view. That padding must not keep the down arrow visible.
+    await page
+      .locator("#menu nav")
+      .evaluate((nav) =>
+        nav.scrollTo({ top: nav.scrollHeight, behavior: "smooth" }),
+      );
+    await page.waitForFunction(
+      () => {
+        const nav = document.querySelector("#menu nav")!;
+        const range = document.createRange();
+        range.selectNodeContents(nav.lastElementChild!);
+        return (
+          range.getBoundingClientRect().bottom <=
+          nav.getBoundingClientRect().bottom
+        );
+      },
+      null,
+      { polling: "raf" },
+    );
+    assert.equal(
+      await page
+        .getByRole("button", { name: "一覧を下へ", exact: true })
+        .isVisible(),
+      false,
+    );
+    assert.equal(
+      await page
+        .locator(".selection-scroll")
+        .first()
+        .evaluate((arrow) => getComputedStyle(arrow).color),
+      "rgb(255, 255, 255)",
+    );
+    await page
+      .locator("#menu nav")
+      .evaluate((nav) => nav.scrollTo({ top: 0, behavior: "instant" }));
     for (const viewport of [
       { width: 375, height: 780 },
       { width: 1600, height: 900 },
@@ -184,6 +237,133 @@ module.exports = async function verify({
     }
     await press("Enter");
     await screen("course");
+    assert.equal(await page.locator("#menu nav button").count(), 9);
+    const previewPixels = await page.evaluate(async () => {
+      const { HoverRenderer } = (await import(
+        "./renderer.js" as string
+      )) as typeof import("../src/renderer");
+      const canvas = document.createElement("canvas");
+      canvas.style.cssText =
+        "position:fixed;left:-10000px;width:1600px;height:900px";
+      document.body.append(canvas);
+      const renderer = new HoverRenderer(canvas);
+      try {
+        renderer.resize();
+        renderer.drawCoursePreview(
+          window.HoverEngine.prepare(window.HOVER_TRACKS[0]),
+          0,
+        );
+        const target = Reflect.get(renderer, "coursePreviewTarget");
+        const pixels = new Uint8Array(target.width * target.height * 4);
+        renderer.renderer.readRenderTargetPixels(
+          target,
+          0,
+          0,
+          target.width,
+          target.height,
+          pixels,
+        );
+        let dark = 0,
+          solid = 0;
+        for (let i = 0; i < pixels.length; i += 4)
+          if (pixels[i + 3] > 250) {
+            solid++;
+            if (pixels[i] + pixels[i + 1] + pixels[i + 2] < 240) dark++;
+          }
+        return { dark, solid };
+      } finally {
+        renderer.renderer.dispose();
+        canvas.remove();
+      }
+    });
+    assert.ok(previewPixels.solid > 1000);
+    assert.ok(
+      previewPixels.dark / previewPixels.solid < 0.02,
+      "the overview road must not be speckled by its underside",
+    );
+    assert.equal(
+      await page
+        .locator("#menu nav")
+        .evaluate((nav) => getComputedStyle(nav).scrollbarWidth),
+      "none",
+    );
+    await page.getByRole("button", { name: "一覧を下へ", exact: true }).click();
+    await page.waitForFunction(
+      () => document.querySelector("#menu nav")!.scrollTop > 0,
+    );
+    await page.getByRole("button", { name: "一覧を上へ", exact: true }).click();
+    await page.waitForFunction(
+      () => document.querySelector("#menu nav")!.scrollTop < 1,
+    );
+    assert.deepEqual(
+      await page.locator(".course-records h3").allTextContents(),
+      ["BEST LAP", "TOTAL TIME"],
+    );
+    assert.equal(await page.locator(".course-records [role=img]").count(), 0);
+    assert.deepEqual(
+      await page.locator(".course-record-time").allTextContents(),
+      ["--'--\"--", "--'--\"--"],
+    );
+    await page.evaluate(() => {
+      window.HoverRecords.save("time", 0, "lap", 12.5, 0, "AAA");
+      window.HoverRecords.save("time", 0, "total", 45, 1, "BBB");
+    });
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll(".course-records [role=img]").length === 2,
+    );
+    assert.deepEqual(
+      await page
+        .locator(".record-machine-icon")
+        .evaluateAll((icons) =>
+          icons.map((icon) => icon.getAttribute("aria-label")),
+        ),
+      ["LUSTER", "EXCEL"],
+    );
+    assert.deepEqual(
+      await page.locator(".course-record-time").allTextContents(),
+      ["00'12\"50", "00'45\"00"],
+    );
+    const courseDemo = await page.evaluate(
+      () => window.hoverDiagnostics().demo,
+    );
+    for (const viewport of [
+      { width: 375, height: 780 },
+      { width: 1600, height: 900 },
+      { width: 2560, height: 720 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.locator("#menu nav button").last().click();
+      assert.equal(await page.locator("#course").inputValue(), "8");
+      const selected = await page
+        .locator('#menu nav button[aria-current="true"]')
+        .boundingBox();
+      const nav = await page.locator("#menu nav").boundingBox();
+      const records = await page.locator(".course-records").boundingBox();
+      const menu = await page.locator("#menu").boundingBox();
+      assert.ok(
+        selected &&
+          nav &&
+          selected.y >= nav.y &&
+          selected.y + selected.height <= nav.y + nav.height + 1,
+      );
+      assert.ok(
+        records &&
+          menu &&
+          records.x + records.width <= menu.x + menu.width &&
+          records.y + records.height <= menu.y + menu.height,
+      );
+      await page.locator("#menu nav button").first().click();
+      await page.screenshot({
+        path: `/tmp/hover-course-select-${viewport.width}.png`,
+      });
+    }
+    await page.setViewportSize({ width: 1100, height: 900 });
+    const continuingDemo = await page.evaluate(
+      () => window.hoverDiagnostics().demo,
+    );
+    assert.equal(continuingDemo.course, courseDemo.course);
+    assert.notDeepEqual(continuingDemo.positions, courseDemo.positions);
     for (let i = 0; i < 9; i++) {
       assert.equal(await page.locator("#course").inputValue(), String(i));
       await press("ArrowRight");
