@@ -2,6 +2,7 @@
 import * as THREE from "./vendor/three.module.js";
 import { OriginalBackground } from "./background.js";
 import { ReplayDirector } from "./replay.js";
+import { CourseSurface } from "./course-surface.js";
 const E = window.HoverEngine;
 const TILE: Record<string, number> = {
   ".": 0,
@@ -12,7 +13,6 @@ const TILE: Record<string, number> = {
   d: 4,
   J: 5,
   P: 6,
-  B: 7,
   "&": 16,
   "+": 17,
   Y: 18,
@@ -124,6 +124,8 @@ export class HoverRenderer {
   finishCamera = false;
   // COURCE.C DQA * H * 65536 / 4096^2, with PS1 units / 100.
   sourceDepth = { value: 96 };
+  // ?classictrack keeps the original 32x32 tile surface for comparison.
+  courseSurface: CourseSurface | null = null;
   // Next race intro: frames left before the countdown takes over.
   introLeft: number | null = null;
   introReach = 0;
@@ -153,6 +155,8 @@ export class HoverRenderer {
     this.cache = new Map();
     this.modelCache = new Map();
     this.loader = new THREE.TextureLoader();
+    if (!new URLSearchParams(location.search).has("classictrack"))
+      this.courseSurface = new CourseSurface(this.renderer);
     this.background = new OriginalBackground((path) => this.texture(path));
     this.ships = [];
     this.track = null;
@@ -281,7 +285,12 @@ export class HoverRenderer {
       track.theme === 4 ? 32 : 128,
       128,
     );
-    this.buildTrackGeometry(track, this.trackGroup);
+    if (this.courseSurface)
+      this.courseSurface.build(track, this.trackGroup, theme.fog, {
+        ambient: this.ambient.color,
+        sun: this.sunlight,
+      });
+    else this.buildTrackGeometry(track, this.trackGroup);
     this.yaw = null;
   }
   private buildTrackGeometry(track: Track, group: THREE.Group, source = true) {
@@ -730,6 +739,8 @@ export class HoverRenderer {
     ghost: Pose | null = null,
   ) {
     this.setTrack(track);
+    // worldTime is in seconds.
+    if (this.courseSurface) this.courseSurface.time.value = time;
     const racers = [car, ...bots, ...(ghost ? [ghost] : [])];
     while (this.ships.length > racers.length) {
       const s = this.ships.pop()!;
