@@ -90,6 +90,13 @@ const MOUNTS = [
   },
 ];
 MOUNTS.push(MOUNTS[2], MOUNTS[1]);
+// GP next race intro: its length in frames, the countdown swing's steady
+// rate and lag (source angle units per frame), and the extra downward look
+// at its start.
+export const INTRO_FRAMES = 210;
+const INTRO_SWING_RATE = 16;
+const INTRO_SWING_LAG = 204;
+const INTRO_PITCH = (48 * Math.PI) / 180;
 export class HoverRenderer {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
@@ -119,8 +126,9 @@ export class HoverRenderer {
   finishCamera = false;
   // COURCE.C DQA * H * 65536 / 4096^2, with PS1 units / 100.
   sourceDepth = { value: 96 };
-  // Next race intro: 0..1 through the flight down to the starting grid.
-  flyover: number | null = null;
+  // Next race intro: frames left before the countdown takes over.
+  introLeft: number | null = null;
+  introReach = 0;
   nameEntry: {
     indices: number[];
     selected: number;
@@ -669,33 +677,43 @@ export class HoverRenderer {
     this.wasReplay = this.replayView;
     this.yaw = this.follow.yaw;
   }
-  // Drop from high behind the grid to where the countdown camera starts,
-  // following the course back up to the cars.
-  flyoverCamera(car: Pose, progress: number) {
-    if (!this.track) return;
-    const t = 1 - (1 - progress) ** 3,
-      start =
-        this.track.nodes[E.nearest(this.track, car.x, car.z).index].distance,
-      along = start - 1200 + t * (1200 - 335),
-      eye = E.at(this.track, along),
-      target = E.at(this.track, along + 260 - t * 120);
-    // Ends near the countdown camera: 335 behind, raised by its 7° pitch.
-    const height = 220 - t * 170,
-      side = (1 - t) * 160;
-    const dx = target.x - eye.x,
-      dz = target.z - eye.z,
-      length = Math.hypot(dx, dz) || 1;
-    this.camera.position.set(
-      eye.x - (dz / length) * side,
-      eye.y + height,
-      -(eye.z + (dx / length) * side),
+  // The GP intro hands over to the countdown camera without resetting it:
+  // its yaw already trails the swing target as it does a few frames into
+  // an ordinary countdown, so the swing continues at its steady rate.
+  settleCountdown(car: Pose, startCount: number, track: Track) {
+    this.follow = {
+      yaw:
+        car.heading -
+        ((Math.max(0, startCount - 120) * 16 + INTRO_SWING_LAG) * Math.PI * 2) /
+          4096,
+      pitch: car.pitch || 0,
+      roll: car.roll || 0,
+      distance: 0,
+    };
+    this.yaw = this.follow.yaw;
+    // Start far enough out to take in the course around the grid.
+    const reach = Math.max(
+      ...track.nodes.map((p) => Math.hypot(p.x - car.x, p.z - car.z)),
     );
-    this.camera.up.set(0, 1, 0);
-    this.camera.lookAt(
-      target.x + (car.x - target.x) * t,
-      target.y + (car.y - target.y) * t,
-      -(target.z + (car.z - target.z) * t),
-    );
+    this.introReach = Math.min(2400, Math.max(1100, reach * 0.9));
+  }
+  // The intro is the countdown camera run back in time: one spiral that
+  // starts at rest high above the course and turns the same way as the
+  // countdown swing, reaching its distance, pitch and turning rate exactly
+  // when the countdown takes over.
+  introRig(left: number) {
+    const s = Math.max(0, left - 1),
+      u = s / INTRO_FRAMES;
+    return {
+      yaw:
+        this.follow.yaw -
+        (INTRO_SWING_RATE * (s - (s * s) / (2 * INTRO_FRAMES)) * Math.PI * 2) /
+          4096,
+      pitch: -INTRO_PITCH * u * u,
+      distance:
+        s +
+        (this.introReach - 35 - (this.countdown || 0) - INTRO_FRAMES) * u * u,
+    };
   }
   draw(
     track: Track,
@@ -735,14 +753,23 @@ export class HoverRenderer {
     });
     if (state !== "falling" && !this.holdCamera) {
       if (this.yaw === null) this.updateCamera(car, this.countdown || 0);
+      const intro =
+        this.introLeft === null
+          ? { yaw: 0, pitch: 0, distance: 0 }
+          : this.introRig(this.introLeft);
       const menu = state === "menu",
         distance = menu
           ? 24
           : 35 +
             this.follow.distance /
               (this.replayView || this.finishCamera ? 100 : 400) +
-            (this.countdown || 0);
-      const yaw = menu ? car.heading - 0.42 : this.follow.yaw;
+            (this.countdown || 0) +
+            intro.distance;
+      const yaw = menu
+        ? car.heading - 0.42
+        : this.introLeft === null
+          ? this.follow.yaw
+          : intro.yaw;
       const pitch = menu
         ? -0.18
         : this.follow.pitch *
@@ -750,7 +777,8 @@ export class HoverRenderer {
             (this.replayView && this.replayDirector.mode === 17)
               ? -1
               : 1) -
-          (Math.trunc((4096 * 7) / 360) * Math.PI * 2) / 4096;
+          (Math.trunc((4096 * 7) / 360) * Math.PI * 2) / 4096 +
+          intro.pitch;
       const roll =
         menu || this.replayView || this.finishCamera ? 0 : this.follow.roll;
       // GsSetView2 is a view matrix: its translation must be inverted
@@ -767,7 +795,6 @@ export class HoverRenderer {
       this.camera.up.copy(up);
       this.camera.lookAt(this.camera.position.clone().add(forward));
     }
-    if (this.flyover !== null) this.flyoverCamera(car, this.flyover);
     if (this.replayView && this.replayDirector.anchor && !this.holdCamera) {
       const anchor = this.replayDirector.anchor;
       this.camera.position.set(anchor.x, anchor.y, -anchor.z);

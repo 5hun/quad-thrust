@@ -19,6 +19,7 @@ interface Elements {
   stats: HTMLElement;
   start: HTMLButtonElement;
   "pause-panel": HTMLElement;
+  "scene-fade": HTMLElement;
   result: HTMLElement;
   touch: HTMLElement;
   "records-panel": HTMLElement;
@@ -29,7 +30,7 @@ function $<K extends keyof Elements>(id: K): Elements[K] {
   if (!element) throw new Error(`Missing element: ${id}`);
   return element as Elements[K];
 }
-import { HoverRenderer } from "./renderer.js";
+import { HoverRenderer, INTRO_FRAMES } from "./renderer.js";
 import { OriginalSound } from "./sound.js";
 import { RaceHUD } from "./hud.js";
 import { OriginalMenu } from "./menu.js";
@@ -299,8 +300,9 @@ const gpScreens = new GPScreens(originalMenu.hooks.sound, session);
 const goalBanner = new GoalBanner();
 // The goal banner's three seconds, then the result or records.
 const GOAL_FRAMES = 180;
-// The next race intro flies down to the grid before the countdown.
-const INTRO_FRAMES = 210;
+// The next race intro spirals down to the grid before the countdown.
+// Skipping it dips to black (#scene-fade's 0.2 s) instead of cutting.
+const INTRO_SKIP_FRAMES = 12;
 function resize() {
   view.resize();
 }
@@ -311,7 +313,8 @@ let hudBest = Infinity,
   gpRound = 0,
   resultFrames = 0,
   gpCup = 0,
-  introFrames = 0,
+  introLeft = 0,
+  introSkip = 0,
   replayClock = 0;
 let raceResult: RaceResult | null = null;
 let inputRecording: ReplayRecorder | null = null;
@@ -355,7 +358,7 @@ function start(nextRound = false, intro = false) {
   gpScreens.close();
   goalBanner.hide();
   view.nameEntry = null;
-  view.flyover = null;
+  view.introLeft = null;
   originalSound.cancel();
   originalSound.pause(false);
   mode = $("mode").value;
@@ -409,17 +412,26 @@ function start(nextRound = false, intro = false) {
     );
   if (intro) {
     state = "intro";
-    introFrames = 0;
+    introLeft = INTRO_FRAMES;
+    introSkip = 0;
+    // Loading the course resets the camera, so it must come first.
+    view.setTrack(track);
+    view.settleCountdown(car, Math.ceil(countdown * 60), track);
     $("hud").hidden = true;
     $("touch").hidden = true;
-    gpScreens.showIntro(gpCup, gpRound, track, beginCountdown);
+    gpScreens.showIntro(gpCup, gpRound, track, () => {
+      if (introSkip) return;
+      introSkip = INTRO_SKIP_FRAMES;
+      $("scene-fade").classList.add("dark");
+    });
   }
 }
+// The countdown camera carries on from the state the intro settled.
 function beginCountdown() {
   gpScreens.close();
   state = "countdown";
-  view.flyover = null;
-  view.yaw = null;
+  view.introLeft = null;
+  $("scene-fade").classList.remove("dark");
   $("hud").hidden = false;
   $("touch").hidden = !matchMedia("(pointer:coarse)").matches;
 }
@@ -433,6 +445,7 @@ function beginDemo() {
   postrace.close();
   gpScreens.close();
   goalBanner.hide();
+  $("scene-fade").classList.remove("dark");
   state = "menu";
   demoFrames = 0;
   keys = {};
@@ -472,7 +485,7 @@ function beginDemo() {
   if (sound) initAudio();
   view.yaw = null;
   view.countdown = null;
-  view.flyover = null;
+  view.introLeft = null;
   view.holdCamera = false;
   view.nameEntry = null;
   for (const id of ["hud", "pause-panel", "result", "touch"] as const)
@@ -926,8 +939,10 @@ function render() {
   const ghost = !postrace.phase ? ghostReplay?.car || null : null;
   view.nameEntry = postrace.entry;
   view.countdown =
-    state === "countdown" ? Math.max(0, Math.ceil(countdown * 60)) : null;
-  view.flyover = state === "intro" ? introFrames / INTRO_FRAMES : null;
+    state === "countdown" || state === "intro"
+      ? Math.max(0, Math.ceil(countdown * 60))
+      : null;
+  view.introLeft = state === "intro" ? introLeft : null;
   view.holdCamera =
     state === "falling" ||
     (state === "finished" && car.reason === "course-out");
@@ -991,7 +1006,9 @@ function updateGoalDrive(dt: number) {
 function update(dt: number) {
   currentInput = input();
   if (state === "intro") {
-    if (++introFrames >= INTRO_FRAMES) beginCountdown();
+    // Behind the black, the countdown starts as it would after the spiral.
+    if (introSkip && --introSkip === 0) beginCountdown();
+    else if (--introLeft <= 0) beginCountdown();
     return;
   }
   if (state === "finished") {
@@ -1125,7 +1142,12 @@ function frame(ts: number) {
   accumulator += dt;
   while (accumulator >= 1 / 60) {
     update(1 / 60);
-    if (state !== "paused" && state !== "menu" && state !== "falling")
+    if (
+      state !== "paused" &&
+      state !== "menu" &&
+      state !== "falling" &&
+      state !== "intro"
+    )
       view.updateCamera(
         postraceReplay?.car || car,
         state === "countdown" ? Math.round(countdown * 60) : 0,
@@ -1181,7 +1203,7 @@ export const getHoverDiagnostics = () => ({
   gpScreen: gpScreens.screen,
   gpSelection: gpScreens.selected,
   goalBanner: goalBanner.visible,
-  introFrames,
+  introLeft,
   menuScreen: originalMenu.screen,
   menuSelection: originalMenu.selected,
   saveError: session.saveError,

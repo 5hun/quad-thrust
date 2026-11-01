@@ -50,6 +50,7 @@ declare global {
       semi?: boolean;
       opacity?: number;
     }[];
+    cameraTrail: { state: string; time: number; p: number[]; q: number[] }[];
     phaseView: {
       sides: boolean[];
       flames: boolean[];

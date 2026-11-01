@@ -229,6 +229,25 @@ module.exports = async function verify({
       () => window.hoverDiagnostics?.().state === "menu",
     );
     await wait("menu");
+    // Record the rendered camera through the intro and countdown.
+    await page.evaluate(async () => {
+      const { HoverRenderer } = (await import(
+        "./renderer.js" as string
+      )) as typeof import("../src/renderer");
+      const draw = HoverRenderer.prototype.draw;
+      window.cameraTrail = [];
+      HoverRenderer.prototype.draw = function (...args) {
+        draw.apply(this, args);
+        const state = window.hoverDiagnostics().state;
+        if (state === "intro" || state === "countdown")
+          window.cameraTrail.push({
+            state,
+            time: performance.now(),
+            p: this.camera.position.toArray(),
+            q: this.camera.quaternion.toArray(),
+          });
+      };
+    });
     for (const code of ["Enter", "Enter", "Enter"]) await key(code);
     for (let round = 0; round < 3; round++) {
       await wait("running");
@@ -266,11 +285,42 @@ module.exports = async function verify({
         await page.screenshot({ path: "/tmp/hover-gp-intro.png" });
         await key("Enter");
       }
+      if (round === 1)
+        await page.evaluate(() => (window.cameraTrail.length = 0));
       await wait("countdown");
       assert.equal(
         (await page.evaluate(() => window.hoverDiagnostics())).gpScreen,
         null,
       );
+      if (round === 1) {
+        // Without a skip, the spiral runs into the countdown camera: no
+        // frame turns or moves faster than the countdown swing itself, and
+        // the view keeps turning one way.
+        await page.waitForTimeout(500);
+        const trail = await page.evaluate(() => window.cameraTrail);
+        assert.ok(trail.some((c) => c.state === "intro"));
+        assert.ok(trail.some((c) => c.state === "countdown"));
+        for (let i = 1; i < trail.length; i++) {
+          const a = trail[i - 1],
+            b = trail[i],
+            ms = Math.max(16, b.time - a.time);
+          const dot = Math.abs(a.q.reduce((sum, v, j) => sum + v * b.q[j], 0));
+          const turn = (2 * Math.acos(Math.min(1, dot)) * 180) / Math.PI;
+          const move = Math.hypot(...a.p.map((v, j) => v - b.p[j]));
+          assert.ok(turn / ms < 0.3, `camera turned ${turn}° at ${b.state}`);
+          assert.ok(move / ms < 1.5, `camera moved ${move} at ${b.state}`);
+        }
+        const heading = trail.map(({ q: [x, y, z, w] }) =>
+          Math.atan2(-2 * (x * z + w * y), 2 * (x * x + y * y) - 1),
+        );
+        const directions = new Set<number>();
+        for (let i = 1; i < heading.length; i++) {
+          const d = heading[i] - heading[i - 1];
+          const turn = Math.atan2(Math.sin(d), Math.cos(d));
+          if (Math.abs(turn) > 0.002) directions.add(Math.sign(turn));
+        }
+        assert.equal(directions.size, 1, "camera turned back and forth");
+      }
     }
     await page.waitForFunction(
       () => window.hoverDiagnostics().gpScreen === "clear",

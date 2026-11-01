@@ -1223,6 +1223,20 @@ button[aria-current="true"] .volume-meter i {
   }
 }
 
+/* Skipping the next race intro dips to black instead of cutting. */
+#scene-fade {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+#scene-fade.dark {
+  opacity: 1;
+}
+
 /* Grand Prix result, intro, cup clear, name entry and records share the
    title list style; the race keeps running behind them. */
 #gp-panel {
