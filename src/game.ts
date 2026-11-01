@@ -1178,14 +1178,8 @@ function update(dt: number) {
   }
 }
 function frame(ts: number) {
-  let dt = Math.min((ts - last) / 1000 || 0, 0.1);
+  const dt = Math.min((ts - last) / 1000 || 0, 0.1);
   last = ts;
-  // Snap vsync jitter to whole half-ticks. Otherwise the accumulator sits on
-  // the 1/60 boundary and alternates 0- and 2-tick frames, which freezes
-  // tick-parity effects such as the jet blink for several frames.
-  const halfTicks = Math.round(dt * 120);
-  if (halfTicks > 0 && Math.abs(dt - halfTicks / 120) < 0.001)
-    dt = halfTicks / 120;
   if (state !== "paused") worldTime += dt;
   if (replaying && !resultReplay) replayClock += dt;
   view.replayView = replaying || showingMenuDemo();

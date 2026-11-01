@@ -574,10 +574,14 @@ export class HoverRenderer {
       g.rotation.y = (-(p.rudderAngle || 0) * Math.PI * 2) / 4096;
     const size =
       (input.accel || p.turbo ? 64 : p.fireTail || 0) + (p.turbo ? 16 : 0);
+    // The original blinks jets on alternate ticks (rear even, side odd), which
+    // read as a steady flame on CRTs but strobes at 30 Hz on modern displays.
     for (const g of ship.flames) {
-      g.visible = size > 0 && ((tick + (p.cpuSlot || 0)) & 1) === 0;
+      g.visible = size > 0;
       g.scale.setScalar(size / 64);
-      g.rotation.z = (-Math.floor(tick / 2) * 165 * Math.PI * 2) / 4096;
+      // The source turns 165 units every other tick; spread it over both ticks
+      // so the faceted shells do not jump and re-shade at 30 Hz.
+      g.rotation.z = (-tick * 165 * Math.PI) / 4096;
       g.traverse((o) => {
         if (o instanceof THREE.Mesh) {
           // Turbo sets DOBJ_FIRE bit 6 (lighting off), not bit 30.
@@ -593,10 +597,7 @@ export class HoverRenderer {
     ship.power.rotation.y = (-(effect - 1) * Math.PI) / 4;
     const names: (keyof Input)[] = ["l1", "l2", "r1", "r2"];
     ship.sides.forEach((g, i) => {
-      g.visible =
-        (!p.cpuSlot || ship.ghost) &&
-        !!input[names[i]] &&
-        ((tick + (p.cpuSlot || 0)) & 1) === 1;
+      g.visible = (!p.cpuSlot || ship.ghost) && !!input[names[i]];
       g.rotation.x = (-tick * 165 * Math.PI * 2) / 4096;
     });
     if (ship.shadow) {

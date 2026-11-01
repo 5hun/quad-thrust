@@ -501,7 +501,11 @@ module.exports = async function verify({
       [0, 1],
       [1, 0.5],
     ]);
-    assert.deepEqual(damageDisplay.tail, [true, false, true, false]);
+    assert.deepEqual(
+      damageDisplay.tail,
+      [true, true, true, true],
+      "rear jets draw every tick in every CPU slot",
+    );
     const turboFlame = await page.evaluate(() => {
       const { r, c } = window.fidelity,
         ship = r.ships[0];
