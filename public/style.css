@@ -997,6 +997,10 @@ button[aria-current="true"] > .volume-arrow {
   background: #f3faff;
   box-shadow: 0 0 8px rgb(243 250 255 / 35%);
 }
+button[aria-current="true"] .volume-meter i {
+  background: var(--title-cyan);
+  box-shadow: 0 0 8px rgb(32 229 236 / 40%);
+}
 :is(#menu[data-presentation="list"], #pause-panel) nav button:focus-visible {
   outline: none;
 }
