@@ -119,8 +119,6 @@ export class HoverRenderer {
   private wasReplay = false;
   errors: string[];
   canvas: HTMLCanvasElement;
-  countScene: THREE.Scene;
-  countCamera: THREE.PerspectiveCamera;
   skyGroup: THREE.Group;
   countdown: number | null = null;
   finishCamera = false;
@@ -129,14 +127,6 @@ export class HoverRenderer {
   // Next race intro: frames left before the countdown takes over.
   introLeft: number | null = null;
   introReach = 0;
-  nameEntry: {
-    indices: number[];
-    selected: number;
-    rotation: number;
-    frame: number;
-  } | null = null;
-  nameLetters = new THREE.Group();
-  nameKey = "";
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -171,9 +161,6 @@ export class HoverRenderer {
     this.errors = [];
     this.loader.manager.onError = (u) => this.errors.push(u);
     this.canvas = canvas;
-    this.countScene = new THREE.Scene();
-    this.countCamera = new THREE.PerspectiveCamera(42, 4 / 3, 0.15, 100);
-    this.countScene.add(new THREE.AmbientLight(0xffffff, 2));
     this.skyGroup = new THREE.Group();
     this.scene.add(this.skyGroup);
   }
@@ -244,7 +231,7 @@ export class HoverRenderer {
       ),
     );
     this.renderer.setSize(Math.round((h * r.width) / r.height), h, false);
-    for (const camera of [this.camera, this.countCamera, this.menuCamera]) {
+    for (const camera of [this.camera, this.menuCamera]) {
       camera.aspect = r.width / r.height;
       camera.updateProjectionMatrix();
     }
@@ -808,51 +795,6 @@ export class HoverRenderer {
     this.renderer.clearDepth();
     this.renderer.render(this.scene, this.camera);
     this.renderer.autoClear = true;
-    this.nameLetters.visible = !!this.nameEntry;
-    if (this.nameEntry) {
-      const entry = this.nameEntry,
-        key = entry.indices.join(",");
-      if (this.nameKey !== key) {
-        this.clear(this.nameLetters);
-        this.nameKey = key;
-        entry.indices.forEach((index) =>
-          this.nameLetters.add(
-            this.modelObject(
-              ["ALP_A_O", "ALP_P_O", "ALP_0_9"][Math.floor(index / 15)],
-              index % 15,
-            ),
-          ),
-        );
-        if (!this.nameLetters.parent) this.countScene.add(this.nameLetters);
-      }
-      this.nameLetters.visible = true;
-      const sine = (rate: number, offset = 0) =>
-        Math.sin(((entry.frame * rate + offset) * Math.PI * 2) / 720);
-      this.nameLetters.children.forEach((letter, i) => {
-        const selected = i === entry.selected;
-        letter.position.set(
-          i * 8 - 8 + (selected ? sine(1) * 0.64 : 0),
-          selected ? -sine(7) * 0.64 : 0,
-          -50 + (selected ? 10 + sine(1, 45) * 0.16 : 0),
-        );
-        const rotation = entry.rotation;
-        letter.rotation.set(
-          selected && rotation ? (sine(3) * Math.PI * 2) / 64 : 0,
-          selected
-            ? ((Math.abs(rotation) > 8
-                ? -Math.sign(rotation) * (16 - Math.abs(rotation))
-                : rotation) *
-                Math.PI) /
-                16
-            : 0,
-          selected && rotation ? (sine(5) * Math.PI * 2) / 64 : 0,
-        );
-      });
-      this.renderer.autoClear = false;
-      this.renderer.clearDepth();
-      this.renderer.render(this.countScene, this.countCamera);
-      this.renderer.autoClear = true;
-    }
   }
   // Dedicated black-background selection pass. Reuse original TMD letters and
   // the actual course mesh instead of a browser illustration of the course.

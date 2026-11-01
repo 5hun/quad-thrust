@@ -203,7 +203,6 @@ module.exports = async function verify({
           width,
           changed,
           fov: r.camera.fov,
-          countAspect: r.countCamera.aspect,
           menuAspect: r.menuCamera.aspect,
         });
       }
@@ -250,7 +249,6 @@ module.exports = async function verify({
     });
     for (const sample of widescreen.samples) {
       assert.equal(sample.fov, widescreen.originalFov);
-      assert.equal(sample.countAspect, sample.width / 720);
       assert.equal(sample.menuAspect, sample.width / 720);
       assert.ok(
         sample.changed < 960 * 720 * 0.005,
