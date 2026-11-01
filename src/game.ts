@@ -275,8 +275,7 @@ const originalMenu = new OriginalMenu({
     );
   },
   music(name) {
-    if (name) originalSound.playCourse(name);
-    else originalSound.cancel();
+    originalSound.playCourse(name || titleDemo.music);
   },
 });
 const postrace = new OriginalPostrace(originalMenu, session);
@@ -451,7 +450,9 @@ function updateDemo(dt: number) {
     view.setTrack(track);
     view.yaw = null;
     view.replayDirector.reset();
-    originalSound.playCourse(titleDemo.music);
+    originalSound.playCourse(
+      originalMenu.screen === "car" ? "SELECT" : titleDemo.music,
+    );
     titleDemoVisible = true;
   }
   for (const racer of [car, ...bots]) {
@@ -848,6 +849,8 @@ function render() {
   if (showingMenuDemo()) {
     const { track, car, bots } = titleDemo;
     view.draw(track, car, bots, "demo", worldTime, car.active || {});
+    if (originalMenu.screen === "car")
+      view.drawMachinePreview(+$("machine").value, worldTime);
     originalMenu.draw();
     return;
   }

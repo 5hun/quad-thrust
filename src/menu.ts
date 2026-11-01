@@ -54,9 +54,11 @@ export class OriginalMenu {
   portraits = new Image();
   palettes = new Map<string, HTMLCanvasElement>();
   curves: number[][][] = [];
+  machineInfo: HTMLElement;
+  displayedMachine = -1;
   padHeld = new Set<string>();
   get usesListLayout() {
-    return lists[this.screen] !== undefined;
+    return this.screen === "car" || lists[this.screen] !== undefined;
   }
   get usesDemoBackdrop() {
     return (
@@ -89,8 +91,15 @@ export class OriginalMenu {
     const guide = document.createElement("div");
     guide.className = "title-guide";
     guide.innerHTML =
-      '<span><span class="guide-arrows">↑ ↓</span> SELECT</span><span><kbd>ENTER</kbd> CONFIRM</span><span class="back-guide"><kbd>ESC</kbd> BACK</span>';
+      '<span><span class="guide-arrows">↑ ↓</span> SELECT</span><button type="button" class="guide-confirm"><kbd>ENTER</kbd> CONFIRM</button><span class="back-guide"><kbd>ESC</kbd> BACK</span>';
+    guide.querySelector<HTMLButtonElement>(".guide-confirm")!.onclick = () =>
+      this.confirm();
     titleLayout.append(title, this.caption, this.buttons, guide);
+    this.machineInfo = document.createElement("section");
+    this.machineInfo.className = "machine-info";
+    this.machineInfo.setAttribute("aria-label", "車両性能");
+    this.machineInfo.setAttribute("aria-live", "polite");
+    titleLayout.append(this.machineInfo);
     this.panel.append(this.canvas, titleLayout);
     this.font.src = "assets/font.png";
     this.portraits.src = "assets/minicars.png";
@@ -149,9 +158,36 @@ export class OriginalMenu {
       : this.usesDemoBackdrop
         ? "records"
         : "original";
-    this.panel.dataset.count = String(lists[screen]?.length || 0);
+    this.panel.dataset.count = String(
+      screen === "car" ? HoverRules.machineCount() : lists[screen]?.length || 0,
+    );
     this.caption.textContent = captions[screen] || "";
     this.buttons.replaceChildren();
+    if (screen === "car") {
+      this.selected = +field("machine").value;
+      this.displayedMachine = -1;
+      this.caption.textContent = "MACHINE SELECT";
+      HoverEngine.MACHINES.slice(0, HoverRules.machineCount()).forEach(
+        (m, i) => {
+          this.button(
+            m.name,
+            0,
+            0,
+            0,
+            0,
+            () => {
+              if (i !== +field("machine").value) {
+                this.hooks.sound("move");
+                this.hooks.change("machine", i - +field("machine").value);
+              }
+              this.selected = i;
+              this.syncSelection();
+            },
+            i,
+          );
+        },
+      );
+    }
     if (lists[screen])
       lists[screen]!.forEach((label, i) => {
         const count = lists[screen]!.length;
@@ -198,6 +234,10 @@ export class OriginalMenu {
     if (index !== undefined) {
       b.dataset.index = String(index);
       b.onfocus = () => {
+        if (this.screen === "car" && index !== +field("machine").value) {
+          this.hooks.sound("move");
+          this.hooks.change("machine", index - +field("machine").value);
+        }
         this.selected = index;
         this.syncSelection();
       };
@@ -213,6 +253,18 @@ export class OriginalMenu {
           String(+b.dataset.index! === this.selected),
         ),
       );
+    if (this.screen === "car") {
+      const selected = this.buttons.querySelector<HTMLElement>(
+        `[data-index="${this.selected}"]`,
+      );
+      if (selected) {
+        const top = selected.offsetTop;
+        const bottom = top + selected.offsetHeight;
+        if (top < this.buttons.scrollTop) this.buttons.scrollTop = top;
+        else if (bottom > this.buttons.scrollTop + this.buttons.clientHeight)
+          this.buttons.scrollTop = bottom - this.buttons.clientHeight;
+      }
+    }
   }
   focusSelection() {
     this.buttons
@@ -226,8 +278,10 @@ export class OriginalMenu {
         0,
         Math.min(lists[this.screen]!.length - 1, this.selected + delta),
       );
-    else if (this.screen === "car") this.hooks.change("machine", delta);
-    else if (this.screen === "course") this.hooks.change("course", delta);
+    else if (this.screen === "car") {
+      this.hooks.change("machine", delta);
+      this.selected = +field("machine").value;
+    } else if (this.screen === "course") this.hooks.change("course", delta);
     else if (this.screen === "records")
       this.selected = Math.max(0, Math.min(8, this.selected + delta));
     this.syncSelection();
@@ -367,60 +421,81 @@ export class OriginalMenu {
   courseName(i: number) {
     return `${Math.floor(i / 3) + 1}-${(i % 3) + 1} ${HOVER_TRACKS[i].name.replace("’", "'")}`;
   }
+  updateMachineInfo() {
+    const type = +field("machine").value;
+    if (this.displayedMachine === type) return;
+    this.displayedMachine = type;
+    const m = HoverEngine.MACHINES[type];
+    const machines = HoverEngine.MACHINES.slice(0, HoverRules.machineCount());
+    const metrics = [
+      // MENU_ETC.C car_select_init: preserve the original formulas.
+      {
+        label: "Engine",
+        values: machines.map((m) => m.accel - m.falloff * 8),
+      },
+      { label: "Side Thrusters", values: machines.map((m) => m.side) },
+      {
+        label: "Rudder",
+        values: machines.map((m) =>
+          m.rudder ? m.rotation + Math.trunc(227 / m.rudder) : 0,
+        ),
+      },
+      { label: "Drag", values: machines.map((m) => m.drag) },
+      {
+        label: "Turbo",
+        values: machines.map((m) => m.turbo - m.turboFall * 4),
+      },
+      { label: "Weight", values: machines.map((m) => m.weight) },
+      { label: "Energy Capacity", values: machines.map((m) => m.tank) },
+    ];
+    const name = document.createElement("h3");
+    name.textContent = m.name;
+    const description = document.createElement("p");
+    description.className = "machine-description";
+    description.textContent = [
+      "A balanced machine with predictable handling.",
+      "Agile handling. Turn sharply with a single front thruster.",
+      "Built for speed. Steer with four thrusters and no rudder.",
+      "Strong acceleration and durability. Heavy and weak uphill.",
+      "High-speed prototype. No rudder or turbo; low durability.",
+    ][type];
+    const heading = document.createElement("p");
+    heading.className = "performance-heading";
+    heading.textContent = "SPECS";
+    const speeds = document.createElement("div");
+    speeds.className = "machine-speeds";
+    ["MAX SPEED", "MAX TURBO"].forEach((label, i) => {
+      const item = document.createElement("div");
+      const title = document.createElement("span");
+      title.textContent = label;
+      const value = document.createElement("strong");
+      value.textContent = `${Math.round(this.curves[type][i][159])} km/h`;
+      item.append(title, value);
+      speeds.append(item);
+    });
+    const stats = document.createElement("dl");
+    metrics.forEach(({ label, values }) => {
+      const row = document.createElement("div");
+      const term = document.createElement("dt");
+      term.textContent = label;
+      const value = document.createElement("dd");
+      const ratio = Math.round((100 * values[type]) / Math.max(...values));
+      value.setAttribute("aria-label", `${ratio}%（選択可能な車両内の相対値）`);
+      const fill = document.createElement("i");
+      fill.style.width = `${ratio}%`;
+      value.append(fill);
+      row.append(term, value);
+      stats.append(row);
+    });
+    this.machineInfo.replaceChildren(name, description, heading, speeds, stats);
+  }
   draw() {
     const g = this.g;
     g.clearRect(0, 0, 320, 240);
     g.imageSmoothingEnabled = false;
     const list = lists[this.screen];
     if (this.screen === "car") {
-      const type = +field("machine").value,
-        m = HoverEngine.MACHINES[type];
-      this.text(m.name[0] + m.name.slice(1).toLowerCase(), 16, 56, 16);
-      const labels = [
-        "Booster",
-        "Slaster",
-        "Radder",
-        "Resistance",
-        "Turbo",
-        "Weight",
-        "Power",
-      ];
-      const props = HoverEngine.MACHINES.slice(
-        0,
-        HoverRules.machineCount(),
-      ).map((m) => [
-        m.accel - m.falloff * 8,
-        m.side,
-        m.rudder ? m.rotation + 227 / m.rudder : 0,
-        m.drag,
-        m.turbo - m.turboFall * 4,
-        m.weight,
-        m.tank,
-      ]);
-      labels.forEach((label, i) => {
-        g.fillStyle = "#000080";
-        g.fillRect(
-          176,
-          152 + i * 12,
-          (152 * props[type][i]) / Math.max(...props.map((p) => p[i])),
-          8,
-        );
-        this.text(label, 176, 152 + i * 12);
-      });
-      this.curves[type].forEach((curve, j) => {
-        g.strokeStyle = j ? "red" : "white";
-        g.beginPath();
-        curve
-          .slice(0, 136)
-          .forEach((v, i) =>
-            i ? g.lineTo(176 + i, 136 - v) : g.moveTo(176 + i, 136 - v),
-          );
-        g.stroke();
-      });
-      this.text("MAX SPEED", 208, 112);
-      this.text("MAX TURBO", 208, 132);
-      this.text(Math.round(this.curves[type][0][159]) + "Km/h", 256, 122);
-      this.text(Math.round(this.curves[type][1][159]) + "Km/h", 256, 142);
+      this.updateMachineInfo();
     } else if (this.screen === "course") {
       const course = +field("course").value;
       this.text(this.courseName(course), 16, 56, 16);

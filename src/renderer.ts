@@ -925,9 +925,101 @@ export class HoverRenderer {
     0.1,
     10000,
   );
+  private machineScene = new THREE.Scene();
+  private machineCamera = new THREE.PerspectiveCamera(35, 1, 0.1, 1000);
+  private machineBackdrop = new THREE.Scene();
+  private machineBackdropCamera = new THREE.OrthographicCamera(
+    -1,
+    1,
+    1,
+    -1,
+    0,
+    1,
+  );
+  private machineCenter = new THREE.Vector3();
+  private machineRadius = 1;
+  private machineReducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  );
+
+  // Composite over the running demo using the same WebGL context. The viewport
+  // follows the DOM menu's centered 16:9 safe area, including ultrawide screens.
+  drawMachinePreview(type: number, time: number) {
+    if (!this.machineScene.children.length) {
+      const light = new THREE.DirectionalLight(0xffffff, 1.5);
+      light.position.set(-8, 12, -8);
+      this.machineScene.add(new THREE.AmbientLight(0xffffff, 1.6), light);
+      this.machineBackdrop.add(
+        new THREE.Mesh(
+          new THREE.PlaneGeometry(2, 2),
+          new THREE.MeshBasicMaterial({
+            color: 0x00050d,
+            transparent: true,
+            opacity: 0.55,
+            depthTest: false,
+            depthWrite: false,
+          }),
+        ),
+      );
+    }
+    const changed = this.menuShip?.type !== type;
+    const ship = this.getMenuShip(type);
+    ship.flames.forEach((m) => (m.visible = false));
+    ship.sides.forEach((m) => (m.visible = false));
+    if (changed || ship.root.parent !== this.machineScene) {
+      ship.root.position.set(0, 0, 0);
+      ship.root.rotation.set(0, 0, 0);
+      // Hidden engine/power effects extend beyond the hull and must not shrink
+      // the preview's framing.
+      const bounds = new THREE.Box3().setFromObject(ship.hull);
+      ship.rudders.forEach((rudder) => bounds.expandByObject(rudder));
+      bounds.getCenter(this.machineCenter);
+      this.machineRadius = bounds.getSize(new THREE.Vector3()).length() / 2;
+      this.machineScene.add(ship.root);
+    }
+    const angle = this.machineReducedMotion.matches ? 0.6 : 0.6 + time * 0.18;
+    ship.root.rotation.set(0, angle, 0);
+    ship.root.position
+      .copy(this.machineCenter)
+      .multiplyScalar(-1)
+      .applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+    const width = this.canvas.width,
+      height = this.canvas.height;
+    const safeWidth = Math.min(width, (height * 16) / 9);
+    const previewWidth = safeWidth * 0.46,
+      previewHeight = height * 0.34;
+    this.machineCamera.aspect = previewWidth / previewHeight;
+    this.machineCamera.updateProjectionMatrix();
+    const halfFov = THREE.MathUtils.degToRad(this.machineCamera.fov / 2);
+    const distance =
+      this.machineRadius /
+      Math.sin(
+        Math.min(
+          halfFov,
+          Math.atan(Math.tan(halfFov) * this.machineCamera.aspect),
+        ),
+      );
+    this.machineCamera.position.set(0, distance * 0.42, -distance * 0.91);
+    this.machineCamera.lookAt(0, 0, 0);
+    this.renderer.autoClear = false;
+    // Dim the entire demo; the foreground ship stays bright.
+    this.renderer.setViewport(0, 0, width, height);
+    this.renderer.render(this.machineBackdrop, this.machineBackdropCamera);
+    this.renderer.clearDepth();
+    this.renderer.setViewport(
+      (width - safeWidth) / 2 + safeWidth * 0.5,
+      height * 0.48,
+      previewWidth,
+      previewHeight,
+    );
+    this.renderer.render(this.machineScene, this.machineCamera);
+    this.renderer.setViewport(0, 0, width, height);
+    this.renderer.autoClear = true;
+  }
   getMenuShip(type: number) {
     if (this.menuShip?.type !== type) {
       if (this.menuShip) {
+        this.menuShip.root.removeFromParent();
         this.clear(this.menuShip.root);
         if (this.menuShip.shadow) {
           this.scene.remove(this.menuShip.shadow);

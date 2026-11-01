@@ -81,11 +81,103 @@ module.exports = async function verify({
       "TIME ATTACK",
       "OPTION",
     ]);
+    const titleMusic = await page.evaluate(
+      () => window.hoverDiagnostics().music,
+    );
     await press("ArrowDown");
     await press("Enter");
     await screen("car");
-    assert.equal(await page.locator("#menu nav button").count(), 0);
+    assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
+      "LUSTER",
+      "EXCEL",
+      "BETA",
+      "JUSTER",
+      "ALPHA",
+    ]);
     assert.equal(await page.locator("#mode").inputValue(), "time");
+    await click("BETA");
+    assert.equal(await page.locator("#machine").inputValue(), "2");
+    await page.waitForFunction(
+      () => document.querySelector(".machine-info h3")?.textContent === "BETA",
+    );
+    await screen("car");
+    assert.equal(
+      await page.locator("#menu nav button[aria-current=true]").textContent(),
+      "BETA",
+    );
+    assert.deepEqual(await page.locator(".machine-info dt").allTextContents(), [
+      "Engine",
+      "Side Thrusters",
+      "Rudder",
+      "Drag",
+      "Turbo",
+      "Weight",
+      "Energy Capacity",
+    ]);
+    assert.match(
+      await page.locator(".machine-description").innerText(),
+      /four thrusters and no rudder/,
+    );
+    assert.equal(
+      await page
+        .locator(".machine-info dd i")
+        .nth(2)
+        .evaluate((bar) => bar.style.width),
+      "0%",
+    );
+    assert.equal(await page.locator(".machine-confirm").count(), 0);
+    const demoFrame = await page.evaluate(
+      () => window.hoverDiagnostics().demoFrames,
+    );
+    await page.waitForFunction(
+      (frame) => window.hoverDiagnostics().demoFrames > frame,
+      demoFrame,
+    );
+    await page.screenshot({ path: "/tmp/hover-machine-select-desktop.png" });
+    await click("LUSTER");
+    for (const viewport of [
+      { width: 375, height: 780 },
+      { width: 1600, height: 900 },
+      { width: 2560, height: 720 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const info = await page.locator(".machine-info").boundingBox();
+      const list = await page.locator("#menu nav").boundingBox();
+      const guide = await page.locator(".title-guide").boundingBox();
+      const menu = await page.locator("#menu").boundingBox();
+      assert.ok(info && menu && info.y + info.height <= menu.y + menu.height);
+      assert.ok(list && guide && list.y + list.height <= guide.y);
+      assert.ok(info.x + info.width <= viewport.width);
+      const positions = async () =>
+        (
+          await Promise.all([
+            page.locator(".title-brand").boundingBox(),
+            page.locator(".menu-caption").boundingBox(),
+            page.locator("#menu nav button").first().boundingBox(),
+          ])
+        ).map((box) => ({ x: box!.x, y: box!.y }));
+      const machinePositions = await positions();
+      await press("Escape");
+      await click("GRANDPRIX");
+      await screen("gp");
+      assert.deepEqual(
+        await positions(),
+        machinePositions,
+        "machine menu shares the GP menu placement",
+      );
+      await press("Escape");
+      await click("TIME ATTACK");
+      await screen("car");
+    }
+    await page.setViewportSize({ width: 1100, height: 900 });
+    await press("Escape");
+    await screen("title");
+    await page.waitForFunction(
+      (music) => window.hoverDiagnostics().music === music,
+      titleMusic,
+    );
+    await click("TIME ATTACK");
+    await screen("car");
     for (let i = 0; i < 5; i++) {
       assert.equal(await page.locator("#machine").inputValue(), String(i));
       await press("ArrowRight");
@@ -303,8 +395,14 @@ module.exports = async function verify({
     await screen("title");
     await click("TIME ATTACK");
     await screen("car");
+    await page.locator("#menu .title-layout").evaluate(async (element) => {
+      await Promise.all(
+        element.getAnimations().map((animation) => animation.finished),
+      );
+    });
+    await page.screenshot({ path: "/tmp/hover-machine-select-mobile.png" });
     await press("ArrowRight");
-    await press("Enter");
+    await click("ENTER CONFIRM");
     await screen("course");
     const size = await page.locator(".game-wrap").boundingBox();
     assert.ok(Math.abs(size!.width / size!.height - 4 / 3) < 0.01);

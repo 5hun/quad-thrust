@@ -1072,6 +1072,9 @@ main > details {
 .menu-caption {
   display: none;
 }
+.machine-info {
+  display: none;
+}
 #menu[data-presentation="list"] {
   inset: 0;
   width: 100%;
@@ -1168,10 +1171,20 @@ main > details {
   font-size: 0.8cqw;
   letter-spacing: 0.24em;
 }
-.title-guide > span {
+.title-guide > span,
+.title-guide > button {
   display: flex;
   align-items: center;
   gap: 1cqw;
+}
+.title-guide .guide-confirm {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  touch-action: manipulation;
 }
 .guide-arrows {
   font-size: 1.6cqw;
@@ -1227,7 +1240,147 @@ main > details {
 #menu[data-presentation="records"] {
   background: rgb(0 5 13 / 70%);
 }
+
+/* Machine selection shares the title typography and safe area. The renderer
+   dims the demo before drawing the foreground machine, so it stays bright. */
+#menu[data-screen="car"] {
+  background: transparent;
+}
+#menu[data-screen="car"] nav {
+  max-height: 44cqh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #aebdc980 transparent;
+}
+#menu[data-screen="car"] .machine-info {
+  display: block;
+  position: absolute;
+  top: 54%;
+  left: 56%;
+  width: 37%;
+  color: #f3faff;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 45%);
+}
+.machine-info h3 {
+  margin: 0;
+  font-size: 2.15cqw;
+  font-weight: 400;
+  letter-spacing: 0.32em;
+}
+.machine-info .machine-description {
+  margin: 1cqh 0 1.5cqh;
+  min-height: 4cqh;
+  color: #d3dde5;
+  font-size: 1.05cqw;
+  line-height: 1.6;
+}
+.performance-heading {
+  margin: 0 0 1cqh;
+  color: #aebdc9;
+  font-size: 0.8cqw;
+  letter-spacing: 0.3em;
+}
+.machine-info dl {
+  margin: 0;
+}
+.machine-speeds {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2cqw;
+  margin-bottom: 1.5cqh;
+}
+.machine-speeds span {
+  display: block;
+  color: #fff;
+  font-size: 0.8cqw;
+  letter-spacing: 0.12em;
+}
+.machine-speeds strong {
+  display: block;
+  margin-top: 0.5cqh;
+  font-size: 1.6cqw;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.machine-info dl > div {
+  display: grid;
+  grid-template-columns: 43% 57%;
+  align-items: center;
+  min-height: 3cqh;
+  font-size: 1cqw;
+}
+.machine-info dd {
+  height: max(2px, 0.65cqh);
+  margin: 0;
+  background: rgb(172 196 216 / 22%);
+}
+.machine-info dd i {
+  display: block;
+  height: 100%;
+  background: var(--title-cyan);
+  transition: width 180ms ease;
+}
+#menu[data-screen="car"] .title-layout {
+  animation: machine-menu-enter 180ms ease-out;
+}
+@keyframes machine-menu-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #menu[data-screen="car"] .title-layout {
+    animation: none;
+  }
+  .machine-info dd i {
+    transition: none;
+  }
+}
 @container (max-width: 600px) {
+  #menu[data-screen="car"] nav {
+    width: 43%;
+    max-height: 46cqh;
+  }
+  #menu[data-screen="car"][data-count="5"] nav button {
+    min-height: 11.5cqh;
+  }
+  #menu[data-screen="car"] .machine-info {
+    left: 52%;
+    width: 43%;
+    top: 49%;
+  }
+  .machine-info h3 {
+    font-size: 3cqw;
+  }
+  .machine-info .machine-description {
+    font-size: 2.1cqw;
+    line-height: 1.4;
+    min-height: 6cqh;
+    margin-bottom: 0.5cqh;
+  }
+  .performance-heading {
+    display: block;
+    font-size: 2cqw;
+  }
+  .machine-speeds span {
+    font-size: 2cqw;
+  }
+  .machine-speeds strong {
+    font-size: 2.8cqw;
+  }
+  .machine-info dl > div {
+    font-size: 2.1cqw;
+    line-height: 1.15;
+    min-height: 2.8cqh;
+    grid-template-columns: 55% 45%;
+  }
+  #menu[data-screen="car"] .title-guide {
+    gap: 1.7cqw;
+    font-size: 1.5cqw;
+  }
   #menu[data-presentation="list"] .menu-caption {
     top: 34%;
     font-size: 2.5cqw;
