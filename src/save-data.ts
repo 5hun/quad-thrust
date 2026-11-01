@@ -10,16 +10,7 @@ function defaults() {
     for (let course = 0; course < 9; course++) {
       values.set(`hover-v3-record-${category}-${course}`, "600");
       for (const kind of ["lap", "total"])
-        values.set(
-          `hover-records-${category}-${course}-${kind}`,
-          JSON.stringify(
-            ["SAT", "UME", "BEE", "UZU", "MAS", "ZZZ"].map((name, i) => ({
-              time: 600,
-              machine: i % 4,
-              name,
-            })),
-          ),
-        );
+        values.set(`hover-records-${category}-${course}-${kind}`, "[]");
     }
   return values;
 }
@@ -74,7 +65,30 @@ export class SaveStore implements Storage {
       );
       if (!entries.every(([key, value]) => validValue(key, value))) return;
       for (const [key, value] of entries)
-        if (typeof value === "string") this.data.set(key, value);
+        if (typeof value === "string") {
+          // Old saves persisted the six initial ten-minute placeholder rows.
+          // Recognize the complete template, never a time value on its own.
+          if (/^hover-records-(gp|time)-[0-8]-(lap|total)$/.test(key)) {
+            const rows = JSON.parse(value);
+            const names = ["SAT", "UME", "BEE", "UZU", "MAS", "ZZZ"];
+            if (
+              rows.length === names.length &&
+              rows.every(
+                (
+                  row: { time: number; machine: number; name?: string },
+                  i: number,
+                ) =>
+                  row.time === 600 &&
+                  row.machine === i % 4 &&
+                  row.name === names[i],
+              )
+            ) {
+              this.data.set(key, "[]");
+              continue;
+            }
+          }
+          this.data.set(key, value);
+        }
     } catch {
       // Storage may be disabled or corrupt. The game still works in memory.
     }

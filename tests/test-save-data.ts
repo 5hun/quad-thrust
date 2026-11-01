@@ -24,6 +24,11 @@ const fs: typeof import("node:fs") = require("node:fs");
   assert.equal(save.getItem("hover-unlocks"), "0");
   assert.equal(save.getItem("hover-cpu-difficulty"), null);
   assert.equal(writes, 0, "startup does not overwrite existing storage");
+  assert.deepEqual(
+    JSON.parse(save.getItem("hover-records-time-0-lap")!),
+    [],
+    "an unplayed course has no recorded time",
+  );
   const values = {
     "hover-unlocks": "7",
     "hover-player-name": "B9!",
@@ -70,6 +75,35 @@ const fs: typeof import("node:fs") = require("node:fs");
   });
   assert.equal(legacy.getItem("hover-unlocks"), "3");
   assert.equal(legacy.getItem("hover-cpu-difficulty"), null);
+  const seeded = ["SAT", "UME", "BEE", "UZU", "MAS", "ZZZ"].map((name, i) => ({
+    time: 600,
+    machine: i % 4,
+    name,
+  }));
+  const oldRecords = new SaveStore({
+    getItem: () =>
+      JSON.stringify({
+        version: 2,
+        values: {
+          "hover-unlocks": "3",
+          "hover-records-time-0-lap": JSON.stringify(seeded),
+          "hover-records-time-1-lap": JSON.stringify([
+            { time: 600, machine: 2, name: "AAA" },
+          ]),
+        },
+      }),
+    setItem() {},
+  });
+  assert.equal(oldRecords.getItem("hover-unlocks"), "3");
+  assert.deepEqual(
+    JSON.parse(oldRecords.getItem("hover-records-time-0-lap")!),
+    [],
+  );
+  assert.deepEqual(
+    JSON.parse(oldRecords.getItem("hover-records-time-1-lap")!),
+    [{ time: 600, machine: 2, name: "AAA" }],
+    "a real ten-minute record is preserved",
+  );
   const disabled = new SaveStore({
     getItem() {
       throw Error("Disabled");
