@@ -36,7 +36,7 @@ module.exports = async function verify({
       await page.locator("#browser-settings, input[type=file]").count(),
       0,
     );
-    await click("OPTION");
+    await click("OPTIONS");
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
       "VIEW RECORDS",
       "SOUND: ON",
@@ -62,7 +62,7 @@ module.exports = async function verify({
     assert.deepEqual(progress.lap, { time: 12.5, machine: 2, name: "ABC" });
     assert.deepEqual(progress.total, { time: 40, machine: 2, name: "ABC" });
     assert.equal((await snap()).lastReplay, null);
-    await click("OPTION");
+    await click("OPTIONS");
     assert.equal(
       await page.getByRole("button", { name: "ENDING", exact: true }).count(),
       0,

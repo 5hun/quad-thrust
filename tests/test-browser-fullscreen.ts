@@ -49,7 +49,7 @@ module.exports = async function verify({
     };
     await page.goto(baseURL);
     await wait("menu");
-    await click("OPTION");
+    await click("OPTIONS");
     const viewports = [
       { width: 960, height: 720 },
       { width: 1280, height: 720 },
@@ -164,26 +164,37 @@ module.exports = async function verify({
     await fullscreen(true);
     await exit();
     await wait("paused");
+    // The HUD hides while paused; the pause list uses the same 16:9 area.
+    assert.equal(await page.locator("#hud").isHidden(), true);
     for (const viewport of viewports.slice(0, 4)) {
       await page.setViewportSize(viewport);
-      const hud = await page.locator(".race-hud").boundingBox();
+      const layout = await page
+        .locator("#pause-panel .title-layout")
+        .boundingBox();
       assert.ok(
         Math.abs(
-          hud!.width - Math.min(viewport.width, (viewport.height * 16) / 9),
+          layout!.width - Math.min(viewport.width, (viewport.height * 16) / 9),
         ) < 1,
       );
-      assert.ok(Math.abs(hud!.x * 2 + hud!.width - viewport.width) < 1);
+      assert.ok(Math.abs(layout!.x * 2 + layout!.width - viewport.width) < 1);
     }
     const paused = await snapshot();
     await page.waitForTimeout(200);
     assert.equal((await snapshot()).ticks, paused.ticks);
-    await page.getByRole("button", { name: "CONTINUE", exact: true }).click();
+    await page.getByRole("button", { name: "RESUME", exact: true }).click();
     await wait("running");
+    const hud = await page.locator(".race-hud").boundingBox();
+    const viewport = page.viewportSize()!;
+    assert.ok(
+      Math.abs(
+        hud!.width - Math.min(viewport.width, (viewport.height * 16) / 9),
+      ) < 1,
+    );
     await page.screenshot({ path: "/tmp/hover-widescreen-race.png" });
-    // Re-enter from OPTION and verify native exit pauses an active race.
+    // Re-enter from OPTIONS and verify native exit pauses an active race.
     await page.keyboard.press("Escape");
-    await page.locator("#back").click();
-    await click("OPTION");
+    await click("QUIT");
+    await click("OPTIONS");
     await enter();
     await page.keyboard.press("KeyX");
     await click("TIME ATTACK");
@@ -198,8 +209,8 @@ module.exports = async function verify({
     const stopped = await snapshot();
     await page.waitForTimeout(200);
     assert.equal((await snapshot()).ticks, stopped.ticks);
-    await page.locator("#back").click();
-    await click("OPTION");
+    await click("QUIT");
+    await click("OPTIONS");
     // A refused fullscreen request leaves the regular game available.
     await page.evaluate(() => {
       document.getElementById("fullscreen-host")!.requestFullscreen = () =>
@@ -215,7 +226,7 @@ module.exports = async function verify({
     await unsupported.goto(baseURL);
     await unsupported.waitForFunction(() => !!window.hoverDiagnostics);
     await unsupported
-      .getByRole("button", { name: "OPTION", exact: true })
+      .getByRole("button", { name: "OPTIONS", exact: true })
       .click();
     assert.deepEqual(
       await unsupported.locator("#menu nav button").allTextContents(),

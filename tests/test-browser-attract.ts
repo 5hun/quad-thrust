@@ -32,7 +32,7 @@ module.exports = async function verify({
       assert.equal((await snapshot()).menuScreen, "title");
       assert.deepEqual(
         await page.locator("#menu nav button").allTextContents(),
-        ["GRANDPRIX", "TIME ATTACK", "OPTION"],
+        ["GRANDPRIX", "TIME ATTACK", "OPTIONS"],
       );
       await page.getByRole("heading", { name: "QUAD THRUST" }).waitFor();
     };
@@ -124,7 +124,7 @@ module.exports = async function verify({
             box.y + box.height <= viewport.height,
         );
       }
-      await click("OPTION");
+      await click("OPTIONS");
       const lastOption = await page
         .locator("#menu nav button")
         .last()
@@ -171,7 +171,7 @@ module.exports = async function verify({
     await page.screenshot({ path: "/tmp/quad-thrust-gp-c1.png" });
     await page.keyboard.press("Escape");
     await assertContinuingDemo("title");
-    await click("OPTION");
+    await click("OPTIONS");
     await assertContinuingDemo("option");
     await page.screenshot({ path: "/tmp/quad-thrust-option-c1.png" });
     await click("VIEW RECORDS");

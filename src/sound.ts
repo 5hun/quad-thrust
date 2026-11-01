@@ -13,6 +13,46 @@ interface Voice {
   velocity: number;
   held?: boolean;
 }
+type Effects = Map<
+  number,
+  { source: AudioBufferSourceNode; envelope: AudioWorkletNode }
+>;
+// Destination for one-shot effects: the race mix or the menu mix.
+interface Output {
+  context: AudioContext;
+  master: GainNode;
+  reverb: ConvolverNode;
+  effects: Effects;
+}
+// GP1_MAIN.C selects HALL at depth 64/127. A deterministic stereo
+// hall impulse restores the missing wet path; this is not SPU RAM emulation.
+function createOutput(c: AudioContext): Output {
+  const master = c.createGain();
+  master.gain.value = 0.35;
+  const limiter = c.createDynamicsCompressor();
+  master.connect(limiter);
+  limiter.connect(c.destination);
+  const reverb = c.createConvolver();
+  const impulse = c.createBuffer(
+    2,
+    Math.ceil(c.sampleRate * 1.8),
+    c.sampleRate,
+  );
+  let seed = 1;
+  for (let ch = 0; ch < 2; ch++) {
+    const data = impulse.getChannelData(ch);
+    for (let i = Math.floor(c.sampleRate * 0.025); i < data.length; i++) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      data[i] = (seed / 0x80000000 - 1) * Math.exp((-6 * i) / data.length);
+    }
+  }
+  reverb.buffer = impulse;
+  const wet = c.createGain();
+  wet.gain.value = 64 / 127;
+  reverb.connect(wet);
+  wet.connect(master);
+  return { context: c, master, reverb, effects: new Map() };
+}
 export class OriginalSound {
   context: AudioContext | null;
   enabled: boolean;
@@ -28,10 +68,10 @@ export class OriginalSound {
   notesPlayed: number;
   master!: GainNode;
   reverb!: ConvolverNode;
-  effects = new Map<
-    number,
-    { source: AudioBufferSourceNode; envelope: AudioWorkletNode }
-  >();
+  effects: Effects = new Map();
+  // Menu effects keep playing while the race mix is suspended by pause().
+  menu: Output | null = null;
+  paused = false;
   ready!: Promise<void>;
   timer?: ReturnType<typeof setInterval>;
   pendingCourse: string | number | null = null;
@@ -61,39 +101,21 @@ export class OriginalSound {
     this.enabled = value;
     if (!value) {
       if (this.master) this.master.gain.value = 0;
+      if (this.menu) this.menu.master.gain.value = 0;
       return;
     }
     if (!this.context) {
       this.context = new (window.AudioContext || window.webkitAudioContext)();
       const c = this.context;
-      this.master = c.createGain();
-      this.master.gain.value = 0.35;
-      const limiter = c.createDynamicsCompressor();
-      this.master.connect(limiter);
-      limiter.connect(c.destination);
-      // GP1_MAIN.C selects HALL at depth 64/127. A deterministic stereo
-      // hall impulse restores the missing wet path; this is not SPU RAM emulation.
-      this.reverb = c.createConvolver();
-      const impulse = c.createBuffer(
-        2,
-        Math.ceil(c.sampleRate * 1.8),
-        c.sampleRate,
+      ({ master: this.master, reverb: this.reverb } = createOutput(c));
+      this.menu = createOutput(
+        new (window.AudioContext || window.webkitAudioContext)({
+          sampleRate: c.sampleRate,
+        }),
       );
-      let seed = 1;
-      for (let ch = 0; ch < 2; ch++) {
-        const data = impulse.getChannelData(ch);
-        for (let i = Math.floor(c.sampleRate * 0.025); i < data.length; i++) {
-          seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-          data[i] = (seed / 0x80000000 - 1) * Math.exp((-6 * i) / data.length);
-        }
-      }
-      this.reverb.buffer = impulse;
-      const wet = c.createGain();
-      wet.gain.value = 64 / 127;
-      this.reverb.connect(wet);
-      wet.connect(this.master);
       this.ready = Promise.all([
         c.audioWorklet.addModule("spu-envelope.js"),
+        this.menu.context.audioWorklet.addModule("spu-envelope.js"),
         ...[
           ...Object.entries(window.HOVER_SOUNDS).map(
             ([id, s]) => ["se" + id, s] as [string, Sample],
@@ -130,9 +152,15 @@ export class OriginalSound {
         this.timer = setInterval(() => this.schedule(), 25);
       });
     }
-    await this.context.resume();
+    await Promise.all([
+      // A context created during pause must not start the race mix.
+      this.paused ? this.context.suspend() : this.context.resume(),
+      this.menu!.context.resume(),
+    ]);
     await this.ready;
-    this.master.gain.value = this.enabled ? 0.35 : 0;
+    this.master.gain.value = this.menu!.master.gain.value = this.enabled
+      ? 0.35
+      : 0;
     if (this.pendingCourse != null && !this.song)
       this.playCourse(this.pendingCourse, this.musicLoop);
   }
@@ -140,8 +168,9 @@ export class OriginalSound {
     t: { adsr1?: number; adsr2?: number },
     when: number,
     source: AudioBufferSourceNode,
+    context = this.context!,
   ) {
-    const node = new AudioWorkletNode(this.context!, "hover-spu-envelope", {
+    const node = new AudioWorkletNode(context, "hover-spu-envelope", {
       numberOfInputs: 1,
       numberOfOutputs: 1,
       outputChannelCount: [1],
@@ -164,31 +193,53 @@ export class OriginalSound {
     node.port.close();
   }
   effect(id: number, note = 60, volume = 127, sustained = false) {
+    this.play(this.raceOutput(), id, note, volume, sustained);
+  }
+  // Cursor and confirm sounds, audible while the race is paused.
+  menuEffect(id: number, note: number, volume: number) {
+    if (this.menu) this.play(this.menu, id, note, volume, false);
+  }
+  raceOutput(): Output {
+    return {
+      context: this.context!,
+      master: this.master,
+      reverb: this.reverb,
+      effects: this.effects,
+    };
+  }
+  play(
+    output: Output,
+    id: number,
+    note: number,
+    volume: number,
+    sustained: boolean,
+  ) {
     if (!this.enabled || !this.buffers.has("se" + id)) return;
+    const { context: c, effects } = output;
     // car_hitsound replaces the previous wall/landing voice.
-    const old = this.effects.get(id);
-    if (old) old.envelope.port.postMessage({ when: this.context!.currentTime });
+    const old = effects.get(id);
+    if (old) old.envelope.port.postMessage({ when: c.currentTime });
     const meta = window.HOVER_SOUNDS[id];
-    const s = this.context!.createBufferSource();
+    const s = c.createBufferSource();
     s.buffer = this.buffers.get("se" + id)!;
     s.playbackRate.value =
       2 ** ((note - meta.note! - (meta.shift || 0) / 128) / 12);
     s.loop = sustained && meta.loop;
     s.loopStart = meta.loopStart;
     s.loopEnd = meta.loopEnd;
-    const envelope = this.envelope(meta, this.context!.currentTime, s);
-    const gain = this.context!.createGain();
+    const envelope = this.envelope(meta, c.currentTime, s, c);
+    const gain = c.createGain();
     gain.gain.value = (volume / 127) * (meta.volume ?? 1);
     s.connect(envelope);
     envelope.connect(gain);
-    gain.connect(this.master);
-    gain.connect(this.reverb);
-    this.effects.set(id, { source: s, envelope });
+    gain.connect(output.master);
+    gain.connect(output.reverb);
+    effects.set(id, { source: s, envelope });
     s.onended = () => {
       s.disconnect();
       this.disposeEnvelope(envelope);
       gain.disconnect();
-      if (this.effects.get(id)?.source === s) this.effects.delete(id);
+      if (effects.get(id)?.source === s) effects.delete(id);
     };
     s.start();
   }
@@ -407,6 +458,7 @@ export class OriginalSound {
     }
   }
   pause(value: boolean) {
+    this.paused = value;
     if (!this.context) return;
     if (value) this.context.suspend();
     else this.context.resume();
@@ -414,6 +466,7 @@ export class OriginalSound {
   diagnostics() {
     return {
       audioState: this.context?.state || "not-started",
+      menuAudioState: this.menu?.context.state || "not-started",
       music: this.song ? this.songName : null,
       musicNotes: this.notesPlayed,
       musicLoop: this.musicLoop,

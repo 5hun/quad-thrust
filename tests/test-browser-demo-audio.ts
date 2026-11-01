@@ -29,8 +29,11 @@ module.exports = async function verify({
           AudioContext.prototype.createDynamicsCompressor;
         AudioContext.prototype.createDynamicsCompressor = function () {
           const compressor = createCompressor.call(this);
-          window.demoAudioAnalyser = this.createAnalyser();
-          compressor.connect(window.demoAudioAnalyser);
+          // The first output carries BGM; the second only menu effects.
+          if (!window.demoAudioAnalyser) {
+            window.demoAudioAnalyser = this.createAnalyser();
+            compressor.connect(window.demoAudioAnalyser);
+          }
           return compressor;
         };
       });
@@ -101,7 +104,7 @@ module.exports = async function verify({
         "0",
         "selection screens must not replace or restart the title BGM",
       );
-      await page.getByRole("button", { name: "OPTION", exact: true }).click();
+      await page.getByRole("button", { name: "OPTIONS", exact: true }).click();
       await page
         .getByRole("button", { name: "SOUND: ON", exact: true })
         .click();
@@ -132,7 +135,7 @@ module.exports = async function verify({
       await page.waitForFunction(audioMatches, true);
       await page.keyboard.press("Escape");
       await page.keyboard.press("Escape");
-      await page.getByRole("button", { name: "OPTION", exact: true }).click();
+      await page.getByRole("button", { name: "OPTIONS", exact: true }).click();
       assert.equal(
         (
           await page.getByRole("button", { name: /^SOUND:/ }).textContent()

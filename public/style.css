@@ -771,44 +771,6 @@ main > details {
   }
 }
 
-/* GAME.C pause(): retain the frozen race and original sprite coordinates. */
-#pause-panel {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  background: transparent;
-}
-#pause-menu {
-  width: 100%;
-  height: 100%;
-  image-rendering: pixelated;
-  pointer-events: none;
-}
-#pause-panel button {
-  position: absolute;
-  left: 30%;
-  width: 40%;
-  height: 6.6667%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: transparent;
-  font-size: 0;
-}
-#pause-panel #resume {
-  top: 26.6667%;
-}
-#pause-panel #restart {
-  top: 40%;
-  left: 32.5%;
-}
-#pause-panel #back {
-  top: 53.3333%;
-}
-#pause-panel button:focus-visible {
-  outline: 1px solid #00ff00;
-}
-
 #continue-panel {
   position: absolute;
   inset: 0;
@@ -885,7 +847,6 @@ main > details {
 
 /* The same 4:3 box positions both artwork and its pointer targets. */
 .menu,
-#pause-panel,
 #continue-panel,
 #postrace {
   inset: 0 auto 0 50%;
@@ -932,7 +893,7 @@ main > details {
 #menu[data-presentation="list"] #original-menu {
   display: none;
 }
-#menu[data-presentation="list"] .title-layout {
+:is(#menu[data-presentation="list"], #pause-panel) .title-layout {
   display: block;
   position: absolute;
   inset: 0 auto 0 50%;
@@ -956,14 +917,14 @@ main > details {
   width: 100%;
   height: auto;
 }
-#menu[data-presentation="list"] nav {
+:is(#menu[data-presentation="list"], #pause-panel) nav {
   inset: 45% auto auto 4.4%;
   width: 43%;
   display: flex;
   flex-direction: column;
   gap: 1cqh;
 }
-#menu[data-presentation="list"] nav button {
+:is(#menu[data-presentation="list"], #pause-panel) nav button {
   position: relative;
   display: flex;
   align-items: center;
@@ -983,7 +944,7 @@ main > details {
   text-shadow: 0 1px 8px rgb(0 0 0 / 40%);
   touch-action: manipulation;
 }
-#menu[data-presentation="list"] nav button::before {
+:is(#menu[data-presentation="list"], #pause-panel) nav button::before {
   content: "";
   position: absolute;
   left: 0.55cqw;
@@ -992,17 +953,21 @@ main > details {
   background: var(--title-cyan);
   opacity: 0;
 }
-#menu[data-presentation="list"] nav button[aria-current="true"] {
+:is(#menu[data-presentation="list"], #pause-panel)
+  nav
+  button[aria-current="true"] {
   color: var(--title-cyan);
   text-shadow: 0 0 12px rgb(32 229 236 / 20%);
 }
-#menu[data-presentation="list"] nav button[aria-current="true"]::before {
+:is(#menu[data-presentation="list"], #pause-panel)
+  nav
+  button[aria-current="true"]::before {
   opacity: 1;
 }
-#menu[data-presentation="list"] nav button:focus-visible {
+:is(#menu[data-presentation="list"], #pause-panel) nav button:focus-visible {
   outline: none;
 }
-#menu[data-presentation="list"] .title-guide {
+:is(#menu[data-presentation="list"], #pause-panel) .title-guide {
   display: flex;
   position: absolute;
   left: 5%;
@@ -1019,7 +984,8 @@ main > details {
   align-items: center;
   gap: 1cqw;
 }
-.title-guide .guide-confirm {
+.title-guide .guide-confirm,
+.title-guide .guide-back {
   padding: 0;
   border: 0;
   background: transparent;
@@ -1043,19 +1009,19 @@ main > details {
   #menu[data-presentation="list"] .title-brand {
     width: 50%;
   }
-  #menu[data-presentation="list"] nav {
+  :is(#menu[data-presentation="list"], #pause-panel) nav {
     top: 38%;
     width: 75%;
     gap: 0;
   }
-  #menu[data-presentation="list"] nav button {
+  :is(#menu[data-presentation="list"], #pause-panel) nav button {
     min-height: 14cqh;
     font-size: 3cqw;
   }
-  #menu[data-presentation="list"] nav button::before {
+  :is(#menu[data-presentation="list"], #pause-panel) nav button::before {
     height: 6.5cqh;
   }
-  #menu[data-presentation="list"] .title-guide {
+  :is(#menu[data-presentation="list"], #pause-panel) .title-guide {
     font-size: 2cqw;
   }
   .guide-arrows {
@@ -1063,7 +1029,7 @@ main > details {
   }
 }
 
-#menu[data-presentation="list"] .menu-caption {
+:is(#menu[data-presentation="list"], #pause-panel) .menu-caption {
   display: block;
   position: absolute;
   top: 39.5%;
@@ -1078,6 +1044,37 @@ main > details {
 #menu[data-screen="title"] .menu-caption,
 #menu[data-screen="title"] .back-guide {
   display: none;
+}
+/* GAME.C pause(): the frozen race stays visible behind the title list style. */
+#pause-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: linear-gradient(
+    90deg,
+    rgb(0 5 13 / 82%) 0%,
+    rgb(0 5 13 / 62%) 30%,
+    rgb(0 5 13 / 36%) 58%,
+    rgb(0 5 13 / 24%) 78%
+  );
+}
+#pause-panel nav {
+  position: absolute;
+}
+#pause-panel .pause-note {
+  position: absolute;
+  top: 45%;
+  left: 7.4%;
+  margin: 0;
+  color: #c2c8ce;
+  font-size: 1.1cqw;
+  letter-spacing: 0.16em;
+}
+#pause-panel .pause-note[hidden] {
+  display: none;
+}
+#pause-panel[data-screen="quit"] nav {
+  top: 51%;
 }
 #menu[data-presentation="records"] {
   background: rgb(0 5 13 / 70%);
@@ -1325,12 +1322,20 @@ main > details {
     gap: 1.7cqw;
     font-size: 1.5cqw;
   }
-  #menu[data-presentation="list"] .menu-caption {
+  :is(#menu[data-presentation="list"], #pause-panel) .menu-caption {
     top: 34%;
     font-size: 2.5cqw;
   }
-  #menu[data-presentation="list"][data-count="4"] nav button {
+  #menu[data-presentation="list"][data-count="4"] nav button,
+  #pause-panel nav button {
     min-height: 11.5cqh;
+  }
+  #pause-panel .pause-note {
+    top: 40%;
+    font-size: 2cqw;
+  }
+  #pause-panel[data-screen="quit"] nav {
+    top: 45%;
   }
 }
 

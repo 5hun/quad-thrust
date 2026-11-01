@@ -19,9 +19,6 @@ interface Elements {
   stats: HTMLElement;
   start: HTMLButtonElement;
   "pause-panel": HTMLElement;
-  resume: HTMLButtonElement;
-  restart: HTMLButtonElement;
-  back: HTMLButtonElement;
   result: HTMLElement;
   touch: HTMLElement;
   "records-panel": HTMLElement;
@@ -36,6 +33,7 @@ import { HoverRenderer } from "./renderer.js";
 import { OriginalSound } from "./sound.js";
 import { RaceHUD } from "./hud.js";
 import { OriginalMenu } from "./menu.js";
+import { PauseMenu } from "./pause-menu.js";
 import { ReplayMemory } from "./replay-memory.js";
 import { SaveStore } from "./save-data.js";
 import { ReplayRecorder, InputReplay, GhostReplay } from "./input-replay.js";
@@ -256,13 +254,32 @@ const originalMenu = new OriginalMenu({
   sound(kind) {
     initAudio();
     originalSound.ready?.then(() =>
-      originalSound.effect(
+      originalSound.menuEffect(
         kind === "ok" ? 72 : kind === "cancel" ? 74 : 73,
         kind === "ok" ? 50 : 40,
         kind === "ok" ? 80 : 127,
       ),
     );
   },
+});
+const pauseMenu = new PauseMenu({
+  resume() {
+    pause();
+  },
+  restart() {
+    start(true);
+  },
+  quit() {
+    menu();
+  },
+  quitNeedsConfirm() {
+    return mode.startsWith("gp");
+  },
+  fullscreen: originalMenu.hooks.fullscreen,
+  toggleFullscreen,
+  soundEnabled: originalMenu.hooks.soundEnabled,
+  toggleSound: originalMenu.hooks.toggleSound,
+  sound: originalMenu.hooks.sound,
 });
 const postrace = new OriginalPostrace(originalMenu, session);
 function resize() {
@@ -458,36 +475,6 @@ function updateDemo(dt: number) {
   view.updateCamera(car);
   ++demoFrames;
 }
-let pauseSelection = 0;
-const pauseCanvas = document.getElementById("pause-menu") as HTMLCanvasElement;
-function drawPause() {
-  const g = pauseCanvas.getContext("2d")!;
-  g.clearRect(0, 0, 320, 240);
-  const previous = originalMenu.g;
-  originalMenu.g = g;
-  ["CONTINUE", "RESTART ", "  EXIT  "].forEach((text, i) => {
-    originalMenu.text(
-      text,
-      96 + (i % 2) * 8,
-      64 + i * 32,
-      16,
-      i === pauseSelection ? "#00ff00" : "white",
-    );
-  });
-  originalMenu.g = previous;
-  [$("resume"), $("restart"), $("back")].forEach((button, i) =>
-    button.setAttribute("aria-current", String(i === pauseSelection)),
-  );
-}
-function movePause(delta: number) {
-  pauseSelection = Math.max(0, Math.min(2, pauseSelection + delta));
-  originalMenu.hooks.sound("move");
-  drawPause();
-}
-function confirmPause() {
-  originalMenu.hooks.sound("ok");
-  [$("resume"), $("restart"), $("back")][pauseSelection].click();
-}
 function pause() {
   if (
     state === "running" ||
@@ -500,18 +487,21 @@ function pause() {
     originalSound.pause(true);
     keys = {};
     $("pause-panel").hidden = false;
-    pauseSelection = 0;
-    drawPause();
+    pauseMenu.open();
+    hudHiddenBeforePause = $("hud").hidden;
+    $("hud").hidden = true;
     $("touch").hidden = true;
     $("message").textContent = "";
   } else if (state === "paused") {
     state = stateBeforePause;
     originalSound.pause(false);
     $("pause-panel").hidden = true;
+    $("hud").hidden = hudHiddenBeforePause;
     $("touch").hidden = !matchMedia("(pointer:coarse)").matches;
   }
 }
 let stateBeforePause = "running";
+let hudHiddenBeforePause = false;
 const fullscreenHost = $("fullscreen-host");
 const fullscreenStatus = $("fullscreen-status");
 let gameFullscreen = false;
@@ -545,6 +535,7 @@ function syncFullscreen() {
     fullscreenHost.focus({ preventScroll: true });
   }
   gameFullscreen = active;
+  if (state === "paused") pauseMenu.refresh();
   if (state === "menu" && originalMenu.screen === "option") {
     originalMenu.show("option", originalMenu.selected);
     originalMenu.buttons
@@ -556,9 +547,6 @@ function syncFullscreen() {
 }
 document.addEventListener("fullscreenchange", syncFullscreen);
 $("start").onclick = () => start();
-$("resume").onclick = pause;
-$("restart").onclick = () => start(true);
-$("back").onclick = menu;
 let continueChoice = 0,
   continueRotation = 0;
 function showContinue() {
@@ -700,18 +688,18 @@ window.addEventListener("keydown", (e) => {
       [
         "ArrowUp",
         "ArrowDown",
+        "ArrowLeft",
+        "ArrowRight",
         "Enter",
         "KeyZ",
         "Escape",
+        "Backspace",
         "KeyX",
         "KeyP",
       ].includes(e.code)
     )
       e.preventDefault();
-    if (e.code === "ArrowUp") movePause(-1);
-    if (e.code === "ArrowDown") movePause(1);
-    if (e.code === "Enter" || e.code === "KeyZ") confirmPause();
-    if (["Escape", "KeyX", "KeyP"].includes(e.code)) pause();
+    pauseMenu.key(e.code);
     return;
   }
   if (e.code === "Escape" || e.code === "KeyP") {
@@ -772,10 +760,10 @@ function input() {
     if (b(1)) pauseButtons.add("cancel");
     for (const action of pauseButtons)
       if (!pausePadHeld.has(action)) {
-        if (action === "up") movePause(-1);
-        if (action === "down") movePause(1);
-        if (action === "ok") confirmPause();
-        if (action === "cancel") pause();
+        if (action === "up") pauseMenu.move(-1);
+        if (action === "down") pauseMenu.move(1);
+        if (action === "ok") pauseMenu.confirm();
+        if (action === "cancel") pauseMenu.back();
       }
   }
   if (
@@ -1162,7 +1150,8 @@ export const getHoverDiagnostics = () => ({
   replayClock,
   replayPose: postrace.phase ? postraceReplay?.car || null : null,
   entryName: postrace.name.slice(),
-  pauseSelection,
+  pauseSelection: pauseMenu.selected,
+  pauseScreen: pauseMenu.screen,
   continueChoice: document.getElementById("continue-panel")!.hidden
     ? null
     : continueChoice,

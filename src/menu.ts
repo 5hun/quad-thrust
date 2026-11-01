@@ -19,14 +19,14 @@ interface MenuHooks {
   sound(kind: "move" | "ok" | "cancel"): void;
 }
 const lists: Partial<Record<MenuScreen, string[]>> = {
-  title: ["GRANDPRIX", "TIME ATTACK", "OPTION"],
+  title: ["GRANDPRIX", "TIME ATTACK", "OPTIONS"],
   gp: ["Blue GP", "Yellow GP", "Red GP", "PRACTICE"],
   option: [],
   "record-kind": ["GRANDPRIX'S", "TIME ATTACK'S"],
 };
 const captions: Partial<Record<MenuScreen, string>> = {
   gp: "GRANDPRIX",
-  option: "OPTION",
+  option: "OPTIONS",
   "record-kind": "VIEW RECORDS",
 };
 const parent: Partial<Record<MenuScreen, [MenuScreen, number]>> = {

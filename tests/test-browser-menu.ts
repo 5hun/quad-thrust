@@ -81,7 +81,7 @@ module.exports = async function verify({
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
       "GRANDPRIX",
       "TIME ATTACK",
-      "OPTION",
+      "OPTIONS",
     ]);
     const titleMusic = await page.evaluate(
       () => window.hoverDiagnostics().music,
@@ -196,7 +196,7 @@ module.exports = async function verify({
       await page.setViewportSize(viewport);
       const info = await page.locator(".machine-info").boundingBox();
       const list = await page.locator("#menu nav").boundingBox();
-      const guide = await page.locator(".title-guide").boundingBox();
+      const guide = await page.locator("#menu .title-guide").boundingBox();
       const menu = await page.locator("#menu").boundingBox();
       assert.ok(info && menu && info.y + info.height <= menu.y + menu.height);
       assert.ok(list && guide && list.y + list.height <= guide.y);
@@ -205,7 +205,7 @@ module.exports = async function verify({
         (
           await Promise.all([
             page.locator(".title-brand").boundingBox(),
-            page.locator(".menu-caption").boundingBox(),
+            page.locator("#menu .menu-caption").boundingBox(),
             page.locator("#menu nav button").first().boundingBox(),
           ])
         ).map((box) => ({ x: box!.x, y: box!.y }));
@@ -378,7 +378,69 @@ module.exports = async function verify({
       () => window.hoverDiagnostics().state === "running",
     );
     await press("Escape");
-    await page.locator("#back").click();
+    // The pause list replaces the HUD and keeps the race mix suspended while
+    // menu sounds use their own running output.
+    const pauseState = () =>
+      page.evaluate(() => {
+        const d = window.hoverDiagnostics();
+        return {
+          state: d.state,
+          screen: d.pauseScreen,
+          selection: d.pauseSelection,
+          caption: document.querySelector("#pause-panel .menu-caption")!
+            .textContent,
+          items: Array.from(
+            document.querySelectorAll("#pause-panel nav button"),
+            (b) => b.textContent,
+          ),
+          hud: document.getElementById("hud")!.hidden,
+        };
+      });
+    assert.deepEqual(await pauseState(), {
+      state: "paused",
+      screen: "top",
+      selection: 0,
+      caption: "PAUSED",
+      items: ["RESUME", "RESTART", "OPTIONS", "QUIT"],
+      hud: true,
+    });
+    await press("ArrowDown");
+    await press("ArrowDown");
+    await press("Enter");
+    assert.deepEqual(
+      (({ screen, caption, items }) => ({ screen, caption, items }))(
+        await pauseState(),
+      ),
+      {
+        screen: "options",
+        caption: "OPTIONS",
+        items: ["SOUND: ON", "FULLSCREEN: OFF"],
+      },
+    );
+    // AudioContext resume() settles asynchronously.
+    await page.waitForFunction(() => {
+      const d = window.hoverDiagnostics();
+      return d.audioState === "suspended" && d.menuAudioState === "running";
+    });
+    await press("Enter");
+    assert.deepEqual((await pauseState()).items, [
+      "SOUND: OFF",
+      "FULLSCREEN: OFF",
+    ]);
+    await press("Enter");
+    assert.equal(
+      await page.evaluate(() => window.hoverDiagnostics().audioState),
+      "suspended",
+    );
+    await press("Escape");
+    assert.equal((await pauseState()).screen, "top");
+    assert.equal((await pauseState()).selection, 2);
+    await press("Escape");
+    assert.equal((await pauseState()).state, "running");
+    assert.equal((await pauseState()).hud, false);
+    await press("Escape");
+    // Time Attack quits without a confirmation.
+    await click("QUIT");
     await screen("title");
     for (const [label, mode] of [
       ["Blue GP", "gp0"],
@@ -405,11 +467,38 @@ module.exports = async function verify({
         3,
       );
       await press("Escape");
-      await page.locator("#back").click();
+      await click("QUIT");
+      if (mode.startsWith("gp")) {
+        // Quitting a Grand Prix asks first, with NO preselected.
+        assert.deepEqual(
+          (({ screen, selection, caption, items }) => ({
+            screen,
+            selection,
+            caption,
+            items,
+          }))(await pauseState()),
+          {
+            screen: "quit",
+            selection: 1,
+            caption: "QUIT GRAND PRIX?",
+            items: ["YES", "NO"],
+          },
+        );
+        if (mode === "gp0") {
+          await press("Enter");
+          assert.equal((await pauseState()).screen, "top");
+          assert.equal((await pauseState()).selection, 3);
+          await press("Enter");
+          await press("Escape");
+          assert.equal((await pauseState()).screen, "top");
+          await click("QUIT");
+        }
+        await click("YES");
+      }
       await screen("title");
     }
     await title();
-    await click("OPTION");
+    await click("OPTIONS");
     await click("VIEW RECORDS");
     await click("TIME ATTACK'S");
     await screen("records");
@@ -534,7 +623,7 @@ module.exports = async function verify({
     }
     await page.screenshot({ path: "/tmp/hover-record-list-fixed.png" });
     await title();
-    await click("OPTION");
+    await click("OPTIONS");
     assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
       "VIEW RECORDS",
       "SOUND: ON",
