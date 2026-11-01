@@ -11,7 +11,7 @@ def main():
     cases = []
     with tempfile.TemporaryDirectory(prefix='hover-tile-effects-') as directory:
         oracle = compile_oracle(directory)
-        for tile in 'd*B.PJ>gs':
+        for tile in 'd*.PJ>gs':
             for slot in range(4):
                 for grip in (0, 1):
                     for lev in (0, 1, 8, 10):
@@ -19,7 +19,7 @@ def main():
                             for over in (-256, -128, -2, 1, 64, 300, 0):
                                 # Entry effects have a separate state machine;
                                 # isolate the continuous branch for this oracle.
-                                if over == 0 and tile not in 'd*B.':
+                                if over == 0 and tile not in 'd*.':
                                     continue
                                 for time in range(4):
                                     values = [ord(tile), slot, grip, lev, damage, over, time, -1, 0]

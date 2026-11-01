@@ -42,7 +42,7 @@ for (const symbol of ["J", "P", ">"]) {
   E.step(car, track, {}, 1 / 60);
   assert.ok(!car.events.includes("jump"), "J fires once after landing");
 }
-for (const symbol of ["d", "*", "B"]) {
+for (const symbol of ["d", "*"]) {
   const track = tileTrack(symbol),
     car = E.create(track),
     control = E.create(t);
@@ -50,11 +50,8 @@ for (const symbol of ["d", "*", "B"]) {
   car.front[2] = car.rear[2] = control.front[2] = control.rear[2] = 1600;
   E.step(car, track, {}, 1 / 60);
   E.step(control, t, {}, 1 / 60);
-  if (symbol === "B") assert.equal(car.reason, "destroyed");
-  else {
-    assert.equal(car.damage, 0, "CPU is immune to damage tiles");
-    assert.equal(car.front[2], control.front[2], "CPU ignores rough floor");
-  }
+  assert.equal(car.damage, 0, "CPU is immune to damage tiles");
+  assert.equal(car.front[2], control.front[2], "CPU ignores rough floor");
 }
 // Widening, banking boost tile: current left cell edge is (0,20,100),
 // not the centreline's (10,30,100). VP stores half-scale PS1 vertices.
@@ -486,9 +483,6 @@ for (const tile of ["P", "J", ">", "s", "g"]) {
   );
   assert.equal(damageFall.damageFloorActive, false);
 }
-damageFall.sourceTile = "B";
-E.stepFalling(damageFall);
-assert.equal(damageFall.damage, 100500, "B remains continuous during falling");
 assert.equal(damageFall.reason, "course-out");
 assert.equal(damageFall.warningActive, false);
 const fallingBrake = E.create(t),

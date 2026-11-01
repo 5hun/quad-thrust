@@ -953,7 +953,6 @@ namespace HoverEngine {
     car.damageLight = damaging && (time & 2) !== 0;
     car.damageSemi = damaging && (time & 1) === 0;
     if (damaging) car.damage = (car.damage + 100) | 0;
-    if (tile === "B" && car.grip) car.damage = (car.damage + 100000) | 0;
     return tile === "*" && car.grip && !car.cpuLevel;
   }
   // CAR_CTR.C car_resistance: products and sign tests are signed 32-bit.
