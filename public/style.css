@@ -2660,13 +2660,12 @@ button[aria-current="true"] .volume-meter i {
 #menu[data-presentation="records"] nav button {
   position: relative;
   display: grid;
-  grid-template-columns: 11% 1fr 26%;
+  grid-template-columns: 1fr 26%;
   align-items: center;
   width: 100%;
   height: 5.4cqh;
-  padding: 0 1cqw;
+  padding: 0 1cqw 0 3cqw;
   border: 0;
-  border-top: 1px solid rgb(255 255 255 / 12%);
   background: transparent;
   color: #f3faff;
   font: inherit;
@@ -2675,17 +2674,27 @@ button[aria-current="true"] .volume-meter i {
   text-align: left;
   touch-action: manipulation;
 }
+/* The selected course is marked like the main menu: cyan bar and text. */
+#menu[data-presentation="records"] nav button::before {
+  content: "";
+  position: absolute;
+  left: 0.55cqw;
+  top: 50%;
+  width: max(2px, 0.18cqw);
+  height: 3.3cqh;
+  background: #20e5ec;
+  opacity: 0;
+  transform: translateY(-50%);
+}
 #menu[data-presentation="records"] nav button[aria-current="true"] {
-  background: rgb(32 229 236 / 14%);
   color: #20e5ec;
+  text-shadow: 0 0 12px rgb(32 229 236 / 20%);
+}
+#menu[data-presentation="records"] nav button[aria-current="true"]::before {
+  opacity: 1;
 }
 #menu[data-presentation="records"] nav button:focus-visible {
   outline: none;
-}
-.records-course-label {
-  color: #c2c8ce;
-  font-size: 0.94cqw;
-  letter-spacing: 0.1em;
 }
 .records-course-best {
   font-variant-numeric: tabular-nums;
@@ -2713,6 +2722,7 @@ button[aria-current="true"] .volume-meter i {
   grid-template-columns: 9% 20% 1fr 33%;
   align-items: center;
   height: 6.2cqh;
+  border-top: 0;
 }
 .records-rows .gp-gap {
   display: flex;
@@ -2741,7 +2751,6 @@ button[aria-current="true"] .volume-meter i {
   justify-content: center;
   gap: 1.6cqh;
   height: 42cqh;
-  border-block: 1px solid rgb(255 255 255 / 12%);
 }
 .records-empty p:first-child {
   font-size: 1.75cqw;
@@ -2762,7 +2771,6 @@ button[aria-current="true"] .volume-meter i {
     letter-spacing: 0.12em;
   }
   .records-cup,
-  .records-course-label,
   .records-empty p:last-child {
     font-size: 1.8cqw;
   }

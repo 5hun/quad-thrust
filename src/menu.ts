@@ -248,7 +248,7 @@ export class OriginalMenu {
         this.buttons.append(heading);
         for (let i = c * 3; i < c * 3 + 3; i++) {
           const b = this.button(
-            `${this.courseLabel(i)} ${HOVER_TRACKS[i].name}`,
+            HOVER_TRACKS[i].name,
             () => {
               if (i !== this.selected) this.hooks.sound("move");
               this.selected = i;
@@ -256,7 +256,7 @@ export class OriginalMenu {
             },
             i,
           );
-          b.innerHTML = `<span class="records-course-label">${this.courseLabel(i)}</span><span class="records-course-name">${esc(HOVER_TRACKS[i].name.toUpperCase())}</span><span class="records-course-best"></span>`;
+          b.innerHTML = `<span class="records-course-name">${esc(HOVER_TRACKS[i].name.toUpperCase())}</span><span class="records-course-best"></span>`;
         }
       });
     }
@@ -521,9 +521,6 @@ export class OriginalMenu {
     const n = Math.floor((Math.round(t * 60) * 100) / 60);
     return `${String(Math.floor(n / 6000)).padStart(2, "0")}'${String(Math.floor(n / 100) % 60).padStart(2, "0")}"${String(n % 100).padStart(2, "0")}`;
   }
-  courseLabel(i: number) {
-    return `${Math.floor(i / 3) + 1}-${(i % 3) + 1}`;
-  }
   updateMachineInfo() {
     const type = +field("machine").value;
     if (this.displayedMachine === type) return;
@@ -665,10 +662,7 @@ export class OriginalMenu {
     this.buttons
       .querySelectorAll<HTMLElement>(".records-course-best")
       .forEach((best, i) => (best.textContent = this.time(bests[i])));
-    const mode = RECORD_CLASSES.find(([kind]) => kind === this.recordClass)![1];
-    const header =
-      `<p class="gp-label">${this.courseLabel(course)}  ·  ${CUPS[Math.floor(course / 3)].toUpperCase()}  ·  ${mode}</p>` +
-      `<h3 class="records-title">${esc(HOVER_TRACKS[course].name.toUpperCase())}</h3>`;
+    const header = `<h3 class="records-title">${esc(HOVER_TRACKS[course].name.toUpperCase())}</h3>`;
     if (!columns[0].length && !columns[1].length) {
       this.recordsDetail.innerHTML =
         header +
