@@ -361,23 +361,35 @@ export class HoverRenderer {
         geometry.setAttribute(key, new THREE.Float32BufferAttribute(a, size));
       }
       const [textureName, semi] = material.split("|");
-      const fx =
-        name === "OTHER" ||
-        (!name.startsWith("ALP_") && (index === 2 || index === 3));
+      const jet = !name.startsWith("ALP_") && (index === 2 || index === 3);
+      const fx = name === "OTHER" || jet;
+      // The source draws jets opaque on alternate ticks, so they read as half
+      // see-through. Drawing them every tick keeps that look with a 50% blend.
+      const half = translucent || !!semi || jet;
       const mat = new THREE.MeshLambertMaterial({
         map: textureName === "solid" ? null : this.texture(textureName),
         vertexColors: true,
         // Rear/side jet TMD packets have flag=0 (single-sided). Their nested
         // shells expose three blue colours; back faces would hide the core.
-        side: fx && name !== "OTHER" ? THREE.FrontSide : THREE.DoubleSide,
-        transparent: translucent || !!semi,
-        opacity: translucent || semi ? 0.5 : 1,
-        depthWrite: !translucent && !semi,
+        side: jet ? THREE.FrontSide : THREE.DoubleSide,
+        transparent: half,
+        opacity: half ? 0.5 : 1,
+        depthWrite: !half,
         alphaTest: 0.01,
       });
       mat.userData.sourceCameraLight = { value: fx ? 1 : 0 };
       this.sourceMaterial(mat);
       group.add(new THREE.Mesh(geometry, mat));
+      if (jet) {
+        // Depth-only pass, so only the nearest shell blends over the scene
+        // instead of every nested shell darkening the one behind it.
+        const depth = mat.clone();
+        depth.transparent = false;
+        depth.opacity = 1;
+        depth.depthWrite = true;
+        depth.colorWrite = false;
+        group.add(new THREE.Mesh(geometry, depth));
+      }
     }
     return group;
   }
