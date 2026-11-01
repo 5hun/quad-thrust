@@ -119,12 +119,8 @@ export class HoverRenderer {
   finishCamera = false;
   // COURCE.C DQA * H * 65536 / 4096^2, with PS1 units / 100.
   sourceDepth = { value: 96 };
-  result: {
-    text: "FINISH" | "1ST" | "2ND" | "3RD" | "4TH";
-    frame: number;
-  } | null = null;
-  gpRecords = false;
-  gpRecordBackground: THREE.CanvasTexture;
+  // Next race intro: 0..1 through the flight down to the starting grid.
+  flyover: number | null = null;
   nameEntry: {
     indices: number[];
     selected: number;
@@ -133,10 +129,6 @@ export class HoverRenderer {
   } | null = null;
   nameLetters = new THREE.Group();
   nameKey = "";
-  continuePrompt: { choice: number; rotation: number } | null = null;
-  continueLetters = new THREE.Group();
-  resultText = "";
-  resultLetters = new THREE.Group();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -172,21 +164,8 @@ export class HoverRenderer {
     this.loader.manager.onError = (u) => this.errors.push(u);
     this.canvas = canvas;
     this.countScene = new THREE.Scene();
-    // GAME.C make_back_tmd2: upper vertices blue 127, lower vertices red 127.
-    const recordCanvas = document.createElement("canvas");
-    recordCanvas.width = 320;
-    recordCanvas.height = 240;
-    const recordContext = recordCanvas.getContext("2d")!,
-      recordGradient = recordContext.createLinearGradient(0, 0, 0, 240);
-    recordGradient.addColorStop(0, "#00007f");
-    recordGradient.addColorStop(1, "#7f0000");
-    recordContext.fillStyle = recordGradient;
-    recordContext.fillRect(0, 0, 320, 240);
-    this.gpRecordBackground = new THREE.CanvasTexture(recordCanvas);
-    this.gpRecordBackground.colorSpace = THREE.SRGBColorSpace;
     this.countCamera = new THREE.PerspectiveCamera(42, 4 / 3, 0.15, 100);
     this.countScene.add(new THREE.AmbientLight(0xffffff, 2));
-    this.countScene.add(this.resultLetters);
     this.skyGroup = new THREE.Group();
     this.scene.add(this.skyGroup);
   }
@@ -690,6 +669,34 @@ export class HoverRenderer {
     this.wasReplay = this.replayView;
     this.yaw = this.follow.yaw;
   }
+  // Drop from high behind the grid to where the countdown camera starts,
+  // following the course back up to the cars.
+  flyoverCamera(car: Pose, progress: number) {
+    if (!this.track) return;
+    const t = 1 - (1 - progress) ** 3,
+      start =
+        this.track.nodes[E.nearest(this.track, car.x, car.z).index].distance,
+      along = start - 1200 + t * (1200 - 335),
+      eye = E.at(this.track, along),
+      target = E.at(this.track, along + 260 - t * 120);
+    // Ends near the countdown camera: 335 behind, raised by its 7° pitch.
+    const height = 220 - t * 170,
+      side = (1 - t) * 160;
+    const dx = target.x - eye.x,
+      dz = target.z - eye.z,
+      length = Math.hypot(dx, dz) || 1;
+    this.camera.position.set(
+      eye.x - (dz / length) * side,
+      eye.y + height,
+      -(eye.z + (dx / length) * side),
+    );
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(
+      target.x + (car.x - target.x) * t,
+      target.y + (car.y - target.y) * t,
+      -(target.z + (car.z - target.z) * t),
+    );
+  }
   draw(
     track: Track,
     car: Pose,
@@ -760,6 +767,7 @@ export class HoverRenderer {
       this.camera.up.copy(up);
       this.camera.lookAt(this.camera.position.clone().add(forward));
     }
+    if (this.flyover !== null) this.flyoverCamera(car, this.flyover);
     if (this.replayView && this.replayDirector.anchor && !this.holdCamera) {
       const anchor = this.replayDirector.anchor;
       this.camera.position.set(anchor.x, anchor.y, -anchor.z);
@@ -773,79 +781,7 @@ export class HoverRenderer {
     this.renderer.clearDepth();
     this.renderer.render(this.scene, this.camera);
     this.renderer.autoClear = true;
-    this.countScene.background = this.gpRecords
-      ? this.gpRecordBackground
-      : null;
     this.nameLetters.visible = !!this.nameEntry;
-    this.continueLetters.visible = !!this.continuePrompt;
-    this.resultLetters.visible = !!this.result;
-    this.frames++;
-    if (this.result) {
-      const { text, frame } = this.result;
-      if (this.resultText !== text) {
-        this.clear(this.resultLetters);
-        this.resultText = text;
-        for (const ch of text) {
-          const first = ch <= "O" ? "A" : "P";
-          this.resultLetters.add(
-            this.modelObject(
-              /[0-9]/.test(ch)
-                ? "ALP_0_9"
-                : first === "A"
-                  ? "ALP_A_O"
-                  : "ALP_P_O",
-              /[0-9]/.test(ch) ? +ch : ch.charCodeAt(0) - first.charCodeAt(0),
-            ),
-          );
-        }
-      }
-      this.resultLetters.visible = true;
-      // Goal text approaches its final position one character every 8 ticks.
-      this.resultLetters.children.forEach((m, i) => {
-        const age = frame - (i + 1) * 8;
-        const steps = Math.min(5, Math.max(0, age + 1));
-        m.visible = age >= 0;
-        m.position.set(
-          (i - (text.length - 1) / 2) * 6,
-          text === "FINISH" ? 0 : 6,
-          -50 + steps * 2,
-        );
-        m.rotation.y = (-steps * 819 * Math.PI * 2) / 4096;
-      });
-      this.renderer.autoClear = false;
-      this.renderer.clearDepth();
-      this.renderer.render(this.countScene, this.countCamera);
-      this.renderer.autoClear = true;
-    } else this.resultLetters.visible = false;
-    this.continueLetters.visible = !!this.continuePrompt;
-    if (this.continuePrompt) {
-      if (!this.continueLetters.children.length) {
-        [..."CONTINUE?YESNO"].forEach((ch, i) => {
-          const first = ch <= "O" ? "A" : "P";
-          const letter = this.modelObject(
-            ch === "?" ? "ALP_0_9" : first === "A" ? "ALP_A_O" : "ALP_P_O",
-            ch === "?" ? 12 : ch.charCodeAt(0) - first.charCodeAt(0),
-          );
-          letter.position.set(
-            i < 9 ? -24 + i * 6 : i < 12 ? -6 + (i - 9) * 6 : -3 + (i - 12) * 6,
-            i < 9 ? 10 : -10,
-            i < 9 ? -60 : -50,
-          );
-          this.continueLetters.add(letter);
-        });
-        this.countScene.add(this.continueLetters);
-      }
-      this.resultLetters.visible = false;
-      this.continueLetters.children.forEach((letter, i) => {
-        letter.visible =
-          i < 9 || (this.continuePrompt!.choice === 0 ? i < 12 : i >= 12);
-        letter.rotation.y = i < 9 ? 0 : this.continuePrompt!.rotation;
-      });
-      this.renderer.autoClear = false;
-      this.renderer.clearDepth();
-      this.renderer.render(this.countScene, this.countCamera);
-      this.renderer.autoClear = true;
-    }
     if (this.nameEntry) {
       const entry = this.nameEntry,
         key = entry.indices.join(",");
@@ -862,8 +798,6 @@ export class HoverRenderer {
         );
         if (!this.nameLetters.parent) this.countScene.add(this.nameLetters);
       }
-      this.resultLetters.visible = false;
-      this.continueLetters.visible = false;
       this.nameLetters.visible = true;
       const sine = (rate: number, offset = 0) =>
         Math.sin(((entry.frame * rate + offset) * Math.PI * 2) / 720);

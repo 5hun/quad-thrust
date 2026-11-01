@@ -1,5 +1,5 @@
 import type {} from "./types";
-/* global window, requestAnimationFrame */
+/* global window */
 const assert: typeof import("node:assert/strict") = require("node:assert/strict");
 module.exports = async function verify({
   chromium,
@@ -80,9 +80,17 @@ module.exports = async function verify({
       (await page.evaluate(() => window.hoverDiagnostics().height)) < falling,
     );
     await wait("finished");
+    // A retirement goes straight to the result, with RETRY selected.
+    await page.waitForFunction(
+      () => window.hoverDiagnostics().gpScreen === "result",
+    );
     assert.equal(
-      (await page.evaluate(() => window.hoverDiagnostics())).continueChoice,
+      (await page.evaluate(() => window.hoverDiagnostics())).gpSelection,
       0,
+    );
+    assert.match(
+      await page.locator("#gp-panel").innerText(),
+      /COURSE OUT[\s\S]*RETRY[\s\S]*QUIT GRAND PRIX/,
     );
     assert.equal(await page.locator("#result").isVisible(), false);
     await key("Enter");
@@ -109,38 +117,67 @@ module.exports = async function verify({
       "initial burst plus 29 retriggers at eight-tick intervals",
     );
     assert.ok(bursts.every((b) => b.note === 30 && b.volume === 90));
-    await key("ArrowRight");
+    // QUIT GRAND PRIX asks first; NO is selected and ESC goes back.
     await page.waitForFunction(
-      () => window.hoverDiagnostics().continueChoice === 1,
+      () => window.hoverDiagnostics().gpScreen === "result",
     );
-    await page.waitForTimeout(180);
+    await key("ArrowDown");
     await key("Enter");
+    await page.waitForFunction(
+      () => window.hoverDiagnostics().gpScreen === "quit",
+    );
+    assert.equal(
+      (await page.evaluate(() => window.hoverDiagnostics())).gpSelection,
+      1,
+    );
+    await key("Escape");
+    await page.waitForFunction(
+      () => window.hoverDiagnostics().gpScreen === "result",
+    );
+    await key("ArrowDown");
+    await key("Enter");
+    await key("ArrowUp");
+    await key("Enter");
+    // No finished race in this cup, so there are no records to show.
     await wait("menu");
-    // GP defeat uses the three-second rank presentation before CONTINUE?.
+    // GP defeat shows the goal banner for three seconds before the result.
     for (const code of ["Enter", "Enter", "Enter"]) await key(code);
     await wait("running");
     await force("finish");
     await wait("finished");
-    assert.equal(
-      (await page.evaluate(() => window.hoverDiagnostics())).continueChoice,
-      null,
-    );
+    const goal = await page.evaluate(() => window.hoverDiagnostics());
+    assert.equal(goal.goalBanner, true);
+    assert.equal(goal.gpScreen, null);
+    assert.match(await page.locator("#goal-banner").innerText(), /FINISH/);
     assert.equal(await page.locator("#result").isVisible(), false);
     await page.waitForFunction(
-      () => window.hoverDiagnostics().continueChoice === 0,
+      () => window.hoverDiagnostics().gpScreen === "result",
     );
-    await page.locator("#continue-toggle").click();
-    await page.waitForTimeout(320);
-    await page.locator("#continue-confirm").click();
+    assert.equal(
+      (await page.evaluate(() => window.hoverDiagnostics())).goalBanner,
+      false,
+    );
+    await page.screenshot({ path: "/tmp/hover-gp-result-defeat.png" });
+    // Pointer input: the menu rows and confirmation are buttons.
+    await page
+      .getByRole("button", { name: "QUIT GRAND PRIX", exact: true })
+      .click();
+    await page.getByRole("button", { name: "YES", exact: true }).click();
     await page.waitForFunction(
-      () => window.hoverDiagnostics().postrace === "name",
+      () => window.hoverDiagnostics().gpScreen === "name",
     );
-    for (let i = 0; i < 3; i++) await key("Enter");
+    // Letters are typed directly; ENTER on the last letter registers them.
+    for (const code of ["KeyN", "KeyK", "KeyA", "Enter"]) await key(code);
     await page.waitForFunction(
-      () => window.hoverDiagnostics().postrace === "lap",
+      () => window.hoverDiagnostics().gpScreen === "records",
     );
-    await page.waitForTimeout(50);
-    await key("KeyP");
+    const defeatRow = await page.evaluate(
+      () => window.HoverRecords.read("gp", 0, "lap")[0],
+    );
+    assert.equal(defeatRow.name, "NKA");
+    assert.equal(defeatRow.time, 10);
+    assert.match(await page.locator("#gp-panel").innerText(), /NKA\s*NEW/);
+    await key("Enter");
     await wait("menu");
     await page.reload();
     await page.waitForFunction(
@@ -169,7 +206,8 @@ module.exports = async function verify({
     const row = await page.evaluate(
       () => window.HoverRecords.read("time", 0, "lap")[0],
     );
-    assert.equal(row.name, "BAA");
+    // Starts from the name saved by the GP (NKA); the first letter turned to O.
+    assert.equal(row.name, "OKA");
     assert.equal(row.time, 10);
     await key("Enter");
     assert.equal(
@@ -185,7 +223,7 @@ module.exports = async function verify({
     await key("Escape");
     await wait("menu");
     await page.setViewportSize({ width: 1100, height: 900 });
-    // Complete a full GP: automatic rounds, source credits, one name for all courses.
+    // Complete a full GP: result, intro, cup clear, one name for all courses.
     await page.reload();
     await page.waitForFunction(
       () => window.hoverDiagnostics?.().state === "menu",
@@ -194,56 +232,65 @@ module.exports = async function verify({
     for (const code of ["Enter", "Enter", "Enter"]) await key(code);
     for (let round = 0; round < 3; round++) {
       await wait("running");
-      if (round === 2) {
-        await page.keyboard.down("Space");
-        await page.waitForTimeout(2000);
-        await page.keyboard.up("Space");
-      }
       await force("finish", true);
       await wait("finished");
-      if (round < 2)
-        await page.waitForFunction(
-          (round) =>
-            window.hoverDiagnostics().state === "countdown" &&
-            window.hoverDiagnostics().gpRound === round + 1,
-          round,
-        );
+      if (round === 2) break;
+      await page.waitForFunction(
+        () => window.hoverDiagnostics().gpScreen === "result",
+      );
+      const text = await page.locator("#gp-panel").innerText();
+      assert.match(text, /NEXT RACE/);
+      assert.match(text, new RegExp(`RACE ${round + 1} / 3`));
+      if (round === 0)
+        await page.screenshot({ path: "/tmp/hover-gp-result-win.png" });
+      // The result waits for input; the cars keep driving behind it.
+      await page.waitForTimeout(400);
+      assert.equal(
+        (await page.evaluate(() => window.hoverDiagnostics())).gpScreen,
+        "result",
+      );
+      await key("Enter");
+      await page.waitForFunction(
+        (round) =>
+          window.hoverDiagnostics().state === "intro" &&
+          window.hoverDiagnostics().gpRound === round + 1,
+        round,
+      );
+      assert.match(
+        await page.locator("#gp-panel").innerText(),
+        new RegExp(`RACE\\s*${round + 2}`),
+      );
+      // ENTER skips the flyover; otherwise it runs into the countdown.
+      if (round === 0) {
+        await page.waitForTimeout(600);
+        await page.screenshot({ path: "/tmp/hover-gp-intro.png" });
+        await key("Enter");
+      }
+      await wait("countdown");
+      assert.equal(
+        (await page.evaluate(() => window.hoverDiagnostics())).gpScreen,
+        null,
+      );
     }
     await page.waitForFunction(
-      () => window.hoverDiagnostics().postrace === "credits",
+      () => window.hoverDiagnostics().gpScreen === "clear",
     );
-    await page.waitForFunction(() =>
-      [1, 17, 33].includes(window.hoverDiagnostics().replayCameraMode!),
-    );
-    const motion = await page.evaluate(async () => {
-      const poses: string[] = [];
-      await new Promise<void>((resolve) => {
-        function sample() {
-          const pose = window.hoverDiagnostics().replayPose;
-          poses.push(
-            [pose!.x, pose!.y, pose!.z].map((n) => n.toFixed(6)).join(","),
-          );
-          if (poses.length >= 40) resolve();
-          else requestAnimationFrame(sample);
-        }
-        requestAnimationFrame(sample);
-      });
-      return new Set(poses).size;
-    });
-    assert.ok(motion >= 35, `Only ${motion}/40 credit frames moved`);
-    await page.waitForTimeout(600);
-    await page.screenshot({ path: "/tmp/hover-gp-credits.png" });
+    assert.match(await page.locator("#gp-panel").innerText(), /CLEAR/);
+    await page.screenshot({ path: "/tmp/hover-gp-clear.png" });
     await key("Enter");
     await page.waitForFunction(
-      () => window.hoverDiagnostics().postrace === "name",
+      () => window.hoverDiagnostics().gpScreen === "name",
     );
+    // The last saved name (from Time Attack) comes back; ENTER confirms each letter.
+    assert.deepEqual(await page.locator(".gp-letter").allInnerTexts(), [
+      "O",
+      "K",
+      "A",
+    ]);
+    await page.screenshot({ path: "/tmp/hover-gp-name.png" });
     for (let i = 0; i < 3; i++) await key("Enter");
-    assert.equal(
-      (await page.evaluate(() => window.hoverDiagnostics())).postrace,
-      "gap",
-    );
     await page.waitForFunction(
-      () => window.hoverDiagnostics().postrace === "lap",
+      () => window.hoverDiagnostics().gpScreen === "records",
     );
     await page.screenshot({ path: "/tmp/hover-gp-records.png" });
     for (let course = 0; course < 3; course++) {
@@ -251,21 +298,17 @@ module.exports = async function verify({
         (course) => window.HoverRecords.read("gp", course, "lap"),
         course,
       );
-      assert.ok(rows.some((r) => r.time === 10 && r.name === "BAA"));
-      await key("Escape");
-      assert.equal(
-        (await page.evaluate(() => window.hoverDiagnostics())).postrace,
-        "gap",
+      assert.ok(rows.some((r) => r.time === 10 && r.name === "OKA"));
+      assert.match(
+        await page.locator("#gp-panel .gp-title").innerText(),
+        new RegExp(
+          ["GULF CITY", "PENTA ROCK", "ICE GATE"][course].replace(" ", "\\s"),
+          "i",
+        ),
       );
-      await page.waitForFunction(
-        () => window.hoverDiagnostics().postrace === "total",
-      );
-      await key("Enter");
-      if (course < 2)
-        await page.waitForFunction(
-          () => window.hoverDiagnostics().postrace === "lap",
-        );
+      if (course < 2) await key("ArrowRight");
     }
+    await key("Enter");
     await wait("menu");
     assert.deepEqual(errors, []);
     assert.deepEqual(
@@ -273,7 +316,7 @@ module.exports = async function verify({
       [],
     );
     console.log(
-      "PASS: source pause restart; GP fall/destruction/defeat CONTINUE?, YES retry and NO exit, rank delay, touch controls, three-letter entry, named record persistence, mobile records, BESTLAP/TOTAL pages, all GP rounds/credits/batch records",
+      "PASS: source pause restart; GP fall/destruction/defeat results, RETRY and confirmed QUIT, goal banner delay, pointer controls, typed and confirmed names, named record persistence, mobile records, BESTLAP/TOTAL pages, all GP rounds with intros, cup clear and records",
     );
   } finally {
     await browser.close();

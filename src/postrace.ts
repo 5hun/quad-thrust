@@ -1,8 +1,5 @@
 // MENU_ETC.C enter_name and DRAW_SP.C best_draw / total_draw.
 import { OriginalMenu } from "./menu.js";
-import { STAFF } from "./staff.js";
-import { StaffText } from "./staff-text.js";
-import { GPRecordSequence } from "./gp-record-sequence.js";
 export interface GPRecord {
   course: number;
   best: number;
@@ -13,19 +10,12 @@ export const ENTRY_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ,.^_0123456789%*?&!";
 export class OriginalPostrace {
   panel = document.getElementById("postrace")!;
   canvas = document.getElementById("postrace-canvas") as HTMLCanvasElement;
-  phase: "name" | "gap" | "laps" | "lap" | "total" | "credits" | null = null;
+  phase: "name" | "laps" | "lap" | "total" | null = null;
   name = [0, 0, 0];
   cursor = 0;
   rotation = 0;
   frame = 0;
   category = "time";
-  batch: GPRecord[] = [];
-  batchIndex = 0;
-  gpSequence: GPRecordSequence | null = null;
-  creditMode = 0;
-  creditFrame = 0;
-  creditLine = 6;
-  afterCredits: () => void = () => {};
   course = 0;
   machine = 0;
   laps: number[] = [];
@@ -33,7 +23,6 @@ export class OriginalPostrace {
   saved = false;
   held = new Set<string>();
   portraits = new Image();
-  staffText = new StaffText();
   constructor(
     public font: OriginalMenu,
     public storage: Storage = localStorage,
@@ -46,7 +35,7 @@ export class OriginalPostrace {
     document.getElementById("postrace-confirm")!.onclick = () =>
       this.key("Enter");
     document.getElementById("postrace-exit")!.onclick = () =>
-      this.key(this.gpSequence ? "KeyP" : "Escape");
+      this.key("Escape");
     try {
       const saved = this.storage.getItem("hover-player-name");
       if (
@@ -64,9 +53,6 @@ export class OriginalPostrace {
     done: () => void,
   ) {
     Object.assign(this, {
-      batch: [],
-      gpSequence: null,
-      batchIndex: 0,
       category,
       course,
       machine,
@@ -86,46 +72,6 @@ export class OriginalPostrace {
     this.panel.hidden = false;
     if (!qualifies) this.save();
   }
-  beginGP(batch: GPRecord[], done: () => void) {
-    if (!batch.length) {
-      done();
-      return;
-    }
-    Object.assign(this, {
-      batch: batch.map((r) => ({ ...r })),
-      batchIndex: 0,
-      category: "gp",
-      course: batch[0].course,
-      machine: batch[0].machine,
-      done,
-      saved: false,
-      cursor: 0,
-      frame: 0,
-    });
-    const qualifies = batch.some((r) =>
-      ["lap", "total"].some((kind) => {
-        const rows = HoverRecords.read("gp", r.course, kind);
-        return (
-          rows.length < 6 || (kind === "lap" ? r.best : r.total) < rows[5].time
-        );
-      }),
-    );
-    this.gpSequence = new GPRecordSequence(batch.length, qualifies);
-    this.phase = this.gpSequence.page;
-    this.panel.hidden = false;
-  }
-  credits(done: () => void) {
-    Object.assign(this, {
-      phase: "credits",
-      gpSequence: null,
-      frame: 0,
-      creditMode: 0,
-      creditFrame: 0,
-      creditLine: 6,
-      afterCredits: done,
-    });
-    this.panel.hidden = false;
-  }
   get entry() {
     return this.phase === "name"
       ? {
@@ -142,21 +88,6 @@ export class OriginalPostrace {
     try {
       this.storage.setItem("hover-player-name", name);
     } catch {}
-    if (this.batch.length) {
-      for (const row of this.batch) {
-        HoverRecords.save("gp", row.course, "lap", row.best, row.machine, name);
-        HoverRecords.save(
-          "gp",
-          row.course,
-          "total",
-          row.total,
-          row.machine,
-          name,
-        );
-      }
-      this.saved = true;
-      return;
-    }
     HoverRecords.save(
       this.category,
       this.course,
@@ -178,17 +109,9 @@ export class OriginalPostrace {
   close() {
     this.panel.hidden = true;
     this.phase = null;
-    this.gpSequence = null;
   }
   key(code: string) {
     if (!this.phase) return;
-    if (this.phase === "credits") {
-      if (["Enter", "Escape", "KeyZ", "Space", "KeyP"].includes(code)) {
-        this.close();
-        this.afterCredits();
-      }
-      return;
-    }
     if (this.phase === "name") {
       if (this.rotation) return;
       if (["ArrowUp", "ArrowRight", "ArrowDown", "ArrowLeft"].includes(code)) {
@@ -200,37 +123,12 @@ export class OriginalPostrace {
       else if (["Enter", "KeyZ", "Space"].includes(code)) {
         this.font.hooks.sound("ok");
         if (++this.cursor === 3) {
-          if (this.gpSequence) this.gpSequence.finishName();
-          else this.save();
+          this.save();
           this.cursor = 0;
-          this.phase = this.gpSequence ? "gap" : "laps";
+          this.phase = "laps";
           this.frame = 0;
         }
       }
-    } else if (this.gpSequence) {
-      if (code === "KeyP") this.gpSequence.start();
-      else if (
-        [
-          "ArrowUp",
-          "ArrowDown",
-          "ArrowLeft",
-          "ArrowRight",
-          "Enter",
-          "KeyZ",
-          "Space",
-          "Escape",
-          "KeyX",
-          "KeyQ",
-          "KeyE",
-          "KeyA",
-          "KeyD",
-          "KeyS",
-          "ShiftLeft",
-          "ShiftRight",
-        ].includes(code)
-      )
-        this.gpSequence.skipPage();
-      this.syncGP();
     } else if (["Escape", "KeyX"].includes(code)) {
       this.close();
       this.done();
@@ -242,19 +140,6 @@ export class OriginalPostrace {
       this.phase === "laps" ? "lap" : this.phase === "lap" ? "total" : "laps";
     this.frame = 0;
   }
-  syncGP() {
-    const sequence = this.gpSequence;
-    if (!sequence) return;
-    if (sequence.frame >= 60 && !this.saved) this.save();
-    if (sequence.done) {
-      this.close();
-      this.done();
-      return;
-    }
-    this.batchIndex = sequence.course;
-    this.course = this.batch[sequence.course].course;
-    this.phase = sequence.page;
-  }
   tick(gamepad = true) {
     if (!this.phase) return;
     this.frame++;
@@ -264,38 +149,7 @@ export class OriginalPostrace {
         this.name[this.cursor] =
           (this.name[this.cursor] + Math.sign(this.rotation) + 45) % 45;
     }
-    if (this.gpSequence) {
-      this.gpSequence.tick();
-      this.syncGP();
-    } else if (this.phase === "credits") {
-      this.creditFrame++;
-      const mode = this.creditMode;
-      const limit =
-        mode < 6
-          ? mode % 2
-            ? 180
-            : 232
-          : mode < 22
-            ? mode % 2
-              ? 160
-              : 148
-            : Infinity;
-      if (this.creditFrame > limit) {
-        if (mode >= 6 && mode < 22 && mode % 2 === 0)
-          this.creditLine += [2, 1, 1, 2, 2, 4, 7, 2][(mode - 6) / 2] + 1;
-        this.creditMode++;
-        this.creditFrame = 0;
-      }
-      if (this.frame >= 4080) {
-        this.close();
-        this.afterCredits();
-        return;
-      }
-    } else if (
-      this.phase !== "name" &&
-      this.frame >= (this.batch.length ? 420 : 600)
-    )
-      this.advance();
+    if (this.phase !== "name" && this.frame >= 600) this.advance();
     if (!gamepad) return;
     const pad = Array.from(navigator.getGamepads?.() || []).find(Boolean);
     const keys = new Set<string>();
@@ -326,63 +180,12 @@ export class OriginalPostrace {
   draw() {
     const g = this.canvas.getContext("2d")!;
     g.clearRect(0, 0, 320, 240);
-    // Full black credit cards also cover the added sides of a wide race view.
-    this.panel.dataset.backdrop =
-      this.phase === "credits" &&
-      this.creditMode >= 6 &&
-      this.creditMode < 22 &&
-      this.creditMode % 2 === 0
-        ? "black"
-        : "transparent";
     if (!this.phase) return;
     const old = this.font.g;
     this.font.g = g;
     const text = (s: string, x: number, y: number, size = 8) =>
       this.font.text(s, x, y, size);
-    if (this.batch.length && ["gap", "lap", "total"].includes(this.phase)) {
-      // GAME.C make_back_tmd2: blue upper corners and red lower corners.
-      const gradient = g.createLinearGradient(0, 0, 0, 240);
-      gradient.addColorStop(0, "#00007f");
-      gradient.addColorStop(1, "#7f0000");
-      g.fillStyle = gradient;
-      g.fillRect(0, 0, 320, 240);
-    }
-    if (this.phase === "credits") {
-      const mode = this.creditMode,
-        t = this.creditFrame;
-      const jp = (line: number, x: number, y: number) =>
-        this.staffText.draw(g, STAFF[line] || "", x, y);
-      if (mode < 6 && mode % 2 === 0) {
-        const y = t < 16 ? 16 - t : t > 216 ? t - 216 : 0;
-        g.fillStyle = "black";
-        g.fillRect(0, -y * 2, 320, 32);
-        g.fillRect(0, 208 + y * 2, 320, 32);
-        if (t > 32 && t < 200) {
-          const x = t < 56 ? 56 - t : t > 176 ? t - 176 : 0;
-          jp(mode, 32 + x * 10, 8);
-          jp(mode + 1, 32 - x * 10, 216);
-        }
-      } else if (mode >= 6 && mode < 22 && mode % 2 === 0) {
-        g.fillStyle = "black";
-        g.fillRect(0, 0, 320, 240);
-        const count = [2, 1, 1, 2, 2, 4, 7, 2][(mode - 6) / 2],
-          y = (240 - (count + 1) * 24) / 2;
-        const x = t < 24 ? t - 24 : t > 124 ? t - 124 : 0;
-        jp(this.creditLine, 32 - x * 10, y);
-        for (let i = 0; i < count; i++)
-          jp(
-            this.creditLine + 1 + i,
-            32 + x * 10 * (i % 2 ? -1 : 1),
-            y + i * 24 + 32,
-          );
-      } else if (mode >= 22) {
-        jp(this.creditLine + 1, 32, 96);
-        jp(this.creditLine + 2, 32, 128);
-      }
-      this.panel.setAttribute("aria-label", "STAFF CREDITS");
-    } else if (this.phase === "gap") {
-      this.panel.setAttribute("aria-label", "GP RECORDS TRANSITION");
-    } else if (this.phase === "name") {
+    if (this.phase === "name") {
       this.panel.setAttribute(
         "aria-label",
         `NAME ENTRY ${this.name.map((i) => ENTRY_CHARACTERS[i]).join("")} ${this.cursor + 1}/3`,
@@ -397,11 +200,7 @@ export class OriginalPostrace {
       text("EXIT", 240, 208, 16);
     } else {
       text(
-        this.batch.length
-          ? `${Math.floor(this.course / 3) + 1}-${(this.course % 3) + 1} ${this.phase === "lap" ? "BESTLAP" : "TOTAL"}`
-          : this.phase === "lap"
-            ? "BESTLAP RECORDS"
-            : "TOTAL RECORDS",
+        this.phase === "lap" ? "BESTLAP RECORDS" : "TOTAL RECORDS",
         8,
         16,
         16,

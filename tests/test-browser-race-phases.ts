@@ -163,7 +163,7 @@ module.exports = async function verify({
       after.opponents.every((b, i) => b.ticks > before.opponents[i].ticks),
     );
     await page.waitForFunction(
-      () => window.hoverDiagnostics().continueChoice === 0,
+      () => window.hoverDiagnostics().gpScreen === "result",
     );
     const continued = await snapshot();
     await page.waitForTimeout(250);
@@ -181,7 +181,16 @@ module.exports = async function verify({
       false,
       "winning GP retains normal chase camera",
     );
-    await page.waitForFunction(() => window.hoverDiagnostics().gpRound === 1);
+    // NEXT RACE on the result screen flies down to the next grid.
+    await page.waitForFunction(
+      () => window.hoverDiagnostics().gpScreen === "result",
+    );
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(
+      () =>
+        window.hoverDiagnostics().gpRound === 1 &&
+        window.hoverDiagnostics().state === "intro",
+    );
     for (const mode of ["time", "practice"]) {
       await start(mode);
       await wait("running");
@@ -250,7 +259,7 @@ module.exports = async function verify({
     }
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: countdown input/exhaust; live goal autopilot/cameras; fixed records/rank; GP progression and CONTINUE; time/practice entry; opponents during destruction/fall",
+      "PASS: countdown input/exhaust; live goal autopilot/cameras; fixed records/rank; GP result, NEXT RACE intro and defeat result; time/practice entry; opponents during destruction/fall",
     );
   } finally {
     await browser.close();
