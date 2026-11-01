@@ -37,11 +37,14 @@ module.exports = async function verify({
       0,
     );
     await click("OPTIONS");
-    assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
-      "VIEW RECORDS",
-      "SOUND: ON",
-      "FULLSCREEN: OFF",
-    ]);
+    assert.deepEqual(
+      await page
+        .locator("#menu nav button")
+        .evaluateAll((buttons) =>
+          buttons.map((b) => b.getAttribute("aria-label")),
+        ),
+      ["VIEW RECORDS", "SOUND: ON", "VOLUME: 10", "FULLSCREEN: OFF"],
+    );
     // GAME LEVEL is gone; CPU difficulty is always NORMAL.
     assert.equal((await snap()).cpuDifficulty, 0);
     await page.evaluate(() => {

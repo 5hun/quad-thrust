@@ -5,6 +5,7 @@ function defaults() {
   const values = new Map<string, string>([
     ["hover-unlocks", "0"],
     ["hover-player-name", "AAA"],
+    ["hover-volume", "10"],
   ]);
   for (const category of ["gp", "time"])
     for (let course = 0; course < 9; course++) {
@@ -18,6 +19,7 @@ function defaults() {
 function validValue(key: string, value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (key === "hover-unlocks") return /^[0-7]$/.test(value);
+  if (key === "hover-volume") return /^(10|[0-9])$/.test(value);
   if (key === "hover-player-name") return /^[A-Z,.^_0-9%*?&!]{3}$/.test(value);
   if (/^hover-v3-record-(gp|time)-[0-8]$/.test(key))
     return Number.isFinite(Number(value)) && Number(value) > 0;

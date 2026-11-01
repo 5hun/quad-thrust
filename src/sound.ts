@@ -56,6 +56,8 @@ function createOutput(c: AudioContext): Output {
 export class OriginalSound {
   context: AudioContext | null;
   enabled: boolean;
+  // OPTIONS volume, 0..1, applied on top of the fixed mix level.
+  volume = 1;
   buffers: Map<string, AudioBuffer>;
   loops: {
     name: string;
@@ -100,8 +102,7 @@ export class OriginalSound {
   async enable(value: boolean) {
     this.enabled = value;
     if (!value) {
-      if (this.master) this.master.gain.value = 0;
-      if (this.menu) this.menu.master.gain.value = 0;
+      this.applyVolume();
       return;
     }
     if (!this.context) {
@@ -158,11 +159,18 @@ export class OriginalSound {
       this.menu!.context.resume(),
     ]);
     await this.ready;
-    this.master.gain.value = this.menu!.master.gain.value = this.enabled
-      ? 0.35
-      : 0;
+    this.applyVolume();
     if (this.pendingCourse != null && !this.song)
       this.playCourse(this.pendingCourse, this.musicLoop);
+  }
+  setVolume(value: number) {
+    this.volume = Math.max(0, Math.min(1, value));
+    this.applyVolume();
+  }
+  applyVolume() {
+    const level = this.enabled ? 0.35 * this.volume : 0;
+    if (this.master) this.master.gain.value = level;
+    if (this.menu) this.menu.master.gain.value = level;
   }
   envelope(
     t: { adsr1?: number; adsr2?: number },
@@ -472,6 +480,7 @@ export class OriginalSound {
       musicLoop: this.musicLoop,
       musicVoices: this.voices.size,
       audioBuffers: this.buffers.size,
+      volume: this.volume,
     };
   }
 }

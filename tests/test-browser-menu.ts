@@ -78,24 +78,28 @@ module.exports = async function verify({
       await page.locator("#browser-settings, input[type=file]").count(),
       0,
     );
-    assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
-      "GRANDPRIX",
-      "TIME ATTACK",
-      "OPTIONS",
-    ]);
+    assert.deepEqual(
+      await page
+        .locator("#menu nav button")
+        .evaluateAll((buttons) =>
+          buttons.map((b) => b.getAttribute("aria-label")),
+        ),
+      ["GRANDPRIX", "TIME ATTACK", "OPTIONS"],
+    );
     const titleMusic = await page.evaluate(
       () => window.hoverDiagnostics().music,
     );
     await press("ArrowDown");
     await press("Enter");
     await screen("car");
-    assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
-      "LUSTER",
-      "EXCEL",
-      "BETA",
-      "JUSTER",
-      "ALPHA",
-    ]);
+    assert.deepEqual(
+      await page
+        .locator("#menu nav button")
+        .evaluateAll((buttons) =>
+          buttons.map((b) => b.getAttribute("aria-label")),
+        ),
+      ["LUSTER", "EXCEL", "BETA", "JUSTER", "ALPHA"],
+    );
     assert.equal(await page.locator("#mode").inputValue(), "time");
     await click("BETA");
     assert.equal(await page.locator("#machine").inputValue(), "2");
@@ -391,7 +395,7 @@ module.exports = async function verify({
             .textContent,
           items: Array.from(
             document.querySelectorAll("#pause-panel nav button"),
-            (b) => b.textContent,
+            (b) => b.getAttribute("aria-label"),
           ),
           hud: document.getElementById("hud")!.hidden,
         };
@@ -414,7 +418,7 @@ module.exports = async function verify({
       {
         screen: "options",
         caption: "OPTIONS",
-        items: ["SOUND: ON", "FULLSCREEN: OFF"],
+        items: ["SOUND: ON", "VOLUME: 10", "FULLSCREEN: OFF"],
       },
     );
     // AudioContext resume() settles asynchronously.
@@ -425,6 +429,7 @@ module.exports = async function verify({
     await press("Enter");
     assert.deepEqual((await pauseState()).items, [
       "SOUND: OFF",
+      "VOLUME: 10",
       "FULLSCREEN: OFF",
     ]);
     await press("Enter");
@@ -432,6 +437,13 @@ module.exports = async function verify({
       await page.evaluate(() => window.hoverDiagnostics().audioState),
       "suspended",
     );
+    await press("ArrowDown");
+    await press("ArrowLeft");
+    assert.equal((await pauseState()).items[1], "VOLUME: 9");
+    await press("ArrowRight");
+    assert.equal((await pauseState()).items[1], "VOLUME: 10");
+    assert.equal((await pauseState()).screen, "options");
+    await press("ArrowUp");
     await press("Escape");
     assert.equal((await pauseState()).screen, "top");
     assert.equal((await pauseState()).selection, 2);
@@ -624,11 +636,14 @@ module.exports = async function verify({
     await page.screenshot({ path: "/tmp/hover-record-list-fixed.png" });
     await title();
     await click("OPTIONS");
-    assert.deepEqual(await page.locator("#menu nav button").allTextContents(), [
-      "VIEW RECORDS",
-      "SOUND: ON",
-      "FULLSCREEN: OFF",
-    ]);
+    assert.deepEqual(
+      await page
+        .locator("#menu nav button")
+        .evaluateAll((buttons) =>
+          buttons.map((b) => b.getAttribute("aria-label")),
+        ),
+      ["VIEW RECORDS", "SOUND: ON", "VOLUME: 10", "FULLSCREEN: OFF"],
+    );
     await click("SOUND: ON");
     assert.equal(
       await page
@@ -643,6 +658,43 @@ module.exports = async function verify({
         .count(),
       1,
     );
+    // VOLUME: left/right step the level on its row, clamped to 0..10;
+    // the arrows step it by pointer and Enter cycles through the levels.
+    const volume = () =>
+      page.evaluate(() => ({
+        label: document
+          .querySelector("#menu nav button.volume-option")!
+          .getAttribute("aria-label"),
+        lit: document.querySelectorAll("#menu .volume-meter i[data-on]").length,
+        gain: window.hoverDiagnostics().volume,
+      }));
+    await press("ArrowDown");
+    await press("ArrowLeft");
+    await press("ArrowLeft");
+    assert.deepEqual(await volume(), { label: "VOLUME: 8", lit: 8, gain: 0.8 });
+    await press("ArrowRight");
+    await press("ArrowRight");
+    await press("ArrowRight");
+    assert.deepEqual(await volume(), {
+      label: "VOLUME: 10",
+      lit: 10,
+      gain: 1,
+    });
+    await page.locator("#menu .volume-arrow").first().click();
+    assert.equal((await volume()).label, "VOLUME: 9");
+    await press("Enter");
+    await press("Enter");
+    assert.equal((await volume()).label, "VOLUME: 0");
+    await click("VOLUME: 0");
+    assert.equal((await volume()).label, "VOLUME: 1");
+    // The level survives a reload.
+    await page.reload();
+    await enterTitle();
+    await click("OPTIONS");
+    assert.equal((await volume()).label, "VOLUME: 1");
+    for (let i = 0; i < 9; i++)
+      await page.locator("#menu .volume-arrow").last().click();
+    assert.equal((await volume()).label, "VOLUME: 10");
     await press("Escape");
     await screen("title");
     await press("ArrowUp");

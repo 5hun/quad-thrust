@@ -36,6 +36,7 @@ import { OriginalMenu } from "./menu.js";
 import { PauseMenu } from "./pause-menu.js";
 import { ReplayMemory } from "./replay-memory.js";
 import { SaveStore } from "./save-data.js";
+import { VOLUME_STEPS } from "./volume.js";
 import { ReplayRecorder, InputReplay, GhostReplay } from "./input-replay.js";
 import { OriginalPostrace, type GPRecord } from "./postrace.js";
 const originalSound = new OriginalSound();
@@ -49,6 +50,7 @@ const session = new SaveStore({
   setItem: (key, value) => localStorage.setItem(key, value),
 });
 R.useStorage(session);
+originalSound.setVolume(+session.getItem("hover-volume")! / VOLUME_STEPS);
 B.useStorage(session);
 
 const raceHUD = new RaceHUD($("hud"));
@@ -251,6 +253,13 @@ const originalMenu = new OriginalMenu({
     sound = !sound;
     initAudio();
   },
+  volume() {
+    return Math.round(originalSound.volume * VOLUME_STEPS);
+  },
+  setVolume(level) {
+    originalSound.setVolume(level / VOLUME_STEPS);
+    session.setItem("hover-volume", String(level));
+  },
   sound(kind) {
     initAudio();
     originalSound.ready?.then(() =>
@@ -279,6 +288,8 @@ const pauseMenu = new PauseMenu({
   toggleFullscreen,
   soundEnabled: originalMenu.hooks.soundEnabled,
   toggleSound: originalMenu.hooks.toggleSound,
+  volume: originalMenu.hooks.volume,
+  setVolume: originalMenu.hooks.setVolume,
   sound: originalMenu.hooks.sound,
 });
 const postrace = new OriginalPostrace(originalMenu, session);

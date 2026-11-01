@@ -148,7 +148,7 @@ module.exports = async function verify({
     }
     await click("FULLSCREEN: ON");
     await fullscreen(false);
-    assert.equal((await snapshot()).menuSelection, 2);
+    assert.equal((await snapshot()).menuSelection, 3);
     await enter();
     await page.keyboard.press("Escape");
     await fullscreen(false);
@@ -229,8 +229,12 @@ module.exports = async function verify({
       .getByRole("button", { name: "OPTIONS", exact: true })
       .click();
     assert.deepEqual(
-      await unsupported.locator("#menu nav button").allTextContents(),
-      ["VIEW RECORDS", "SOUND: ON"],
+      await unsupported
+        .locator("#menu nav button")
+        .evaluateAll((buttons) =>
+          buttons.map((b) => b.getAttribute("aria-label")),
+        ),
+      ["VIEW RECORDS", "SOUND: ON", "VOLUME: 10"],
     );
     await unsupported.close();
     assert.deepEqual(errors, []);

@@ -964,6 +964,43 @@ main > details {
   button[aria-current="true"]::before {
   opacity: 1;
 }
+.volume-option {
+  gap: 1.2cqw;
+}
+.volume-name {
+  min-width: 9.5em;
+}
+.volume-arrow {
+  padding: 0 0.6cqw;
+  letter-spacing: 0;
+  font-size: 0.75em;
+  opacity: 0.35;
+  cursor: pointer;
+}
+button[aria-current="true"] > .volume-arrow {
+  opacity: 1;
+}
+.volume-arrow[data-disabled="true"] {
+  visibility: hidden;
+}
+.volume-meter {
+  display: flex;
+  gap: 0.3cqw;
+}
+.volume-meter i {
+  width: 0.7cqw;
+  height: 2.2cqh;
+  background: currentColor;
+  opacity: 0.2;
+}
+.volume-meter i[data-on] {
+  opacity: 1;
+}
+.volume-value {
+  min-width: 1.2em;
+  letter-spacing: 0;
+  text-align: center;
+}
 :is(#menu[data-presentation="list"], #pause-panel) nav button:focus-visible {
   outline: none;
 }

@@ -1,4 +1,10 @@
 // GAME.C pause(): the race stays frozen behind a list menu styled like the title.
+import {
+  VOLUME_STEPS,
+  clampVolume,
+  decorateVolumeButton,
+  volumeLabel,
+} from "./volume.js";
 export type PauseScreen = "top" | "options" | "quit";
 interface PauseHooks {
   resume(): void;
@@ -10,8 +16,11 @@ interface PauseHooks {
   toggleFullscreen(): void;
   soundEnabled(): boolean;
   toggleSound(): void;
+  volume(): number;
+  setVolume(level: number): void;
   sound(kind: "move" | "ok" | "cancel"): void;
 }
+const OPTIONS_VOLUME = 1;
 const captions: Record<PauseScreen, string> = {
   top: "PAUSED",
   options: "OPTIONS",
@@ -55,6 +64,7 @@ export class PauseMenu {
       const fullscreen = this.hooks.fullscreen();
       return [
         `SOUND: ${this.hooks.soundEnabled() ? "ON" : "OFF"}`,
+        volumeLabel(this.hooks.volume()),
         ...(fullscreen === null
           ? []
           : [`FULLSCREEN: ${fullscreen ? "ON" : "OFF"}`]),
@@ -87,6 +97,11 @@ export class PauseMenu {
         this.selected = i;
         this.confirm();
       };
+      if (screen === "options" && i === OPTIONS_VOLUME)
+        decorateVolumeButton(b, this.hooks.volume(), (delta) => {
+          this.selected = i;
+          this.adjustVolume(delta);
+        });
       this.buttons.append(b);
     });
     this.syncSelection();
@@ -138,7 +153,11 @@ export class PauseMenu {
           this.hooks.toggleSound();
           this.show("options", i);
         }
-        if (i === 1) this.hooks.toggleFullscreen();
+        if (i === OPTIONS_VOLUME)
+          this.setVolume(
+            this.hooks.volume() === VOLUME_STEPS ? 0 : this.hooks.volume() + 1,
+          );
+        if (i === 2) this.hooks.toggleFullscreen();
         break;
       case "quit":
         if (i === 0) this.hooks.quit();
@@ -151,8 +170,25 @@ export class PauseMenu {
     if (this.screen === "top") this.hooks.resume();
     else this.show("top", this.screen === "options" ? 2 : 3);
   }
+  adjustVolume(delta: number) {
+    const level = clampVolume(this.hooks.volume() + delta);
+    if (level === this.hooks.volume()) return;
+    this.setVolume(level);
+    // The cursor sound previews the new level.
+    this.hooks.sound("move");
+  }
+  setVolume(level: number) {
+    this.hooks.setVolume(level);
+    this.show("options", OPTIONS_VOLUME);
+  }
   key(code: string) {
-    if (["ArrowUp", "ArrowLeft"].includes(code)) this.move(-1);
+    if (
+      this.screen === "options" &&
+      this.selected === OPTIONS_VOLUME &&
+      ["ArrowLeft", "ArrowRight"].includes(code)
+    )
+      this.adjustVolume(code === "ArrowLeft" ? -1 : 1);
+    else if (["ArrowUp", "ArrowLeft"].includes(code)) this.move(-1);
     else if (["ArrowDown", "ArrowRight"].includes(code)) this.move(1);
     else if (["Enter", "KeyZ"].includes(code)) this.confirm();
     else if (["Escape", "Backspace", "KeyX"].includes(code)) this.back();

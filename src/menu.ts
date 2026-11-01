@@ -1,4 +1,10 @@
 // MENU_ETC.C / GP1_MAIN.C: original title tree and selection order.
+import {
+  VOLUME_STEPS,
+  clampVolume,
+  decorateVolumeButton,
+  volumeLabel,
+} from "./volume.js";
 export type MenuScreen =
   | "title"
   | "gp"
@@ -16,6 +22,8 @@ interface MenuHooks {
   toggleFullscreen(): void;
   soundEnabled(): boolean;
   toggleSound(): void;
+  volume(): number;
+  setVolume(level: number): void;
   sound(kind: "move" | "ok" | "cancel"): void;
 }
 const lists: Partial<Record<MenuScreen, string[]>> = {
@@ -35,6 +43,7 @@ const parent: Partial<Record<MenuScreen, [MenuScreen, number]>> = {
   "record-kind": ["option", 0],
   records: ["record-kind", 0],
 };
+const OPTION_VOLUME = 2;
 const field = (id: string) => document.getElementById(id) as HTMLSelectElement;
 export class OriginalMenu {
   screen: MenuScreen = "title";
@@ -179,6 +188,7 @@ export class OriginalMenu {
     lists.option = [
       "VIEW RECORDS",
       `SOUND: ${this.hooks.soundEnabled() ? "ON" : "OFF"}`,
+      volumeLabel(this.hooks.volume()),
       ...(fullscreen === null
         ? []
         : [`FULLSCREEN: ${fullscreen ? "ON" : "OFF"}`]),
@@ -260,6 +270,15 @@ export class OriginalMenu {
           },
           i,
         );
+        if (screen === "option" && i === OPTION_VOLUME)
+          decorateVolumeButton(
+            this.buttons.lastElementChild as HTMLButtonElement,
+            this.hooks.volume(),
+            (delta) => {
+              this.selected = i;
+              this.adjustVolume(delta);
+            },
+          );
       });
     this.layoutSelectionList();
     this.syncSelection();
@@ -418,7 +437,11 @@ export class OriginalMenu {
           this.hooks.toggleSound();
           this.show("option", i);
         }
-        if (i === 2) this.hooks.toggleFullscreen();
+        if (i === OPTION_VOLUME)
+          this.setVolume(
+            this.hooks.volume() === VOLUME_STEPS ? 0 : this.hooks.volume() + 1,
+          );
+        if (i === 3) this.hooks.toggleFullscreen();
         break;
       case "record-kind":
         this.recordClass = i === 0 ? "gp" : "time";
@@ -462,8 +485,25 @@ export class OriginalMenu {
       );
     }
   }
+  adjustVolume(delta: number) {
+    const level = clampVolume(this.hooks.volume() + delta);
+    if (level === this.hooks.volume()) return;
+    this.setVolume(level);
+    // The cursor sound previews the new level.
+    this.hooks.sound("move");
+  }
+  setVolume(level: number) {
+    this.hooks.setVolume(level);
+    this.show("option", OPTION_VOLUME);
+  }
   key(code: string) {
-    if (["ArrowUp", "ArrowLeft"].includes(code)) this.move(-1);
+    if (
+      this.screen === "option" &&
+      this.selected === OPTION_VOLUME &&
+      ["ArrowLeft", "ArrowRight"].includes(code)
+    )
+      this.adjustVolume(code === "ArrowLeft" ? -1 : 1);
+    else if (["ArrowUp", "ArrowLeft"].includes(code)) this.move(-1);
     else if (["ArrowDown", "ArrowRight"].includes(code)) this.move(1);
     else if (["Enter", "Space", "KeyZ"].includes(code)) this.confirm();
     else if (["Escape", "Backspace", "KeyX"].includes(code)) this.back();
