@@ -592,7 +592,9 @@ export class HoverRenderer {
     for (const g of ship.flames) {
       g.visible = size > 0;
       g.scale.setScalar(size / 64);
-      g.rotation.z = (-Math.floor(tick / 2) * 165 * Math.PI * 2) / 4096;
+      // The source turns 165 units every other tick; spread it over both ticks
+      // so the faceted shells do not jump and re-shade at 30 Hz.
+      g.rotation.z = (-tick * 165 * Math.PI) / 4096;
       g.traverse((o) => {
         if (o instanceof THREE.Mesh) {
           // Turbo sets DOBJ_FIRE bit 6 (lighting off), not bit 30.
