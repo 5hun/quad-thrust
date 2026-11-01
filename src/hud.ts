@@ -13,7 +13,8 @@ export interface HUDFrame {
   topSpeed: number;
 }
 
-const LOW_ENERGY = 25;
+// Matches the warning sound and ship warning light (tank >> 3).
+const LOW_ENERGY = 12.5;
 // Damage stays visible this long before the lost segment drains.
 const LOST_HOLD = 20;
 const HIT_FRAMES = 18;
