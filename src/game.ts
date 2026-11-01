@@ -1128,14 +1128,8 @@ function update(dt: number) {
   }
 }
 function frame(ts: number) {
-  let dt = Math.min((ts - last) / 1000 || 0, 0.1);
+  const dt = Math.min((ts - last) / 1000 || 0, 0.1);
   last = ts;
-  // Snap vsync jitter to whole half-ticks. Otherwise, whenever the
-  // accumulator drifts onto the 1/60 boundary, frames alternate between 0 and
-  // 2 ticks and the whole scene judders.
-  const halfTicks = Math.round(dt * 120);
-  if (halfTicks > 0 && Math.abs(dt - halfTicks / 120) < 0.001)
-    dt = halfTicks / 120;
   if (state !== "paused") worldTime += dt;
   if (postrace.phase && !postraceReplay) replayClock += dt;
   view.replayView = !!postrace.phase || showingMenuDemo();
