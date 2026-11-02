@@ -1,0 +1,44 @@
+# BLUE GP 2: a step up from the opener, still forgiving. Its signature is
+# the long chicane on the way down from the high ground: two clear bends
+# joined by a short straight, wide enough to take flat out on a good line.
+# Lanes are numbered from the left wall (0) to the right wall (3).
+name Cliff Line
+theme 1
+width 6500
+lanes 4
+
+# Start straight into a long right-hander.
+straight 40000 goal=12
+straight 30000
+arc right 120 r=26000
+
+# Climb to the high ground; the centre boost pair at its foot has the
+# whole climb ahead of it.
+straight 50000 rise=4000 boost=1-2:1-2
+arc left 60 r=26000
+straight 12000 rise=1000
+
+# A gentle run down the far side, no crest to fly off.
+straight 42000 rise=-3000
+straight 16000
+
+# Banked double-apex right-hander: two bites with a short straight between.
+arc right 70 r=24000 bank=500
+straight 8000
+arc right 80 r=22000 bank=0
+
+# The long chicane, dropping off the high ground.
+straight ? rise=-1500
+arc left 70 r=20000 rise=-500
+straight 20000 rise=-1000
+arc right 70 r=20000 rise=-1500
+
+# A centre boost pair on the chicane exit, before a gentle right-hander.
+straight 20000 boost=2-3:1-2
+arc right 60 r=26000
+
+# West straight with a full-width repair row late in the lap.
+straight ?
+straight 30000 repair=8
+arc right 90 r=26000 rise=1000
+straight 24000 rise=1500
