@@ -1,0 +1,41 @@
+# BLUE GP 1: the opening race. Wide road, clear straights joined by
+# distinct corners, and one hill whose crest lifts fast cars briefly.
+# Panels are only ever a full-width row or a pair in the centre lanes
+# (1-2), so no line choice is forced on the player.
+# Lanes are numbered from the left wall (0) to the right wall (3).
+name Harbor Run
+theme 0
+width 7000
+lanes 4
+
+# Start straight.
+straight 40000 goal=12
+straight 40000
+
+# Turn 1 opens onto the climb; a centre boost pair helps up the hill.
+arc right 90 r=24000
+straight 44000 rise=4000 boost=1-2:1-2
+
+# The crest. The road drops away fast enough that quick cars float for
+# a moment before landing on the descent; no jump pad.
+straight 12000
+straight 40000 rise=-7000
+straight 46000
+
+# Banked hairpin at the bottom.
+arc right 30 r=20000 bank=600
+arc right 120 r=20000 bank=600
+arc right 30 r=20000 bank=0
+
+# Back straight, then a left-right pair of corners. The long straight
+# between them carries a full-width repair row nobody can miss, late in
+# the lap where energy has actually been used.
+straight ? rise=1500
+arc left 90 r=26000
+straight ? repair=16
+arc right 90 r=26000
+
+# Short straight with a centre boost before the last corner.
+straight 44000 boost=4-5:1-2
+arc right 90 r=28000 rise=1500
+straight 24000

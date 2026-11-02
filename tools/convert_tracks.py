@@ -1,20 +1,30 @@
 """Convert MAKEMAP.C course geometry using its integer math and original tables."""
 from pathlib import Path
 import json
+from course_builder import build
 from track_geometry import mesh, parse_parts, parse_patterns, trig_tables
 
 ROOT = Path(__file__).resolve().parents[1]
+# New courses replace the original ones slot by slot.
+COURSES = {0: 'blue-1'}
 NAMES = ['Gulf City', 'Penta Rock', 'Ice Gate', 'KNight Town', 'Rollin’Stone',
          'Misty Arc', 'White Cutter', 'Highway Star', 'Desert Gora']
 
 
 def convert(idx, name, tables):
-    key = f'{idx//3+1}_{idx%3+1}'
-    text = (ROOT/'extracted'/f'STG{key}.TXT').read_text('cp932')
-    ptn = (ROOT/'extracted'/f'PTN{key}.TXT').read_text('cp932')
-    patterns = parse_patterns(ptn)
+    if idx in COURSES:
+        course, part_list, patterns = build(
+            (ROOT/'courses'/f'{COURSES[idx]}.course').read_text())
+        name, theme = course['name'], course['theme']
+    else:
+        key = f'{idx//3+1}_{idx%3+1}'
+        text = (ROOT/'extracted'/f'STG{key}.TXT').read_text('cp932')
+        ptn = (ROOT/'extracted'/f'PTN{key}.TXT').read_text('cp932')
+        patterns = parse_patterns(ptn)
+        part_list = parse_parts(text)
+        theme = [0, 1, 2, 0, 1, 3, 2, 3, 4][idx]
     parts = {}
-    for part in parse_parts(text):
+    for part in part_list:
         xs, ys, rows = patterns[part['pat']]
         data = mesh(part['kind'], part['left'], part['right'], xs, ys, tables)
         origin = data['origin']
@@ -39,7 +49,7 @@ def convert(idx, name, tables):
     start = next((i for i, s in enumerate(samples) if 'g' in s['tiles']), 0)
     samples = samples[start:]+samples[:start]
     print(name, len(samples))
-    return {'name': name, 'theme': [0, 1, 2, 0, 1, 3, 2, 3, 4][idx],
+    return {'name': name, 'theme': theme,
             'samples': samples,
             'parts': [{k: p[k] for k in ['id', 'next', 'before', 'writeF', 'writeB', 'extraF', 'extraB']} for p in parts.values()]}
 

@@ -1,11 +1,11 @@
-"""Integer course mesh generation from MAKEMAP.C and the supplied CSDATA.DAT.
+"""Integer course mesh generation from MAKEMAP.C.
 
 Coordinates here remain in PS1 TMD units (half PS1 world units, Y down).
 Do not replace integer division, shifts or sqr_i with floating point math.
 """
 from pathlib import Path
+import math
 import re
-import struct
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,8 +39,9 @@ def sqr_i(value):
 
 
 def trig_tables():
-    data = (ROOT / "extracted/CSDATA.DAT").read_bytes()
-    first_half = list(struct.unpack_from("<360i", data, 1024 * 4))
+    # Half-degree cosines scaled by 1024 and truncated toward zero; this
+    # reproduces the table that CSDATA.DAT used to supply, value for value.
+    first_half = [int(1024 * math.cos(math.radians(i / 2))) for i in range(360)]
     cos = first_half + [-v for v in first_half]
     sin = [cos[(i + 720 - 180) % 720] for i in range(720)]
     return cos, sin
