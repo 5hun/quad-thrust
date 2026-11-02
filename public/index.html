@@ -229,7 +229,12 @@
       <span>HOVER RACING <b> / </b> WEB RECREATION</span
       ><span>Original by Sato Tomokazu · 1997</span>
     </footer>
-    <script src="tracks.js"></script>
+    <script>
+      // ?classiccourses loads the original courses for comparison.
+      document.write(
+        `<script src="${new URLSearchParams(location.search).has("classiccourses") ? "tracks-classic.js" : "tracks.js"}"><\/script>`,
+      );
+    </script>
     <script src="engine.js"></script>
     <script src="rules.js"></script>
     <script src="records.js"></script>

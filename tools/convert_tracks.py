@@ -6,15 +6,15 @@ from track_geometry import mesh, parse_parts, parse_patterns, trig_tables
 
 ROOT = Path(__file__).resolve().parents[1]
 # New courses replace the original ones slot by slot.
-COURSES = {0: 'blue-1'}
+COURSES = {0: 'blue-1', 1: 'blue-2'}
 NAMES = ['Gulf City', 'Penta Rock', 'Ice Gate', 'KNight Town', 'Rollin’Stone',
          'Misty Arc', 'White Cutter', 'Highway Star', 'Desert Gora']
 
 
-def convert(idx, name, tables):
-    if idx in COURSES:
+def convert(idx, name, tables, courses):
+    if idx in courses:
         course, part_list, patterns = build(
-            (ROOT/'courses'/f'{COURSES[idx]}.course').read_text())
+            (ROOT/'courses'/f'{courses[idx]}.course').read_text())
         name, theme = course['name'], course['theme']
     else:
         key = f'{idx//3+1}_{idx%3+1}'
@@ -56,8 +56,10 @@ def convert(idx, name, tables):
 
 def main():
     tables = trig_tables()
-    tracks = [convert(i, n, tables) for i, n in enumerate(NAMES)]
-    (ROOT/'dist/tracks.js').write_text('window.HOVER_TRACKS='+json.dumps(tracks, separators=(',', ':'))+';\n')
+    # tracks-classic.js keeps every original course for ?classiccourses.
+    for file, courses in (('tracks.js', COURSES), ('tracks-classic.js', {})):
+        tracks = [convert(i, n, tables, courses) for i, n in enumerate(NAMES)]
+        (ROOT/'dist'/file).write_text('window.HOVER_TRACKS='+json.dumps(tracks, separators=(',', ':'))+';\n')
 
 
 if __name__ == '__main__':
