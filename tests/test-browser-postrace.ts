@@ -226,7 +226,7 @@ module.exports = async function verify({
     await page.screenshot({ path: "/tmp/hover-time-result.png" });
     await page.setViewportSize({ width: 1100, height: 900 });
     const result = await page.locator("#gp-panel").innerText();
-    assert.match(result, /TIME ATTACK\s*·\s*LUSTER/);
+    assert.match(result, /TIME ATTACK\s*·\s*WHITE HARE/);
     assert.match(result, /TOTAL\s*NEW · 1ST/);
     assert.match(
       result,
@@ -235,7 +235,7 @@ module.exports = async function verify({
     // The record table marks this run and shows each holder's machine.
     assert.match(
       await page.locator(".ta-record-rows [data-player]").innerText(),
-      /OKA\s*NEW\s*LUSTER\s*00'33"00/,
+      /OKA\s*NEW\s*WHITE HARE\s*00'33"00/,
     );
     assert.equal(
       await page.locator(".ta-record-rows .record-machine-icon").count(),
@@ -273,7 +273,7 @@ module.exports = async function verify({
     );
     const retired = await page.locator("#gp-panel").innerText();
     assert.match(retired, /COURSE OUT/);
-    assert.match(retired, /BEST TOTAL\s*00'33"00\s*OKA · LUSTER/);
+    assert.match(retired, /BEST TOTAL\s*00'33"00\s*OKA · WHITE HARE/);
     assert.equal(await page.locator(".ta-records .gp-tabs").count(), 0);
     await page.screenshot({ path: "/tmp/hover-time-retired.png" });
     await page

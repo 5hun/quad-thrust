@@ -405,6 +405,10 @@ module.exports = async function verify({
     const ghostHull = await page.evaluate(() => {
       const { r, c } = window.fidelity;
       const ghost = r.makeShip(0, true);
+      const initialColor = (
+        (ghost.hull!.children[0] as import("three").Mesh)
+          .material as import("three").MeshLambertMaterial
+      ).color.getHex();
       r.updateShip(ghost, { ...c, explosionFrames: undefined }, {}, 0);
       const hull = (
         ghost.hull!.children[0] as import("three").Mesh<
@@ -419,7 +423,7 @@ module.exports = async function verify({
         >
       ).material;
       const result = {
-        color: hull.color.getHex(),
+        colorPreserved: hull.color.getHex() === initialColor,
         opacity: hull.opacity,
         rudder: rudder.opacity,
       };
@@ -430,9 +434,145 @@ module.exports = async function verify({
     });
     assert.deepEqual(
       ghostHull,
-      { color: 0xffffff, opacity: 0.5, rudder: 1 },
+      { colorPreserved: true, opacity: 0.5, rudder: 1 },
       "source ghost changes hull blend only",
     );
+    const standardControls = await page.evaluate(async () => {
+      const THREE = await import("./vendor/three.module.js");
+      const { r, c } = window.fidelity;
+      const ship = r.makeShip(0);
+      const jetBounds = new THREE.Box3().setFromObject(ship.flames[0]);
+      const sourcePositions = Object.values(
+        window.HOVER_MODELS.XVN_CAR[2],
+      ).flatMap((group) => group.position);
+      const sourceLength =
+        Math.max(...sourcePositions.filter((_, i) => i % 3 === 2)) -
+        Math.min(...sourcePositions.filter((_, i) => i % 3 === 2));
+      const rudder = ship.rudders[0];
+      const hinge = rudder.position.clone();
+      const tips = [-384, 0, 384].map((rudderAngle) => {
+        r.updateShip(
+          ship,
+          {
+            ...c,
+            x: 0,
+            y: 0,
+            z: 0,
+            heading: 0,
+            pitch: 0,
+            roll: 0,
+            sourceMatrix: undefined,
+            rudderAngle,
+            explosionFrames: undefined,
+          },
+          {},
+          0,
+        );
+        return rudder.localToWorld(new THREE.Vector3(0, 0.34, 1)).x;
+      });
+      const hingeFixed = rudder.position.equals(hinge);
+      const jetStates = [false, true].map((turbo) => {
+        r.updateShip(ship, { ...c, turbo, ticks: 2 }, { accel: true }, 0);
+        return {
+          visible: ship.flames[0].visible,
+          scale: ship.flames[0].scale.z,
+        };
+      });
+      r.updateShip(ship, { ...c, turbo: false, fireTail: 0 }, {}, 0);
+      const coastHidden = !ship.flames[0].visible;
+      r.scene.remove(ship.root, ship.shadow!);
+      r.clear(ship.root);
+      r.clear(ship.shadow!);
+      return {
+        jetLength: jetBounds.max.z - jetBounds.min.z,
+        sourceLength,
+        tips,
+        hingeFixed,
+        jetStates,
+        coastHidden,
+      };
+    });
+    assert.ok(
+      Math.abs(standardControls.jetLength - standardControls.sourceLength) <
+        0.01,
+      "standard rear plume matches the original standard machine's length",
+    );
+    assert.ok(
+      standardControls.tips[0] > standardControls.tips[1] &&
+        standardControls.tips[1] > standardControls.tips[2],
+      "rear rudder trailing edge swings in both steering directions",
+    );
+    assert.equal(
+      standardControls.hingeFixed,
+      true,
+      "rudder hinge stays attached",
+    );
+    assert.deepEqual(
+      standardControls.jetStates,
+      [
+        { visible: true, scale: 1 },
+        { visible: true, scale: 1.25 },
+      ],
+      "rear plume responds to acceleration and turbo",
+    );
+    assert.equal(
+      standardControls.coastHidden,
+      true,
+      "inactive rear plume is hidden",
+    );
+    const exhaustMatch = await page.evaluate(async () => {
+      const THREE = await import("./vendor/three.module.js");
+      const { r } = window.fidelity;
+      const target = new THREE.WebGLRenderTarget(128, 128);
+      const results = [];
+      r.renderer.setRenderTarget(target);
+      for (const index of [2, 3]) {
+        const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+        camera.position.set(0.7, 0.3, index === 2 ? 13 : 4);
+        camera.lookAt(0, 0, index === 2 ? 2 : 0.5);
+        for (const turbo of [false, true]) {
+          const frames: Uint8Array[] = [];
+          for (const name of ["XVN_CAR", "QUAD_01"]) {
+            const scene = new THREE.Scene();
+            const part = r.modelObject(name, index);
+            part.rotation.z = 0.37;
+            part.traverse((o) => {
+              if (o instanceof THREE.Mesh)
+                (
+                  o.material as import("three").MeshLambertMaterial
+                ).userData.sourceUnlit = { value: turbo ? 1 : 0 };
+            });
+            scene.add(part);
+            const pixels = new Uint8Array(128 * 128 * 4);
+            r.renderer.render(scene, camera);
+            r.renderer.readRenderTargetPixels(target, 0, 0, 128, 128, pixels);
+            frames.push(pixels);
+            r.clear(part);
+          }
+          results.push({
+            index,
+            turbo,
+            same: frames[0].every((byte, i) => byte === frames[1][i]),
+            visible: frames[0].some((byte, i) => i % 4 !== 3 && byte > 0),
+          });
+        }
+      }
+      r.renderer.setRenderTarget(null);
+      target.dispose();
+      return results;
+    });
+    for (const result of exhaustMatch) {
+      assert.equal(
+        result.visible,
+        true,
+        `exhaust ${result.index} draws visible pixels`,
+      );
+      assert.equal(
+        result.same,
+        true,
+        `exhaust ${result.index}, turbo=${result.turbo}: matches original pixels exactly`,
+      );
+    }
     const bombLifetime = await page.evaluate(() => {
       const { r, c } = window.fidelity;
       return [235, 236, 299].map((explosionFrames) => {

@@ -4,8 +4,8 @@ namespace HoverEngine {
   "use strict";
   export const MACHINES = [
     {
-      name: "LUSTER",
-      model: "XVN_CAR",
+      name: "WHITE HARE",
+      model: "QUAD_01",
       weight: 128,
       accel: 240,
       falloff: 0,
@@ -17,7 +17,7 @@ namespace HoverEngine {
       rudder: 32,
       tank: 33000,
       color: "#d8e6ef",
-      desc: "標準型。原作の機体モデルと性能設定。",
+      desc: "標準型。独立した4基のポッドを備える白いホバーマシン。",
     },
     {
       name: "EXCEL",

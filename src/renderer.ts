@@ -3,6 +3,11 @@ import * as THREE from "./vendor/three.module.js";
 import { OriginalBackground } from "./background.js";
 import { ReplayDirector } from "./replay.js";
 import { CourseSurface } from "./course-surface.js";
+import {
+  STANDARD_MODEL,
+  STANDARD_MOUNTS,
+  standardMachinePart,
+} from "./standard-machine.js";
 const E = window.HoverEngine;
 const TILE: Record<string, number> = {
   ".": 0,
@@ -220,8 +225,24 @@ export class HoverRenderer {
             #endif
           `,
           );
+      if (material.userData.machineSurface)
+        shader.fragmentShader = shader.fragmentShader.replace(
+          "#include <map_fragment>",
+          `
+          #ifdef USE_MAP
+            vec4 sampledDiffuseColor = texture2D(map, vMapUv);
+            // Treat the metal image as subtle paint grain, not grey/blue dye.
+            float paintGrain = dot(sampledDiffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+            sampledDiffuseColor.rgb = vec3(0.9 + 0.1 * paintGrain);
+            diffuseColor *= sampledDiffuseColor;
+          #endif
+        `,
+        );
     };
-    material.customProgramCacheKey = () => "hover-source-raster-v4";
+    material.customProgramCacheKey = () =>
+      material.userData.machineSurface
+        ? "hover-machine-paint-v1"
+        : "hover-source-raster-v4";
     return material;
   }
   resize() {
@@ -353,7 +374,35 @@ export class HoverRenderer {
       group.add(new THREE.Mesh(geometry, mat));
     }
   }
-  modelObject(name: string, index: number, translucent = false) {
+  modelObject(name: string, index: number, translucent = false): THREE.Group {
+    if (name === STANDARD_MODEL) {
+      // Exhaust is deliberately identical to the original standard machine:
+      // geometry, colours, winding, lighting and depth/blend passes all share
+      // the source-model path below. Only the new hull's mounts differ.
+      if (index === 2 || index === 3)
+        return this.modelObject("XVN_CAR", index, translucent);
+      const part = standardMachinePart(index);
+      part.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        const material = object.material as THREE.MeshLambertMaterial;
+        if (material.userData.machineSurface) {
+          const color = this.texture("machine/metal-color.jpg");
+          const normal = this.texture("machine/metal-normal.jpg");
+          for (const texture of [color, normal]) {
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+            texture.magFilter = THREE.LinearFilter;
+            texture.minFilter = THREE.LinearMipmapLinearFilter;
+            texture.generateMipmaps = true;
+          }
+          normal.colorSpace = THREE.NoColorSpace;
+          material.map = color;
+          material.normalMap = normal;
+          material.normalScale.set(0.25, 0.25);
+        }
+        this.sourceMaterial(material);
+      });
+      return part;
+    }
     const group = new THREE.Group();
     const data = window.HOVER_MODELS[name][index];
     for (const [material, attrs] of Object.entries(data)) {
@@ -410,7 +459,7 @@ export class HoverRenderer {
       body = new THREE.Group();
     root.add(body);
     body.add(this.modelObject(name, 0));
-    const mounts = MOUNTS[type],
+    const mounts = name === STANDARD_MODEL ? STANDARD_MOUNTS : MOUNTS[type],
       mount = (index: number, p: Vec3) => {
         const g = this.modelObject(name, index);
         g.position.set(p[0] / 100, -p[1] / 100, -p[2] / 100);
@@ -498,6 +547,7 @@ export class HoverRenderer {
     root.add(debris);
     return {
       type,
+      model: name,
       root,
       body,
       hull: body.children[0],

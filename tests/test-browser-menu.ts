@@ -98,7 +98,7 @@ module.exports = async function verify({
         .evaluateAll((buttons) =>
           buttons.map((b) => b.getAttribute("aria-label")),
         ),
-      ["LUSTER", "EXCEL", "BETA", "JUSTER", "ALPHA"],
+      ["WHITE HARE", "EXCEL", "BETA", "JUSTER", "ALPHA"],
     );
     assert.equal(await page.locator("#mode").inputValue(), "time");
     await click("BETA");
@@ -140,7 +140,7 @@ module.exports = async function verify({
       demoFrame,
     );
     await page.screenshot({ path: "/tmp/hover-machine-select-desktop.png" });
-    await click("LUSTER");
+    await click("WHITE HARE");
     assert.equal(
       await page
         .locator("#menu nav")
@@ -322,7 +322,7 @@ module.exports = async function verify({
         .evaluateAll((icons) =>
           icons.map((icon) => icon.getAttribute("aria-label")),
         ),
-      ["LUSTER", "EXCEL"],
+      ["WHITE HARE", "EXCEL"],
     );
     assert.deepEqual(
       await page.locator(".course-record-time").allTextContents(),
