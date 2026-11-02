@@ -1,5 +1,6 @@
 .agents/
 .codex/
+.claude/
 .aws/
 **/node_modules/
 **/__pycache__/
