@@ -15,6 +15,7 @@
     "test:browser": "node tests/test-browser-fidelity.ts",
     "test:fullscreen": "node tests/test-browser-fullscreen.ts",
     "test:menu": "node tests/test-browser-menu.ts",
+    "test:machines": "node tests/test-browser-machine-models.ts",
     "test:postrace": "node tests/test-browser-postrace.ts",
     "test:phases": "node tests/test-browser-race-phases.ts",
     "test:attract": "node tests/test-browser-attract.ts",

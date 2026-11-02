@@ -9,6 +9,7 @@ import {
   standardMachinePart,
 } from "./standard-machine.js";
 const E = window.HoverEngine;
+const CLASSIC_MODELS = ["XVN_CAR", "XVP_CAR", "SVS_CAR", "JUSTER", "XXX_CAR"];
 const TILE: Record<string, number> = {
   ".": 0,
   s: 0,
@@ -131,6 +132,10 @@ export class HoverRenderer {
   sourceDepth = { value: 96 };
   // ?classictrack keeps the original 32x32 tile surface for comparison.
   courseSurface: CourseSurface | null = null;
+  // Presence flag, matching ?classictrack and ?classiccourses.
+  readonly classicMachines = new URLSearchParams(location.search).has(
+    "classicmachines",
+  );
   // Next race intro: frames left before the countdown takes over.
   introLeft: number | null = null;
   introReach = 0;
@@ -454,7 +459,9 @@ export class HoverRenderer {
     return group;
   }
   makeShip(type: number, ghost = false) {
-    const name = E.MACHINES[type].model,
+    const name = this.classicMachines
+        ? CLASSIC_MODELS[type]
+        : E.MACHINES[type].model,
       root = new THREE.Group(),
       body = new THREE.Group();
     root.add(body);
@@ -1201,6 +1208,7 @@ export class HoverRenderer {
   diagnostics() {
     return {
       renderer: "Three.js " + THREE.REVISION,
+      machineAppearance: this.classicMachines ? "classic" : "modern",
       backgroundTheme: this.background.theme,
       groundBands: this.background.ground.length,
       searchlights: this.background.beams.length,

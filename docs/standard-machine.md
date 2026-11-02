@@ -34,6 +34,10 @@ ambientCGのCC0素材 [Metal032](https://ambientcg.com/view?id=Metal032) の1K�
 
 半透明描画・毎フレーム表示・回転の平滑化は原作機体と共有しています。
 
+## 新旧モデルの切り替え
+
+通常はWHITE HAREを表示します。URLへ `?classicmachines` を追加すると、機体選択・走行・デモ・リプレイ・ゴーストのすべてで原作モデルとそのマウント位置・影を使用します。`classictrack`・`classiccourses` と併用できます。表示のみの切り替えで、機体名・性能・保存データは維持します。
+
 ## 組み込み
 
 - `src/engine.ts` の標準機の表示モデルIDは `QUAD_01`。
