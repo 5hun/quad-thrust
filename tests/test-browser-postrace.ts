@@ -304,7 +304,10 @@ module.exports = async function verify({
         if (state === "intro" || state === "countdown")
           window.cameraTrail.push({
             state,
-            time: performance.now(),
+            // Camera motion uses the capped simulation clock passed to draw.
+            // A post-draw wall-clock timestamp includes variable GPU work and
+            // can make several simulation steps look like an instant jump.
+            time: args[4] * 1000,
             p: this.camera.position.toArray(),
             q: this.camera.quaternion.toArray(),
           });
@@ -411,12 +414,16 @@ module.exports = async function verify({
         course,
       );
       assert.ok(rows.some((r) => r.time === 10 && r.name === "OKA"));
-      assert.match(
-        await page.locator("#gp-panel .gp-title").innerText(),
-        new RegExp(
-          ["GULF CITY", "PENTA ROCK", "ICE GATE"][course].replace(" ", "\\s"),
-          "i",
-        ),
+      const courseName = await page.evaluate(
+        (course) => window.HOVER_TRACKS[course].name,
+        course,
+      );
+      assert.equal(
+        (await page.locator("#gp-panel .gp-title").innerText())
+          .replace(/\s+/g, " ")
+          .trim()
+          .toUpperCase(),
+        courseName.toUpperCase(),
       );
       if (course < 2) await key("ArrowRight");
     }
