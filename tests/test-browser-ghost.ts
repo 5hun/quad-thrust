@@ -249,13 +249,13 @@ module.exports = async function verify({
     await page.reload();
     await wait("menu");
     assert.equal(
-      (await snap()).lastReplay,
-      null,
-      "source replay buffer is volatile until card load",
+      (await snap()).lastReplay?.machine,
+      2,
+      "the course's best ghost is restored from the save",
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: source TA ghost eligibility across machines, 60Hz live path equality, translucent hull and slot-1 jets, countdown/pause, tape-end coasting, separate slower attempt replay, faster replacement and preserved legacy data",
+      "PASS: source TA ghost eligibility across machines, 60Hz live path equality, translucent hull and slot-1 jets, countdown/pause, tape-end coasting, separate slower attempt replay, faster replacement, saved course best and preserved legacy data",
     );
   } finally {
     await browser.close();

@@ -64,6 +64,30 @@ const fs: typeof import("node:fs") = require("node:fs");
   save.setItem("hover-volume", "4");
   assert.equal(save.saveError, false, "future mutations retry persistence");
   assert.equal(new SaveStore(storage).getItem("hover-volume"), "4");
+  // Each course's best Time Attack ghost is part of the save.
+  const ghost = JSON.stringify({
+    machine: 2,
+    course: 3,
+    gameMode: 4,
+    level: 0,
+    frames: 40,
+    totalTicks: 2400,
+    words: [31, 8 << 5],
+    axes: { 5: [0.5, -0.25] },
+  });
+  save.setItem("hover-ghost-3", ghost);
+  assert.equal(new SaveStore(storage).getItem("hover-ghost-3"), ghost);
+  save.setItem("hover-ghost-4", ghost);
+  assert.equal(save.getItem("hover-ghost-4"), null, "course must match key");
+  save.setItem(
+    "hover-ghost-3",
+    JSON.stringify({ ...JSON.parse(ghost), gameMode: 0 }),
+  );
+  assert.equal(
+    save.getItem("hover-ghost-3"),
+    ghost,
+    "only TA tapes are ghosts",
+  );
   save.setItem("hover-player-name", "ZZZ");
   assert.equal(save.getItem("hover-player-name"), null, "names are not saved");
   // Saves from before GAME LEVEL and name entry were removed still load.

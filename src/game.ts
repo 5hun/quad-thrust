@@ -327,7 +327,7 @@ let replaying = false;
 let inputRecording: ReplayRecorder | null = null;
 // CPU difficulty is fixed to the original NORMAL row (GAME.C level 0).
 const recordingLevel = 0;
-const replayMemory = new ReplayMemory();
+const replayMemory = new ReplayMemory(session);
 let ghostReplay: GhostReplay | null = null;
 let resultReplay: InputReplay | null = null;
 function prepareResultReplay() {
@@ -346,6 +346,19 @@ function prepareResultReplay() {
   view.yaw = null;
   view.replayDirector.reset();
   replayClock = 0;
+}
+// The saved ghost of the selected course, for diagnostics.
+function lastGhost() {
+  const tape = replayMemory.ghost(+$("course").value);
+  return tape
+    ? {
+        course: tape.course,
+        machine: tape.machine,
+        frames: tape.frames,
+        bytes: tape.words.length * 2,
+        totalTicks: tape.totalTicks,
+      }
+    : null;
 }
 function rememberReplay() {
   if (!inputRecording?.frames || car.reason !== "finish") return;
@@ -752,8 +765,8 @@ function finish() {
         // The run just became the ghost the next attempt races.
         ghostUpdated:
           mode === "time" &&
-          !!replayMemory.saved &&
-          replayMemory.saved === replayMemory.recent,
+          !!replayMemory.recent &&
+          replayMemory.ghost(+$("course").value) === replayMemory.recent,
       });
     }
     $("hud").hidden = true;
@@ -1255,15 +1268,7 @@ export const getHoverDiagnostics = () => ({
   menuSelection: originalMenu.selected,
   saveError: session.saveError,
   cpuDifficulty: recordingLevel,
-  lastReplay: replayMemory.saved
-    ? {
-        course: replayMemory.saved.course,
-        machine: replayMemory.saved.machine,
-        frames: replayMemory.saved.frames,
-        bytes: replayMemory.saved.words.length * 2,
-        totalTicks: replayMemory.saved.totalTicks,
-      }
-    : null,
+  lastReplay: lastGhost(),
   sourceMode: mode === "time" && ghostReplay ? 5 : R.profile(mode).sourceMode,
   ghost: ghostReplay
     ? {

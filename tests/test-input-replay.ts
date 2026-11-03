@@ -176,7 +176,12 @@ const E = require("../dist/engine.js") as typeof HoverEngine;
     "data:text/javascript;base64," +
       Buffer.from(memorySource).toString("base64")
   );
-  const memory = new ReplayMemory();
+  const disk = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => disk.get(key) ?? null,
+    setItem: (key: string, value: string) => void disk.set(key, value),
+  };
+  const memory = new ReplayMemory(storage);
   const firstTape = {
     ...tape,
     gameMode: 4 as const,
@@ -189,54 +194,66 @@ const E = require("../dist/engine.js") as typeof HoverEngine;
   assert.equal(
     memory.beginRace(0, 4),
     firstTape,
-    "different machine uses the same source ghost",
+    "different machine uses the same course ghost",
   );
   const slower = { ...firstTape, machine: 1, totalTicks: 1100 };
   memory.complete(slower);
-  assert.equal(memory.saved, firstTape);
+  assert.equal(memory.ghost(0), firstTape);
   assert.equal(memory.recent, slower);
   memory.complete({ ...slower, frames: slower.frames + 1 });
   assert.equal(
-    memory.saved,
+    memory.ghost(0),
     firstTape,
     "repeated finish snapshots retain the race's starting ghost",
   );
   memory.beginRace(0, 4);
   memory.complete({ ...slower, machine: 2, totalTicks: 1000 });
-  assert.equal(memory.saved, firstTape, "ties do not replace the ghost buffer");
+  assert.equal(memory.ghost(0), firstTape, "ties do not replace the ghost");
   memory.beginRace(0, 4);
   const faster = { ...firstTape, machine: 3, totalTicks: 900 };
   memory.complete(faster);
-  assert.equal(memory.saved, faster);
-  assert.equal(memory.beginRace(1, 4), null);
+  assert.equal(memory.ghost(0), faster);
+  const longer = { ...faster, frames: faster.frames + 1 };
+  memory.complete(longer);
   assert.equal(
-    memory.saved,
-    faster,
-    "choosing/aborting another course preserves the existing replay",
+    memory.ghost(0),
+    longer,
+    "the goal drive extends the new best of the same race",
   );
+  assert.equal(memory.beginRace(1, 4), null);
   const otherCourse = { ...firstTape, course: 1, totalTicks: 1200 };
   memory.complete(otherCourse);
   assert.equal(
     memory.beginRace(0, 4),
-    null,
-    "there is one source buffer, not a per-course cache",
+    longer,
+    "each course keeps its own best ghost",
   );
+  assert.equal(memory.beginRace(1, 4), otherCourse);
   memory.beginRace(1, 4, false);
-  const disabled = { ...otherCourse, totalTicks: 1300 };
-  memory.complete(disabled);
+  memory.complete({ ...otherCourse, totalTicks: 1300 });
   assert.equal(
-    memory.saved,
-    disabled,
-    "a run without a ghost records unconditionally",
+    memory.ghost(1),
+    otherCourse,
+    "a run with the ghost hidden still has to beat the course best",
   );
   assert.equal(memory.beginRace(0, 1), null);
-  const practice = { ...firstTape, gameMode: 1 };
+  const practice = { ...firstTape, gameMode: 1 as const, totalTicks: 1 };
   memory.complete(practice);
+  assert.equal(memory.recent, practice);
   assert.equal(
     memory.beginRace(0, 4),
-    null,
-    "a completed GP/practice replay replaces the TA buffer",
+    longer,
+    "GP/practice runs never replace a Time Attack ghost",
   );
+  const reloaded = new ReplayMemory(storage);
+  assert.deepEqual(
+    reloaded.beginRace(0, 4),
+    JSON.parse(JSON.stringify(longer)),
+    "course bests survive a reload",
+  );
+  assert.equal(reloaded.ghost(1)!.totalTicks, 1200);
+  assert.equal(reloaded.ghost(2), null);
+  assert.equal(reloaded.recent, null);
   // A source posr fraction must survive movement, and replay/ghost falling
   // must use the same drag, gravity, attitude and integer movement as live play.
   const fallingTape = { ...firstTape, machine: 0, gameMode: 4 as const };

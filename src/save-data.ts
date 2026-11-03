@@ -1,4 +1,5 @@
-// One browser save for progress, records and settings. Replays stay in memory.
+// One browser save for progress, records, settings and each course's best
+// Time Attack ghost. Other replays stay in memory.
 export const SAVE_KEY = "hover-autosave-v2";
 
 function defaults() {
@@ -23,6 +24,38 @@ function validValue(key: string, value: unknown): value is string {
     return Number.isFinite(Number(value)) && Number(value) > 0;
   try {
     const data = JSON.parse(value);
+    const ghost = /^hover-ghost-([0-8])$/.exec(key);
+    if (ghost)
+      return (
+        data?.course === Number(ghost[1]) &&
+        data.gameMode === 4 &&
+        Number.isInteger(data.machine) &&
+        data.machine >= 0 &&
+        data.machine < 5 &&
+        Number.isInteger(data.level) &&
+        Number.isInteger(data.frames) &&
+        data.frames > 0 &&
+        Number.isInteger(data.totalTicks) &&
+        data.totalTicks > 0 &&
+        Array.isArray(data.words) &&
+        data.words.length > 0 &&
+        data.words.length <= 4096 &&
+        data.words.every(
+          (word: unknown) =>
+            Number.isInteger(word) &&
+            (word as number) >= 0 &&
+            (word as number) < 65536,
+        ) &&
+        (data.axes === undefined ||
+          (typeof data.axes === "object" &&
+            !Array.isArray(data.axes) &&
+            Object.values(data.axes).every(
+              (axis) =>
+                Array.isArray(axis) &&
+                axis.length === 2 &&
+                axis.every(Number.isFinite),
+            )))
+      );
     if (/^hover-records-(gp|time)-[0-8]-(lap|total)$/.test(key))
       return (
         Array.isArray(data) &&
