@@ -168,39 +168,51 @@ namespace HoverEngine {
       return r.map((v, k) => v - outward[k] - (k === 1 ? 2.56 : 0));
     return l.map((v, k) => mix(v, r[k], (row - 2) / (ys - 4)));
   }
+  const sourceLine = (a: Vec3, b: Vec3, p: number[]) =>
+    (Math.imul(b[0] - a[0], p[1] - a[2]) -
+      Math.imul(b[2] - a[2], p[0] - a[0])) |
+    0;
+  // The road corners of a part, in the local coordinates of its first node.
+  function sourceCorners(track: Track, part: { indices: number[] }) {
+    const first = track.nodes[part.indices[0]],
+      last = track.nodes[part.indices.at(-1)!].end!;
+    const ys = first.allTiles.length;
+    return [
+      first.source!.vertices[2],
+      last.source!.vertices[2],
+      last.source!.vertices[ys - 2],
+      first.source!.vertices[ys - 2],
+    ];
+  }
+  function sourceLocal(track: Track, index: number, x: number, z: number) {
+    const origin = track.nodes[index].source!.origin;
+    return [
+      (Math.floor(x * 100 + 1e-8) - origin[0]) >> 1,
+      (Math.floor(z * 100 + 1e-8) - origin[2]) >> 1,
+    ];
+  }
+  function sourceContains(
+    track: Track,
+    part: { indices: number[] },
+    x: number,
+    z: number,
+  ) {
+    const quad = sourceCorners(track, part),
+      point = sourceLocal(track, part.indices[0], x, z);
+    return quad.every((a, i) => sourceLine(a, quad[(i + 1) % 4], point) <= 0);
+  }
   // CAR_CTR.C car_position / car_getplate. Authored parts, not Euclidean
   // proximity, determine the current strip at crossings and hairpin bends.
   function sourceCell(track: Track, x: number, z: number, hint: number | null) {
     const parts = track.sourceParts;
     if (!parts?.size) return null;
-    const local = (index: number) => {
-      const origin = track.nodes[index].source!.origin;
-      return [
-        (Math.floor(x * 100 + 1e-8) - origin[0]) >> 1,
-        (Math.floor(z * 100 + 1e-8) - origin[2]) >> 1,
-      ];
-    };
-    const line = (a: Vec3, b: Vec3, p: number[]) =>
-      (Math.imul(b[0] - a[0], p[1] - a[2]) -
-        Math.imul(b[2] - a[2], p[0] - a[0])) |
-      0;
-    const corners = (part: { indices: number[] }) => {
-      const first = track.nodes[part.indices[0]],
-        last = track.nodes[part.indices.at(-1)!].end!;
-      const ys = first.allTiles.length;
-      return [
-        first.source!.vertices[2],
-        last.source!.vertices[2],
-        last.source!.vertices[ys - 2],
-        first.source!.vertices[ys - 2],
-      ];
-    };
+    const local = (index: number) => sourceLocal(track, index, x, z);
+    const line = sourceLine;
+    const corners = (part: { indices: number[] }) => sourceCorners(track, part);
     let part = hint === null ? undefined : parts.get(track.nodes[hint].part!);
     if (!part) {
       for (const [, candidate] of [...parts].sort(([a], [b]) => a - b)) {
-        const quad = corners(candidate),
-          point = local(candidate.indices[0]);
-        if (quad.every((a, i) => line(a, quad[(i + 1) % 4], point) <= 0)) {
+        if (sourceContains(track, candidate, x, z)) {
           part = candidate;
           break;
         }
@@ -404,6 +416,22 @@ namespace HoverEngine {
       }
     }
     if (!best) throw new Error("Track must contain at least one sample");
+    return best;
+  }
+  // The highest road surface under (x, z) that is not above y, searched
+  // across every part of the course.
+  function stripBelow(track: Track, x: number, y: number, z: number) {
+    let best: Nearest | null = null;
+    for (const part of track.sourceParts?.values() ?? []) {
+      if (!sourceContains(track, part, x, z)) continue;
+      const near = nearest(track, x, z, part.indices[0]);
+      if (
+        near.supported &&
+        near.surface <= y &&
+        (!best || near.surface > best.surface)
+      )
+        best = near;
+    }
     return best;
   }
   const TAU = Math.PI * 2,
@@ -997,7 +1025,22 @@ namespace HoverEngine {
         );
     const speed = car.sourceSpeed;
     if (car.damage > 4) car.damage -= 6 + Math.floor((car.damage * 9) / m.tank);
-    const near = nearest(track, car.x, car.z, car.index);
+    let near = nearest(track, car.x, car.z, car.index);
+    if (!near.supported) {
+      // Part tracking only steps to adjacent parts, so a car that flies off
+      // the side onto another part of the course would keep testing the old
+      // strip and fall. Move it onto the strip below and credit the skipped
+      // distance, as a jump shortcut should count.
+      const below = stripBelow(track, car.x, car.y, car.z);
+      if (below && below.index !== near.index) {
+        near = below;
+        let skipped = near.distance - car.lastDistance;
+        if (skipped < -track.length / 2) skipped += track.length;
+        if (skipped > track.length / 2) skipped -= track.length;
+        car.progress += skipped;
+        car.lastDistance = near.distance;
+      }
+    }
     car.index = near.index;
     let lines = near.index - car.lastLine;
     if (lines < -track.nodes.length / 2) lines += track.nodes.length;
