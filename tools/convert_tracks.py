@@ -6,7 +6,7 @@ from track_geometry import mesh, parse_parts, parse_patterns, trig_tables
 
 ROOT = Path(__file__).resolve().parents[1]
 # New courses replace the original ones slot by slot.
-COURSES = {0: 'blue-1', 1: 'blue-2', 2: 'blue-3'}
+COURSES = {0: 'blue-1', 1: 'blue-2', 2: 'blue-3', 3: 'yellow-1'}
 NAMES = ['Gulf City', 'Penta Rock', 'Ice Gate', 'KNight Town', 'Rollin’Stone',
          'Misty Arc', 'White Cutter', 'Highway Star', 'Desert Gora']
 

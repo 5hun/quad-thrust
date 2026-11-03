@@ -1,0 +1,68 @@
+# YELLOW GP 1: the first full jump. Taken straight, it is an ordinary jump
+# onto a long landing straight. The hairpin beyond folds the road back
+# below it, so a car that leaves the jump angled to the right can land on
+# the return road and skip the hairpin; nothing on the course points this
+# out. The second feature is a run of three low humps on the way south.
+# Lanes are numbered from the left wall (0) to the right wall (3).
+name Night Span
+theme 0
+width 6000
+lanes 4
+
+# 1. Start straight.
+straight 40000 goal=12
+straight 20000
+
+# 2. A long banked right-hander, taken flat out. The outside edge rises
+# 2000 above the inside (about 18 degrees across 6000), easing in and out
+# over 40 degrees; the centre rises by half the bank so the inside stays
+# level.
+arc right 10 r=50000 bank=312 rise=156
+arc right 10 r=50000 bank=1000 rise=344
+arc right 10 r=50000 bank=1688 rise=344
+arc right 10 r=50000 bank=2000 rise=156
+arc right 40 r=50000 bank=2000
+arc right 10 r=50000 bank=1688 rise=-156
+arc right 10 r=50000 bank=1000 rise=-344
+arc right 10 r=50000 bank=312 rise=-344
+arc right 10 r=50000 bank=0 rise=-156
+
+# 3. The climb to the jump, widening for the landing. No boost: the jump
+# distance should not depend on catching a pad.
+straight 40000 rise=4000 width=7000
+
+# 4. Full-width jump at the end of the plateau, then a landing straight
+# longer than any straight flight.
+straight 20000 jump=8-9
+straight 55000
+
+# 5. Hairpin down to the return road, which runs back beside the landing
+# straight. A car flying from the jump towards the right lands here.
+arc right 180 r=10000 rise=-2000
+straight 30000
+
+# 6. The only left-hander turns south onto three humps, each lower than
+# the last. Fast cars lift slightly over each crest. Each crest also leans
+# 1000 across the road (about 9.5 degrees), right, left, right, levelling
+# out again in every dip. No panels here.
+arc left 120 r=22000 rise=-1000
+straight 8000 rise=-200 width=6000
+straight 6000 rise=700 tilt=-1000
+straight 6000 rise=-950 tilt=0
+straight 4000
+straight 6000 rise=550 tilt=1000
+straight 6000 rise=-800 tilt=0
+straight 4000
+straight 6000 rise=400 tilt=-1000
+straight 6000 rise=-700 tilt=0
+straight 8000
+
+# 7. West straight: repair on the left two lanes, boost on the right two,
+# once the car has settled after the humps.
+arc right 90 r=24000
+straight ? repair=4-5:0-1 boost=4-5:2-3
+
+# 8. A right-hander that tightens, then a centre boost pair to the line.
+arc right 45 r=32000
+arc right 45 r=18000
+straight ? boost=3:1-2
