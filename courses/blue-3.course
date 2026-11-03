@@ -1,0 +1,64 @@
+# BLUE GP 3: keep the broad outer bank and S-bends, then fold the return
+# road over the S-bend on a narrow bridge. No background changes: theme 2
+# is the original BLUE GP 3 environment. Lanes run left (0) to right (3).
+name Tidal Ring
+theme 2
+width 7000
+lanes 4
+
+# 1. Start straight, widening gradually before the outer bank.
+straight 40000 goal=12
+straight 50000 width=9500
+
+# 2. A wide, sweeping 180-degree right bank. The outside edge rises 4500
+# above the inside (about 25 degrees across 9500), easing in and out over
+# 60 degrees at either end, with the full bank held through the middle.
+# Raise the centre by half the bank so the inside edge stays at height 0.
+# Short arcs sample a smoothstep bank profile: slow changes at the straight
+# and full-bank boundaries, with the inside level at every generated column.
+arc right 10 r=50000 bank=334 rise=167
+arc right 10 r=50000 bank=1166 rise=416
+arc right 10 r=50000 bank=2250 rise=542
+arc right 10 r=50000 bank=3334 rise=542
+arc right 10 r=50000 bank=4166 rise=416
+arc right 10 r=50000 bank=4500 rise=167
+arc right 60 r=50000 bank=4500
+arc right 10 r=50000 bank=4166 rise=-167
+arc right 10 r=50000 bank=3334 rise=-416
+arc right 10 r=50000 bank=2250 rise=-542
+arc right 10 r=50000 bank=1166 rise=-542
+arc right 10 r=50000 bank=334 rise=-416
+arc right 10 r=50000 bank=0 rise=-167
+straight 20000
+
+# 3. Keep the full 9500 width through both bends and below the bridge.
+arc left 50 r=24000
+straight 12000
+arc right 50 r=24000
+
+# 4. Return to normal width, then accelerate towards the hairpin.
+# Two longitudinal pads occupy the outer lanes, leaving the centre clear.
+straight 20000 width=7000
+straight ? boost=3-4:0,3-4:3
+
+# 5. One continuous left hairpin turns all the way towards the bridge.
+# Its exit joins the bridge climb directly, without an intermediate straight.
+arc left 225 r=18000
+
+# 6. Centre boost pair near the foot of the climb, well before crossing.
+# Narrow smoothly to 4500. At the crossing the upper road is about 7900
+# above the lower road, clearing its walls and the bridge underside.
+straight 45000 rise=8000 width=4500 boost=2-3:1-2
+straight 20000
+# A broader curve after the bridge, still at the bridge's height.
+arc left 90 r=24000
+
+# 7. Widen on the descent, then follow the level return straight.
+# Put the full-width repair row halfway through the final right corner,
+# after the landing straight. No jump pad is required.
+straight 30000 rise=-8000 width=7000
+straight ?
+straight 10000
+arc right 135 r=14000 repair=8
+# Level connector back to the start.
+straight 5000
