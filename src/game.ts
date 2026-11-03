@@ -1170,6 +1170,7 @@ function update(dt: number) {
       car.repairFrames = 32;
       originalSound.effect(69, 24, 90);
     }
+    if (e === "boost") originalSound.modernEffect("boost", 90);
     if (e === "wall-sound") originalSound.effect(67, 45);
     if (e === "collision") originalSound.effect(67, 70);
     if (e === "land") originalSound.effect(67, 80);

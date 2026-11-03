@@ -24,6 +24,9 @@ interface Output {
   reverb: ConvolverNode;
   effects: Effects;
 }
+// New one-shot effects in public/assets/sound/<id>.wav (see CREDITS.md there).
+// The original has none for these events; they play without the SPU envelope.
+const MODERN_EFFECTS = ["boost"] as const;
 // GP1_MAIN.C selects HALL at depth 64/127. A deterministic stereo
 // hall impulse restores the missing wet path; this is not SPU RAM emulation.
 function createOutput(c: AudioContext): Output {
@@ -119,14 +122,17 @@ export class OriginalSound {
         this.menu.context.audioWorklet.addModule("spu-envelope.js"),
         ...[
           ...Object.entries(window.HOVER_SOUNDS).map(
-            ([id, s]) => ["se" + id, s] as [string, Sample],
+            ([id, s]) => ["se" + id, s.file] as [string, string],
           ),
           ...Object.entries(window.HOVER_MUSIC.samples).map(
-            ([id, s]) => ["bgm" + id, s] as [string, Sample],
+            ([id, s]) => ["bgm" + id, s.file] as [string, string],
           ),
-        ].map(async ([id, s]) => {
-          const r = await fetch("assets/" + s.file);
-          if (!r.ok) throw Error(s.file);
+          ...MODERN_EFFECTS.map(
+            (id) => [id, `sound/${id}.wav`] as [string, string],
+          ),
+        ].map(async ([id, file]) => {
+          const r = await fetch("assets/" + file);
+          if (!r.ok) throw Error(file);
           this.buffers.set(id, await c.decodeAudioData(await r.arrayBuffer()));
         }),
       ]).then(() => {
@@ -202,6 +208,23 @@ export class OriginalSound {
   }
   effect(id: number, note = 60, volume = 127, sustained = false) {
     this.play(this.raceOutput(), id, note, volume, sustained);
+  }
+  modernEffect(id: (typeof MODERN_EFFECTS)[number], volume = 127) {
+    const c = this.context;
+    const buffer = this.buffers.get(id);
+    if (!this.enabled || !c || !buffer) return;
+    const s = c.createBufferSource();
+    s.buffer = buffer;
+    const gain = c.createGain();
+    gain.gain.value = volume / 127;
+    s.connect(gain);
+    gain.connect(this.master);
+    gain.connect(this.reverb);
+    s.onended = () => {
+      s.disconnect();
+      gain.disconnect();
+    };
+    s.start();
   }
   // Cursor and confirm sounds, audible while the race is paused.
   menuEffect(id: number, note: number, volume: number) {
