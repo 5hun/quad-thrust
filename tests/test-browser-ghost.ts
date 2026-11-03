@@ -94,17 +94,11 @@ module.exports = async function verify({
       }, total);
       await wait("finished");
       await page.waitForFunction(
-        () => window.hoverDiagnostics().gpScreen === "name",
-      );
-    }
-    // Keep the name, then CHANGE MACHINE on the result.
-    async function selection() {
-      await press("Enter");
-      await press("Enter");
-      await press("Enter");
-      await page.waitForFunction(
         () => window.hoverDiagnostics().gpScreen === "time-result",
       );
+    }
+    // CHANGE MACHINE on the result.
+    async function selection() {
       await press("ArrowDown");
       await press("Enter");
       await wait("menu");

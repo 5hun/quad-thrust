@@ -27,7 +27,6 @@ const E = require("../dist/engine.js") as typeof HoverEngine;
     gameMode: 1 as const,
     totalTicks: 3456,
     name: "A RUN",
-    playerName: "SAT",
   };
   const r = new ReplayRecorder();
   for (let i = 0; i < 33; i++) r.record({ accel: true });
@@ -51,7 +50,7 @@ const E = require("../dist/engine.js") as typeof HoverEngine;
   assert.equal(view.getInt32(44, true), 3456);
   assert.equal(view.getInt32(52, true), 1);
   assert.equal(bytes[16], 65);
-  assert.equal(bytes[32], 83);
+  assert.deepEqual([...bytes.slice(32, 40)], [0, 0, 0, 0, 0, 0, 0, 0]);
   const decoded = decodeOriginalReplay(bytes);
   assert.deepEqual(decoded.words, tape.words);
   assert.equal(decoded.frames, 35);

@@ -163,20 +163,18 @@ module.exports = async function verify({
       .getByRole("button", { name: "QUIT GRAND PRIX", exact: true })
       .click();
     await page.getByRole("button", { name: "YES", exact: true }).click();
-    await page.waitForFunction(
-      () => window.hoverDiagnostics().gpScreen === "name",
-    );
-    // Letters are typed directly; ENTER on the last letter registers them.
-    for (const code of ["KeyN", "KeyK", "KeyA", "Enter"]) await key(code);
+    // Records save without a name entry and mark the run's row.
     await page.waitForFunction(
       () => window.hoverDiagnostics().gpScreen === "records",
     );
     const defeatRow = await page.evaluate(
       () => window.HoverRecords.read("gp", 0, "lap")[0],
     );
-    assert.equal(defeatRow.name, "NKA");
-    assert.equal(defeatRow.time, 10);
-    assert.match(await page.locator("#gp-panel").innerText(), /NKA\s*NEW/);
+    assert.deepEqual(defeatRow, { time: 10, machine: 0 });
+    assert.match(
+      await page.locator("#gp-panel [data-player]").first().innerText(),
+      /WHITE HARE\s*NEW/,
+    );
     await key("Enter");
     await wait("menu");
     await page.reload();
@@ -198,31 +196,19 @@ module.exports = async function verify({
     assert.match(timedGoal, /NEW BEST LAP\s*00'10"00 · 1ST/);
     assert.match(timedGoal, /GHOST UPDATED/);
     await page.waitForFunction(
-      () => window.hoverDiagnostics().gpScreen === "name",
+      () => window.hoverDiagnostics().gpScreen === "time-result",
     );
     assert.equal(
       (await page.evaluate(() => window.hoverDiagnostics())).replaying,
       true,
     );
-    assert.match(
-      await page.locator("#gp-panel .gp-kicker").innerText(),
-      /TIME ATTACK\s*·\s*NEW RECORD/,
-    );
     await page.setViewportSize({ width: 375, height: 780 });
     const mobile = await page.locator(".game-wrap").boundingBox();
     assert.ok(Math.abs(mobile!.width / mobile!.height - 4 / 3) < 0.01);
-    await key("ArrowDown");
-    await page.screenshot({ path: "/tmp/hover-name-entry.png" });
-    for (let i = 0; i < 3; i++) await key("Enter");
-    await page.waitForFunction(
-      () => window.hoverDiagnostics().gpScreen === "time-result",
-    );
     const row = await page.evaluate(
       () => window.HoverRecords.read("time", 0, "lap")[0],
     );
-    // Starts from the name saved by the GP (NKA); the first letter turned to O.
-    assert.equal(row.name, "OKA");
-    assert.equal(row.time, 10);
+    assert.deepEqual(row, { time: 10, machine: 0 });
     await page.screenshot({ path: "/tmp/hover-time-result.png" });
     await page.setViewportSize({ width: 1100, height: 900 });
     const result = await page.locator("#gp-panel").innerText();
@@ -235,7 +221,7 @@ module.exports = async function verify({
     // The record table marks this run and shows each holder's machine.
     assert.match(
       await page.locator(".ta-record-rows [data-player]").innerText(),
-      /OKA\s*NEW\s*WHITE HARE\s*00'33"00/,
+      /WHITE HARE\s*NEW\s*00'33"00/,
     );
     assert.equal(
       await page.locator(".ta-record-rows .record-machine-icon").count(),
@@ -249,7 +235,7 @@ module.exports = async function verify({
     );
     assert.match(
       await page.locator(".ta-record-rows [data-player]").innerText(),
-      /OKA[\s\S]*00'10"00/,
+      /WHITE HARE[\s\S]*00'10"00/,
     );
     // Switching the table keeps the menu row.
     assert.equal(
@@ -273,7 +259,7 @@ module.exports = async function verify({
     );
     const retired = await page.locator("#gp-panel").innerText();
     assert.match(retired, /COURSE OUT/);
-    assert.match(retired, /BEST TOTAL\s*00'33"00\s*OKA · WHITE HARE/);
+    assert.match(retired, /BEST TOTAL\s*00'33"00\s*WHITE HARE/);
     assert.equal(await page.locator(".ta-records .gp-tabs").count(), 0);
     await page.screenshot({ path: "/tmp/hover-time-retired.png" });
     await page
@@ -394,17 +380,6 @@ module.exports = async function verify({
     await page.screenshot({ path: "/tmp/hover-gp-clear.png" });
     await key("Enter");
     await page.waitForFunction(
-      () => window.hoverDiagnostics().gpScreen === "name",
-    );
-    // The last saved name (from Time Attack) comes back; ENTER confirms each letter.
-    assert.deepEqual(await page.locator(".gp-letter").allInnerTexts(), [
-      "O",
-      "K",
-      "A",
-    ]);
-    await page.screenshot({ path: "/tmp/hover-gp-name.png" });
-    for (let i = 0; i < 3; i++) await key("Enter");
-    await page.waitForFunction(
       () => window.hoverDiagnostics().gpScreen === "records",
     );
     await page.screenshot({ path: "/tmp/hover-gp-records.png" });
@@ -413,7 +388,8 @@ module.exports = async function verify({
         (course) => window.HoverRecords.read("gp", course, "lap"),
         course,
       );
-      assert.ok(rows.some((r) => r.time === 10 && r.name === "OKA"));
+      assert.ok(rows.some((r) => r.time === 10));
+      assert.equal(await page.locator("#gp-panel [data-player]").count(), 2);
       const courseName = await page.evaluate(
         (course) => window.HOVER_TRACKS[course].name,
         course,
@@ -435,7 +411,7 @@ module.exports = async function verify({
       [],
     );
     console.log(
-      "PASS: source pause restart; GP fall/destruction/defeat results, RETRY and confirmed QUIT, goal banner delay, pointer controls, typed and confirmed names, named record persistence, Time Attack goal, name entry, result tables, RETRY and retirement, all GP rounds with intros, cup clear and records",
+      "PASS: source pause restart; GP fall/destruction/defeat results, RETRY and confirmed QUIT, goal banner delay, pointer controls, record persistence without names, Time Attack goal, result tables, RETRY and retirement, all GP rounds with intros, cup clear and records",
     );
   } finally {
     await browser.close();

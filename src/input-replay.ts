@@ -9,7 +9,6 @@ export interface ReplayTape {
   totalTicks: number;
   words: number[];
   name?: string;
-  playerName?: string;
   // Fractional browser axes have no representation in the PS1 digital format.
   // Keep them beside browser recordings so the local replay uses the same input.
   axes?: Record<number, [number, number]>;
@@ -119,7 +118,7 @@ export function encodeOriginalReplay(tape: ReplayTape): Uint8Array {
     );
   };
   text(tape.name || "", 16, 16);
-  text(tape.playerName || "", 32, 8);
+  // Bytes 32..39 held the player's name; they stay zero.
   v.setInt32(40, tape.gameMode, true);
   v.setInt32(44, tape.totalTicks, true);
   v.setInt32(52, tape.level, true);
@@ -172,7 +171,6 @@ export function decodeOriginalReplay(bytes: Uint8Array): ReplayTape {
     words,
     level,
     name: text(16, 16),
-    playerName: text(32, 8),
   };
 }
 // Re-run the same fixed-step simulation as the race, rather than interpolating

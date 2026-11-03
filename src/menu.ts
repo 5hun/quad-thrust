@@ -618,18 +618,16 @@ export class OriginalMenu {
         if (machine) {
           const icon = document.createElement("span");
           icon.className = "record-machine-icon";
-          icon.setAttribute("role", "img");
-          icon.setAttribute("aria-label", machine.name);
+          icon.setAttribute("aria-hidden", "true");
           const sprite = document.createElement("img");
           sprite.src = "assets/minicars.png";
           sprite.alt = "";
           sprite.style.top = `${-row.machine * 100}%`;
           icon.append(sprite);
-          holder.append(icon);
+          const name = document.createElement("span");
+          name.textContent = machine.name;
+          holder.append(icon, name);
         }
-        const name = document.createElement("span");
-        name.textContent = row.name || "---";
-        holder.append(name);
         column.append(holder);
       }
       this.courseInfo.append(column);
@@ -679,7 +677,7 @@ export class OriginalMenu {
               (_, i) => {
                 const r = rows[i];
                 const machine = r && HoverEngine.MACHINES[r.machine];
-                return `<li${r ? (i === 0 ? " data-top" : "") : " data-empty"}><span class="gp-pos">${i + 1}</span><span class="gp-machine">${esc(r?.name || "---")}</span><span class="gp-gap">${machine ? `<span class="record-machine-icon" aria-hidden="true"><img src="assets/minicars.png" alt="" style="top: ${-r.machine * 100}%"></span>${esc(machine.name)}` : ""}</span><span class="gp-time">${this.time(r?.time)}</span></li>`;
+                return `<li${r ? (i === 0 ? " data-top" : "") : " data-empty"}><span class="gp-pos">${i + 1}</span><span class="gp-gap">${machine ? `<span class="record-machine-icon" aria-hidden="true"><img src="assets/minicars.png" alt="" style="top: ${-r.machine * 100}%"></span>${esc(machine.name)}` : "---"}</span><span class="gp-time">${this.time(r?.time)}</span></li>`;
               },
             ).join("")}</ol></section>`,
         )

@@ -1,18 +1,17 @@
 // Source: src/gp-screens.ts. Build with npm run build; do not edit dist/gp-screens.js directly.
 // Screens after the finish line, in the title menu's style. Grand Prix: race
-// result, next race intro, cup clear, name entry and the cup's records.
-// Time Attack and practice: name entry and the result with course records.
+// result, next race intro, cup clear and the cup's records.
+// Time Attack and practice: the result with course records.
 import { hudTime } from "./hud.js";
 
 export type GPScreen =
-  "result" | "quit" | "intro" | "clear" | "name" | "records" | "time-result";
+  "result" | "quit" | "intro" | "clear" | "records" | "time-result";
 export interface GPRecord {
   course: number;
   best: number;
   total: number;
   machine: number;
 }
-export const ENTRY_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ,.^_0123456789%*?&!";
 type MenuSound = "move" | "ok" | "cancel";
 export interface Standing {
   machine: number;
@@ -104,26 +103,20 @@ export class GPScreens {
   // ENTER on screens without a list; ESC on screens that can go back.
   confirmAction: (() => void) | null = null;
   backAction: (() => void) | null = null;
-  name = [0, 0, 0];
-  cursor = 0;
-  nameDone: (() => void) | null = null;
   batch: GPRecord[] = [];
+  // Where each batch row's lap and total landed among the six, or 0.
+  ranks: { lap: number; total: number }[] = [];
   page = 0;
-  // Name the cup's rows were saved under, highlighted on the records pages.
-  savedName = "";
   padHeld = new Set<string>();
   resultScreen: (() => void) | null = null;
   quitAction: () => void = () => {};
   recordsDone: () => void = () => {};
-  // Records the name entry saves into: the GP's, or Time Attack's.
+  // Records the batch saves into: the GP's, or Time Attack's.
   recordClass: "gp" | "time" = "gp";
   // Time Attack result's record table: TOTAL or BEST LAP.
   recordKind: "total" | "lap" = "total";
   timeResult: (() => void) | null = null;
-  constructor(
-    public sound: (kind: MenuSound) => void,
-    public storage: Pick<Storage, "getItem" | "setItem">,
-  ) {
+  constructor(public sound: (kind: MenuSound) => void) {
     this.panel = document.getElementById("gp-panel")!;
     this.layout = document.createElement("div");
     this.layout.className = "title-layout gp-layout";
@@ -135,7 +128,7 @@ export class GPScreens {
   close() {
     this.screen = null;
     this.items = [];
-    this.confirmAction = this.backAction = this.nameDone = null;
+    this.confirmAction = this.backAction = null;
     this.panel.hidden = true;
     this.layout.replaceChildren();
   }
@@ -143,7 +136,7 @@ export class GPScreens {
     // A button still held from racing or the last screen must not confirm.
     this.padHeld = this.padCodes();
     this.items = [];
-    this.confirmAction = this.backAction = this.nameDone = null;
+    this.confirmAction = this.backAction = null;
     this.screen = screen;
     this.panel.dataset.screen = screen;
     this.layout.innerHTML = html;
@@ -286,7 +279,7 @@ export class GPScreens {
     const record = (kind: string) => {
       const row = HoverRecords.read("gp", course, kind)[0];
       return row
-        ? `${hudTime(row.time)} <small>${esc(row.name || "---")} · ${esc(machineName(row.machine))}</small>`
+        ? `${hudTime(row.time)} <small>${esc(machineName(row.machine))}</small>`
         : `${hudTime()} <small>---</small>`;
     };
     this.open(
@@ -364,161 +357,28 @@ export class GPScreens {
     this.confirmAction = next;
     this.backAction = null;
   }
-  // One name for every course of the cup, as before. Cups whose times
-  // stay out of the top six go straight to the records.
+  // Every course of the cup saves at once, then its records pages.
   showRecords(batch: GPRecord[], done: () => void) {
     this.recordClass = "gp";
     this.batch = batch
       .map((r) => ({ ...r }))
       .sort((a, b) => a.course - b.course);
-    this.loadName();
-    const entries = this.newRecords();
-    const finish = () => {
-      this.save();
-      this.page = 0;
-      this.showRecordPage(done);
-    };
-    if (entries.length) this.showName(entries, finish, "NEW RECORD");
-    else finish();
+    this.save();
+    this.page = 0;
+    this.showRecordPage(done);
   }
-  // The last name entered, in GP or Time Attack, comes back.
-  loadName() {
-    let saved = "";
-    try {
-      saved = this.storage.getItem("hover-player-name") || "";
-    } catch {}
-    this.name =
-      saved.length === 3 &&
-      [...saved].every((c) => ENTRY_CHARACTERS.includes(c))
-        ? [...saved].map((c) => ENTRY_CHARACTERS.indexOf(c))
-        : [0, 0, 0];
-  }
-  newRecords() {
-    const rows: { course: number; kind: string; time: number; rank: number }[] =
-      [];
-    for (const r of this.batch)
-      for (const [kind, time] of [
-        ["lap", r.best],
-        ["total", r.total],
-      ] as const) {
-        const rank = rankAmong(
-          HoverRecords.read(this.recordClass, r.course, kind),
-          time,
-        );
-        if (rank) rows.push({ course: r.course, kind, time, rank });
-      }
-    return rows;
-  }
-  get nameText() {
-    return this.name.map((i) => ENTRY_CHARACTERS[i]).join("");
-  }
-  showName(
-    entries: ReturnType<GPScreens["newRecords"]>,
-    done: () => void,
-    kicker: string,
-  ) {
-    this.cursor = 0;
-    this.open(
-      "name",
-      this.header(kicker, "ENTER YOUR NAME") +
-        `<div class="gp-name" role="group" aria-label="Name, 3 letters">${[
-          0, 1, 2,
-        ]
-          .map(
-            (i) =>
-              `<div class="gp-slot" data-slot="${i}"><button type="button" class="gp-letter-prev" aria-label="Previous letter"></button><span class="gp-letter" aria-live="polite"></span><button type="button" class="gp-letter-next" aria-label="Next letter"></button></div>`,
-          )
-          .join("")}</div>` +
-        `<section class="gp-side gp-new-records"><h3 class="gp-label">YOUR NEW RECORDS</h3><ol>${entries
-          .map(
-            (e) =>
-              `<li><span>${courseLabel(e.course)} ${esc(courseName(e.course))}<small>${e.kind === "lap" ? "BEST LAP" : "TOTAL"}</small></span><span>${hudTime(e.time)}</span><span class="gp-rank">${ORDINALS[e.rank - 1] ?? `${e.rank}TH`}</span></li>`,
-          )
-          .join("")}</ol></section>` +
-        guide([
-          guideArrows("↑ ↓", "LETTER"),
-          guideArrows("← →", "MOVE"),
-          guideKey("ENTER", "CONFIRM"),
-          guideKey("ESC", "BACK", "Escape"),
-        ]),
-    );
-    this.layout.querySelectorAll<HTMLElement>(".gp-slot").forEach((slot) => {
-      const i = +slot.dataset.slot!;
-      slot.querySelector<HTMLButtonElement>(".gp-letter-prev")!.onclick =
-        () => {
-          this.cursor = i;
-          this.turn(-1);
-        };
-      slot.querySelector<HTMLButtonElement>(".gp-letter-next")!.onclick =
-        () => {
-          this.cursor = i;
-          this.turn(1);
-        };
-      slot.querySelector<HTMLElement>(".gp-letter")!.onclick = () => {
-        this.cursor = i;
-        this.syncName();
-      };
-    });
-    this.nameDone = done;
-    this.confirmAction = this.backAction = null;
-    this.syncName();
-  }
-  syncName() {
-    const n = ENTRY_CHARACTERS.length;
-    this.layout.querySelectorAll<HTMLElement>(".gp-slot").forEach((slot) => {
-      const i = +slot.dataset.slot!,
-        index = this.name[i];
-      slot.dataset.state =
-        i === this.cursor ? "current" : i < this.cursor ? "done" : "later";
-      slot.querySelector(".gp-letter")!.textContent = ENTRY_CHARACTERS[index];
-      slot.querySelector(".gp-letter-prev")!.textContent =
-        ENTRY_CHARACTERS[(index + n - 1) % n];
-      slot.querySelector(".gp-letter-next")!.textContent =
-        ENTRY_CHARACTERS[(index + 1) % n];
-    });
-  }
-  turn(delta: number) {
-    const n = ENTRY_CHARACTERS.length;
-    this.name[this.cursor] = (this.name[this.cursor] + delta + n) % n;
-    this.sound("move");
-    this.syncName();
-  }
-  nameKey(code: string) {
-    const typed = /^Key([A-Z])$|^Digit([0-9])$/.exec(code);
-    if (typed) {
-      this.name[this.cursor] = ENTRY_CHARACTERS.indexOf(typed[1] || typed[2]);
-      this.sound("move");
-      if (this.cursor < 2) this.cursor++;
-      this.syncName();
-    } else if (code === "ArrowUp") this.turn(-1);
-    else if (code === "ArrowDown") this.turn(1);
-    else if (code === "ArrowLeft" || code === "ArrowRight") {
-      const cursor = Math.max(
-        0,
-        Math.min(2, this.cursor + (code === "ArrowLeft" ? -1 : 1)),
-      );
-      if (cursor !== this.cursor) this.sound("move");
-      this.cursor = cursor;
-      this.syncName();
-    } else if (code === "Enter" || code === "Space") {
-      this.sound("ok");
-      if (this.cursor < 2) {
-        this.cursor++;
-        this.syncName();
-      } else this.nameDone?.();
-    } else if (code === "Escape" || code === "Backspace") {
-      if (this.cursor > 0) {
-        this.sound("cancel");
-        this.cursor--;
-        this.syncName();
-      }
-    }
-  }
+  // Ranks are taken before saving; a saved row lands after equal times.
   save() {
-    const name = this.nameText;
-    try {
-      this.storage.setItem("hover-player-name", name);
-    } catch {}
+    this.ranks = this.batch.map((r) => ({
+      lap: rankAmong(
+        HoverRecords.read(this.recordClass, r.course, "lap"),
+        r.best,
+      ),
+      total: rankAmong(
+        HoverRecords.read(this.recordClass, r.course, "total"),
+        r.total,
+      ),
+    }));
     for (const row of this.batch) {
       HoverRecords.save(
         this.recordClass,
@@ -526,7 +386,6 @@ export class GPScreens {
         "lap",
         row.best,
         row.machine,
-        name,
       );
       HoverRecords.save(
         this.recordClass,
@@ -534,29 +393,25 @@ export class GPScreens {
         "total",
         row.total,
         row.machine,
-        name,
       );
     }
-    this.savedName = name;
+  }
+  // One table row: the machine and, for this run's row, NEW.
+  private recordRow(
+    r: { time: number; machine: number } | undefined,
+    i: number,
+    mine: boolean,
+  ) {
+    return `<li${mine ? " data-player" : ""}><span class="gp-pos">${i + 1}</span><span class="gp-gap">${r ? `${machineIcon(r.machine)}${esc(machineName(r.machine))}` : "---"}${mine ? "<small>NEW</small>" : ""}</span><span class="gp-time">${hudTime(r?.time)}</span></li>`;
   }
   showRecordPage(done: () => void) {
     const course = this.batch[this.page].course;
-    const mine = this.batch[this.page];
     const column = (kind: "lap" | "total") => {
       const rows = HoverRecords.read("gp", course, kind);
-      const time = kind === "lap" ? mine.best : mine.total;
-      const highlight = rows.findIndex(
-        (r) =>
-          r.time === time &&
-          r.machine === mine.machine &&
-          r.name === this.savedName,
-      );
+      const mine = this.ranks[this.page][kind] - 1;
       return `<section><h3 class="gp-label">${kind === "lap" ? "BEST LAP" : "TOTAL"}</h3><ol class="gp-record-rows">${Array.from(
         { length: 6 },
-        (_, i) => {
-          const r = rows[i];
-          return `<li${i === highlight ? " data-player" : ""}><span class="gp-pos">${i + 1}</span><span class="gp-machine">${esc(r ? r.name || "---" : "---")}${i === highlight ? "<small>NEW</small>" : ""}</span><span class="gp-gap">${esc(r ? machineName(r.machine) : "")}</span><span class="gp-time">${hudTime(r?.time)}</span></li>`;
-        },
+        (_, i) => this.recordRow(rows[i], i, i === mine),
       ).join("")}</ol></section>`;
     };
     this.open(
@@ -596,7 +451,7 @@ export class GPScreens {
     this.page = page;
     this.showRecordPage(done);
   }
-  // A finished run enters the name first when it makes the top six.
+  // A finished run saves before its result; a retired one saves nothing.
   showTimeAttack(result: TimeResult, actions: TimeActions) {
     this.recordClass = result.recordClass;
     this.recordKind = "total";
@@ -610,18 +465,10 @@ export class GPScreens {
             machine: result.machine,
           },
         ];
-    this.loadName();
-    const entries = this.newRecords();
-    const ranks = { lap: 0, total: 0 };
-    for (const e of entries) ranks[e.kind as "lap" | "total"] = e.rank;
+    this.save();
+    const ranks = this.ranks[0] ?? { lap: 0, total: 0 };
     this.timeResult = () => this.showTimeResult(result, actions, ranks);
-    const finish = () => {
-      if (this.batch.length) this.save();
-      this.timeResult?.();
-    };
-    if (entries.length)
-      this.showName(entries, finish, `${result.label}  ·  NEW RECORD`);
-    else finish();
+    this.timeResult();
   }
   showTimeResult(
     result: TimeResult,
@@ -702,10 +549,7 @@ export class GPScreens {
         .join("")}</div>` +
       `<ol class="gp-record-rows ta-record-rows">${Array.from(
         { length: 6 },
-        (_, i) => {
-          const r = rows[i];
-          return `<li${i === mine ? " data-player" : ""}><span class="gp-pos">${i + 1}</span><span class="gp-machine">${esc(r ? r.name || "---" : "---")}${i === mine ? "<small>NEW</small>" : ""}</span><span class="gp-gap">${r ? `${machineIcon(r.machine)}${esc(machineName(r.machine))}` : ""}</span><span class="gp-time">${hudTime(r?.time)}</span></li>`;
-        },
+        (_, i) => this.recordRow(rows[i], i, i === mine),
       ).join("")}</ol>`
     );
   }
@@ -713,7 +557,7 @@ export class GPScreens {
   private courseBests(result: TimeResult) {
     const best = (kind: string, label: string) => {
       const r = HoverRecords.read(result.recordClass, result.course, kind)[0];
-      return `<div><dt>${label}</dt><dd>${hudTime(r?.time)}${r ? ` <small>${esc(r.name || "---")} · ${esc(machineName(r.machine))}</small>` : ""}</dd></div>`;
+      return `<div><dt>${label}</dt><dd>${hudTime(r?.time)}${r ? ` <small>${esc(machineName(r.machine))}</small>` : ""}</dd></div>`;
     };
     return `<h3 class="gp-label">COURSE RECORDS</h3><dl class="gp-laps ta-bests">${best("total", "BEST TOTAL")}${best("lap", "BEST LAP")}</dl>`;
   }
@@ -725,10 +569,6 @@ export class GPScreens {
   }
   key(code: string) {
     if (!this.screen) return false;
-    if (this.screen === "name") {
-      this.nameKey(code);
-      return true;
-    }
     if (this.items.length && (code === "ArrowUp" || code === "ArrowDown")) {
       const selected = Math.max(
         0,

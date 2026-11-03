@@ -50,8 +50,8 @@ module.exports = async function verify({
     await page.evaluate(() => {
       window.HoverRules.completeCup(0);
       window.HoverRules.completeCup(1);
-      window.HoverRecords.save("time", 2, "lap", 12.5, 2, "ABC");
-      window.HoverRecords.save("time", 2, "total", 40, 2, "ABC");
+      window.HoverRecords.save("time", 2, "lap", 12.5, 2);
+      window.HoverRecords.save("time", 2, "total", 40, 2);
     });
     await page.reload();
     await title();
@@ -62,8 +62,8 @@ module.exports = async function verify({
       total: window.HoverRecords.read("time", 2, "total")[0],
     }));
     assert.equal(progress.cups, 3);
-    assert.deepEqual(progress.lap, { time: 12.5, machine: 2, name: "ABC" });
-    assert.deepEqual(progress.total, { time: 40, machine: 2, name: "ABC" });
+    assert.deepEqual(progress.lap, { time: 12.5, machine: 2 });
+    assert.deepEqual(progress.total, { time: 40, machine: 2 });
     assert.equal((await snap()).lastReplay, null);
     await click("OPTIONS");
     assert.equal(

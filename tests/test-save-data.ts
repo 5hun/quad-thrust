@@ -31,7 +31,7 @@ const fs: typeof import("node:fs") = require("node:fs");
   );
   const values = {
     "hover-unlocks": "7",
-    "hover-player-name": "B9!",
+    "hover-volume": "3",
     "hover-records-time-8-lap": JSON.stringify([
       { time: 10.25, machine: 4, name: "B9!" },
     ]),
@@ -50,31 +50,38 @@ const fs: typeof import("node:fs") = require("node:fs");
   assert.equal(disk.get("hover-card-v1-0"), "old card");
   assert.equal([...disk.keys()].filter((key) => key === SAVE_KEY).length, 1);
   const count = writes;
-  save.setItem("hover-player-name", "B9!");
+  save.setItem("hover-volume", "3");
   assert.equal(writes, count, "unchanged values do not write");
   save.setItem("hover-cpu-difficulty", "3");
   assert.equal(writes, count, "removed GAME LEVEL setting is not stored");
   const before = disk.get(SAVE_KEY);
   blocked = true;
-  save.setItem("hover-player-name", "ZZZ");
+  save.setItem("hover-volume", "4");
   assert.equal(save.saveError, true);
-  assert.equal(save.getItem("hover-player-name"), "ZZZ", "RAM stays usable");
+  assert.equal(save.getItem("hover-volume"), "4", "RAM stays usable");
   assert.equal(disk.get(SAVE_KEY), before, "failed write preserves prior save");
   blocked = false;
-  save.setItem("hover-player-name", "ZZZ");
+  save.setItem("hover-volume", "4");
   assert.equal(save.saveError, false, "future mutations retry persistence");
-  assert.equal(new SaveStore(storage).getItem("hover-player-name"), "ZZZ");
-  // Saves from before GAME LEVEL was removed still load their progress.
+  assert.equal(new SaveStore(storage).getItem("hover-volume"), "4");
+  save.setItem("hover-player-name", "ZZZ");
+  assert.equal(save.getItem("hover-player-name"), null, "names are not saved");
+  // Saves from before GAME LEVEL and name entry were removed still load.
   const legacy = new SaveStore({
     getItem: () =>
       JSON.stringify({
         version: 2,
-        values: { "hover-unlocks": "3", "hover-cpu-difficulty": "2" },
+        values: {
+          "hover-unlocks": "3",
+          "hover-cpu-difficulty": "2",
+          "hover-player-name": "B9!",
+        },
       }),
     setItem() {},
   });
   assert.equal(legacy.getItem("hover-unlocks"), "3");
   assert.equal(legacy.getItem("hover-cpu-difficulty"), null);
+  assert.equal(legacy.getItem("hover-player-name"), null);
   const seeded = ["SAT", "UME", "BEE", "UZU", "MAS", "ZZZ"].map((name, i) => ({
     time: 600,
     machine: i % 4,
@@ -139,7 +146,7 @@ const fs: typeof import("node:fs") = require("node:fs");
   ]) {
     disk.set(SAVE_KEY, raw);
     const recovered = new SaveStore(storage);
-    assert.equal(recovered.getItem("hover-player-name"), "AAA");
+    assert.equal(recovered.getItem("hover-volume"), "10");
     assert.equal(recovered.getItem("hover-unlocks"), "0");
     recovered.setItem("hover-unlocks", "2");
     assert.equal(new SaveStore(storage).getItem("hover-unlocks"), "2");

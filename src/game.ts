@@ -300,9 +300,9 @@ const pauseMenu = new PauseMenu({
   setVolume: originalMenu.hooks.setVolume,
   sound: originalMenu.hooks.sound,
 });
-const gpScreens = new GPScreens(originalMenu.hooks.sound, session);
+const gpScreens = new GPScreens(originalMenu.hooks.sound);
 const goalBanner = new GoalBanner();
-// The goal banner's three seconds, then the result, name entry or records.
+// The goal banner's three seconds, then the result or records.
 const GOAL_FRAMES = 180;
 // The next race intro spirals down to the grid before the countdown.
 // Skipping it dips to black (#scene-fade's 0.2 s) instead of cutting.
@@ -614,7 +614,7 @@ function showResult() {
     quit: endGP,
   });
 }
-// Name entry (when a time makes the top six) and the cup's records.
+// The cup's records.
 function endGP() {
   gpScreens.close();
   // The confirming pad button must not also press the title menu.
@@ -691,8 +691,7 @@ function returnToSelection(screen: "car" | "course") {
   originalMenu.show(screen, screen === "course" ? +$("course").value : 0);
   originalSound.playCourse("SELECT");
 }
-// Time Attack and practice: name entry when the run makes the top six,
-// then the result. A retired run goes straight to the result.
+// Time Attack and practice: the result, with the run's records saved.
 function showTimeResult() {
   $("hud").hidden = true;
   $("touch").hidden = true;
@@ -1246,7 +1245,6 @@ export const getHoverDiagnostics = () => ({
   replaying,
   replayClock,
   replayPose: replaying ? resultReplay?.car || null : null,
-  entryName: gpScreens.name.slice(),
   pauseSelection: pauseMenu.selected,
   pauseScreen: pauseMenu.screen,
   gpScreen: gpScreens.screen,

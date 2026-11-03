@@ -1261,14 +1261,6 @@ button[aria-current="true"] .volume-meter i {
       transparent 80%
     );
 }
-#gp-panel[data-screen="name"] {
-  background: linear-gradient(
-    90deg,
-    rgb(0 5 13 / 90%) 0%,
-    rgb(0 5 13 / 80%) 55%,
-    rgb(0 5 13 / 62%) 100%
-  );
-}
 .gp-layout {
   color: #f3faff;
   font-family: "Segoe UI", Arial, sans-serif;
@@ -1327,7 +1319,8 @@ button[aria-current="true"] .volume-meter i {
   font-size: 1.33cqw;
   letter-spacing: 0.24em;
 }
-.gp-machine small {
+.gp-machine small,
+.gp-gap small {
   margin-left: 1.1cqw;
   font-size: 0.86cqw;
   font-weight: 600;
@@ -1668,95 +1661,8 @@ button[aria-current="true"] .volume-meter i {
   font-weight: 300;
   letter-spacing: 0.26em;
 }
-#gp-panel[data-screen="name"] .gp-header .gp-kicker {
-  color: #20e5ec;
-}
-.gp-name {
-  position: absolute;
-  left: 4.4%;
-  top: 27.2%;
-  display: flex;
-  gap: 2.2cqw;
-}
-.gp-slot {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 10.9cqw;
-}
-.gp-slot button,
-.gp-letter {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  touch-action: manipulation;
-}
-.gp-slot button {
-  height: 6.7cqh;
-  width: 100%;
-  font-size: 2.35cqw;
-  font-weight: 300;
-  opacity: 0;
-}
-.gp-letter {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 20.8cqh;
-  border-bottom: 3px solid rgb(255 255 255 / 20%);
-  font-size: 8.75cqw;
-  font-weight: 200;
-  line-height: 1;
-  color: rgb(243 250 255 / 35%);
-}
-.gp-slot[data-state="done"] .gp-letter {
-  border-color: rgb(255 255 255 / 40%);
-  color: #f3faff;
-}
-.gp-slot[data-state="current"] .gp-letter {
-  border-color: #20e5ec;
-  color: #20e5ec;
-}
-.gp-slot[data-state="current"] button {
-  opacity: 0.35;
-}
-.gp-slot button:focus-visible,
 #gp-panel .gp-tabs button:focus-visible {
   outline: 1px solid #20e5ec;
-}
-.gp-new-records {
-  top: 27.2% !important;
-  width: 34.4% !important;
-}
-.gp-new-records li {
-  display: grid;
-  grid-template-columns: 1fr 26% 14%;
-  align-items: baseline;
-  height: 7.8cqh;
-  padding-top: 1cqh;
-  border-top: 1px solid rgb(255 255 255 / 12%);
-  font-size: 1.4cqw;
-}
-.gp-new-records li span:first-child {
-  font-size: 1.17cqw;
-  letter-spacing: 0.18em;
-}
-.gp-new-records small {
-  display: block;
-  margin-top: 0.6cqh;
-  color: #c2c8ce;
-  font-size: 0.86cqw;
-  font-weight: 600;
-  letter-spacing: 0.3em;
-}
-.gp-new-records li span:nth-child(n + 2) {
-  text-align: right;
-}
-.gp-rank {
-  color: #20e5ec;
 }
 .gp-tabs {
   position: absolute;
@@ -1790,15 +1696,23 @@ button[aria-current="true"] .volume-meter i {
   gap: 5.6cqw;
 }
 .gp-record-rows li {
-  grid-template-columns: 9% 1fr 18% 26%;
+  grid-template-columns: 9% 1fr 26%;
+  align-items: center;
 }
 .gp-record-rows .gp-pos {
   font-size: 1.56cqw;
 }
 .gp-record-rows .gp-gap {
+  display: flex;
+  align-items: center;
+  gap: 0.8cqw;
   font-size: 0.94cqw;
   letter-spacing: 0.2em;
   text-align: left;
+}
+.gp-record-rows .record-machine-icon {
+  width: 2.8cqw;
+  flex: none;
 }
 /* Time Attack and practice result: the run on the left, records right. */
 .ta-summary {
@@ -1877,18 +1791,8 @@ button[aria-current="true"] .volume-meter i {
   margin-bottom: 1.9cqh;
 }
 .ta-record-rows li {
-  grid-template-columns: 7% 1fr 30% 22%;
-  align-items: center;
+  grid-template-columns: 7% 1fr 22%;
   height: 6.4cqh;
-}
-.ta-record-rows .gp-gap {
-  display: flex;
-  align-items: center;
-  gap: 0.8cqw;
-}
-.ta-records .record-machine-icon {
-  width: 2.8cqw;
-  flex: none;
 }
 .ta-bests dd {
   font-size: 1.4cqw;
@@ -1906,7 +1810,6 @@ button[aria-current="true"] .volume-meter i {
   .gp-progress small,
   .gp-progress span,
   .gp-course-records dt,
-  .gp-new-records small,
   .gp-clear-head,
   .gp-tabs button,
   .gp-map figcaption,
@@ -1917,14 +1820,12 @@ button[aria-current="true"] .volume-meter i {
   .gp-gap,
   .gp-hint,
   .gp-course-records small,
-  .gp-new-records li span:first-child,
   .gp-clear-table li span:nth-child(2) {
     font-size: 2.2cqw;
   }
   .gp-time,
   .gp-laps dd,
   .gp-course-records dd,
-  .gp-new-records li,
   .gp-clear-table li {
     font-size: 2.6cqw;
   }
@@ -1958,7 +1859,15 @@ button[aria-current="true"] .volume-meter i {
     left: 54% !important;
     width: 42% !important;
   }
-  .ta-records .record-machine-icon {
+  .gp-record-rows .gp-gap {
+    font-size: 1.8cqw;
+    letter-spacing: 0.12em;
+  }
+  .gp-record-rows .gp-gap small {
+    margin-left: 0.6cqw;
+    font-size: 1.6cqw;
+  }
+  .gp-record-rows .record-machine-icon {
     width: 4.4cqw;
   }
 }
@@ -2719,7 +2628,7 @@ button[aria-current="true"] .volume-meter i {
   gap: 4cqw;
 }
 .records-rows li {
-  grid-template-columns: 9% 20% 1fr 33%;
+  grid-template-columns: 9% 1fr 33%;
   align-items: center;
   height: 6.2cqh;
   border-top: 0;
@@ -2785,11 +2694,10 @@ button[aria-current="true"] .volume-meter i {
   }
   /* Too narrow for machine names: each row keeps only the machine icon. */
   .records-rows li {
-    grid-template-columns: 11% 1fr auto 42%;
+    grid-template-columns: 11% 1fr 42%;
     height: 5.6cqh;
   }
-  .records-rows .gp-pos,
-  .records-rows .gp-machine {
+  .records-rows .gp-pos {
     font-size: 2.2cqw;
     letter-spacing: 0.1em;
   }

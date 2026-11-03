@@ -4,7 +4,6 @@ export const SAVE_KEY = "hover-autosave-v2";
 function defaults() {
   const values = new Map<string, string>([
     ["hover-unlocks", "0"],
-    ["hover-player-name", "AAA"],
     ["hover-volume", "10"],
   ]);
   for (const category of ["gp", "time"])
@@ -20,7 +19,6 @@ function validValue(key: string, value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (key === "hover-unlocks") return /^[0-7]$/.test(value);
   if (key === "hover-volume") return /^(10|[0-9])$/.test(value);
-  if (key === "hover-player-name") return /^[A-Z,.^_0-9%*?&!]{3}$/.test(value);
   if (/^hover-v3-record-(gp|time)-[0-8]$/.test(key))
     return Number.isFinite(Number(value)) && Number(value) > 0;
   try {
@@ -61,9 +59,10 @@ export class SaveStore implements Storage {
         Array.isArray(saved.values)
       )
         return;
-      // Older saves carry the removed GAME LEVEL setting; drop it.
+      // Older saves carry the removed GAME LEVEL setting and record name.
       const entries = Object.entries(saved.values).filter(
-        ([key]) => key !== "hover-cpu-difficulty",
+        ([key]) =>
+          key !== "hover-cpu-difficulty" && key !== "hover-player-name",
       );
       if (!entries.every(([key, value]) => validValue(key, value))) return;
       for (const [key, value] of entries)

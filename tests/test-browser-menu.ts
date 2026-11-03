@@ -303,25 +303,23 @@ module.exports = async function verify({
       await page.locator(".course-records h3").allTextContents(),
       ["BEST LAP", "TOTAL TIME"],
     );
-    assert.equal(await page.locator(".course-records [role=img]").count(), 0);
+    assert.equal(await page.locator(".course-record-holder").count(), 0);
     assert.deepEqual(
       await page.locator(".course-record-time").allTextContents(),
       ["--'--\"--", "--'--\"--"],
     );
     await page.evaluate(() => {
-      window.HoverRecords.save("time", 0, "lap", 12.5, 0, "AAA");
-      window.HoverRecords.save("time", 0, "total", 45, 1, "BBB");
+      window.HoverRecords.save("time", 0, "lap", 12.5, 0);
+      window.HoverRecords.save("time", 0, "total", 45, 1);
     });
     await page.waitForFunction(
       () =>
-        document.querySelectorAll(".course-records [role=img]").length === 2,
+        document.querySelectorAll(".course-records .record-machine-icon")
+          .length === 2,
     );
+    // Each record shows its machine, not a name.
     assert.deepEqual(
-      await page
-        .locator(".record-machine-icon")
-        .evaluateAll((icons) =>
-          icons.map((icon) => icon.getAttribute("aria-label")),
-        ),
+      await page.locator(".course-record-holder").allTextContents(),
       ["WHITE HARE", "EXCEL"],
     );
     assert.deepEqual(
@@ -541,7 +539,6 @@ module.exports = async function verify({
           document.querySelectorAll("#menu .records-rows"),
           (ol) =>
             Array.from(ol.children, (li) => [
-              li.querySelector(".gp-machine")!.textContent,
               li.querySelector(".gp-gap")!.textContent,
               li.querySelector(".gp-time")!.textContent,
               li
@@ -587,22 +584,8 @@ module.exports = async function verify({
     );
     await page.evaluate(() => {
       for (let machine = 0; machine < 5; machine++) {
-        window.HoverRecords.save(
-          "time",
-          1,
-          "lap",
-          10 + machine,
-          machine,
-          "ABC",
-        );
-        window.HoverRecords.save(
-          "time",
-          1,
-          "total",
-          30 + machine,
-          machine,
-          "DEF",
-        );
+        window.HoverRecords.save("time", 1, "lap", 10 + machine, machine);
+        window.HoverRecords.save("time", 1, "total", 30 + machine, machine);
       }
     });
     // Left and right switch the record class; a click picks a course.
@@ -618,18 +601,17 @@ module.exports = async function verify({
     const machineNames = await page.evaluate(() =>
       window.HoverEngine.MACHINES.slice(0, 5).map((m) => m.name),
     );
-    for (const [column, name, base] of [
-      [0, "ABC", 10],
-      [1, "DEF", 30],
+    for (const [column, base] of [
+      [0, 10],
+      [1, 30],
     ] as const)
       assert.deepEqual(view.rows[column], [
         ...machineNames.map((machine, i) => [
-          name,
           machine,
           `00'${base + i}"00`,
           `top: ${-i * 100}%`,
         ]),
-        ["---", "", "--'--\"--", null],
+        ["---", "--'--\"--", null],
       ]);
     assert.equal(view.bests[1], `00'30"00`);
     assert.equal(
