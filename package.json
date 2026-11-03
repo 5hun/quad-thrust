@@ -6,7 +6,7 @@
     "prepare": "husky",
     "build": "node tools/build.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json",
-    "test": "npm run build && npm run typecheck && node tests/test-assets.ts && node tests/test.ts && node tests/test-fidelity.ts && node tests/test-circuits.ts && node tests/test-replay.ts && node tests/test-input-replay.ts && node tests/test-save-data.ts",
+    "test": "npm run build && npm run typecheck && node tests/test-assets.ts && node tests/test.ts && node tests/test-fidelity.ts && node tests/test-course-layout.ts && node tests/test-circuits.ts && node tests/test-replay.ts && node tests/test-input-replay.ts && node tests/test-save-data.ts",
     "start": "python3 start-server.py",
     "lint": "eslint src tests eslint.config.mjs --max-warnings=0",
     "lint:fix": "npm run lint -- --fix",
